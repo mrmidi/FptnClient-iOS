@@ -23,8 +23,8 @@ class VPNService: ObservableObject {
 
     private var timer: Timer?
     private var speedTimer: Timer?
-    private var websocketClient: WebsocketClientBridge?
     private var packetTunnelProvider: NETunnelProviderManager?
+    private var tunnelStatusObserver: NSObjectProtocol?
 
     private let tokenService = TokenService.shared
 
@@ -37,19 +37,17 @@ class VPNService: ObservableObject {
     }
 
     func disconnect() {
-        _ = websocketClient?.stop()
-        websocketClient = nil
-
         packetTunnelProvider?.connection.stopVPNTunnel()
         packetTunnelProvider = nil
+
+        if let observer = tunnelStatusObserver {
+            NotificationCenter.default.removeObserver(observer)
+            tunnelStatusObserver = nil
+        }
 
         connection.isConnected = false
         stopTimer()
         stopSpeedMonitoring()
-    }
-
-    func sendPacket(_ packetData: Data) -> Bool {
-        return websocketClient?.sendPacket(packetData) ?? false
     }
 
     // MARK: - Private connect flow
@@ -91,26 +89,18 @@ class VPNService: ObservableObject {
             return
         }
 
-        // Configure VPN tunnel
+        // Save config and launch the PacketTunnelProvider extension.
+        // The extension owns the WebSocket and the TUN interface — the app
+        // process does not run a second WebSocket connection.
         let vpnResult = await configureAndStartVPN(
-            server: server,
-            dnsIPv4: dnsIPv4,
-            dnsIPv6: dnsIPv6
-        )
-        guard case .success = vpnResult else {
-            if case .failure(let error) = vpnResult {
-                logger.error("VPN configuration error: \(error.localizedDescription)")
-            }
-            return
-        }
-
-        // Start WebSocket
-        startWebSocketConnection(
             server: server,
             accessToken: accessToken,
             dnsIPv4: dnsIPv4,
             dnsIPv6: dnsIPv6
         )
+        if case .failure(let error) = vpnResult {
+            logger.error("VPN configuration error: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Login
@@ -204,11 +194,15 @@ class VPNService: ObservableObject {
 
     private func configureAndStartVPN(
         server: VPNServer,
+        accessToken: String,
         dnsIPv4: String,
         dnsIPv6: String
     ) async -> Result<Void, Error> {
         return await withCheckedContinuation { continuation in
-            NETunnelProviderManager.loadAllFromPreferences { [weak self] _, error in
+            // Reuse the existing manager when one is already installed — creating a
+            // fresh NETunnelProviderManager() on every connect would accumulate
+            // duplicate VPN profiles in Settings.
+            NETunnelProviderManager.loadAllFromPreferences { [weak self] existing, error in
                 guard let self else {
                     continuation.resume(returning: .failure(NSError(
                         domain: "VPNService",
@@ -223,29 +217,29 @@ class VPNService: ObservableObject {
                     return
                 }
 
+                let manager = existing?.first ?? NETunnelProviderManager()
+
                 let config = NETunnelProviderProtocol()
                 config.serverAddress = server.host
 #if os(iOS)
-                config.providerBundleIdentifier = "org.fptn.FptnVPN.FptnVPNTunnel"
+                config.providerBundleIdentifier = "net.mrmidi.FptnVPN.FptnVPNTunnel"
 #else
                 config.providerBundleIdentifier = "org.fptn.FptnVPN.mac.extension"
 #endif
                 config.providerConfiguration = [
                     "server": server.host,
                     "port": server.port,
+                    "accessToken": accessToken,
                     "dnsIPv4": dnsIPv4,
                     "dnsIPv6": dnsIPv6,
                     "sni": server.host,
                     "md5Fingerprint": server.md5_fingerprint
                 ]
 
-                let manager = NETunnelProviderManager()
                 manager.protocolConfiguration = config
                 manager.localizedDescription = "FPTN"
                 manager.isEnabled = true
 
-                // Box manager before any closure captures it — NETunnelProviderManager
-                // isn't Sendable but all NE callbacks run on the main thread.
                 let box = NEManagerBox(manager)
 
                 box.manager.saveToPreferences { error in
@@ -263,8 +257,23 @@ class VPNService: ObservableObject {
                             continuation.resume(returning: .failure(error))
                             return
                         }
+
+                        // Start the PacketTunnelProvider extension. This is what
+                        // configures the TUN interface and routes all device traffic
+                        // through the VPN. Without this call the OS never touches the
+                        // tunnel and traffic continues over the regular network.
+                        do {
+                            try box.manager.connection.startVPNTunnel()
+                            logger.info("VPN tunnel start requested")
+                        } catch {
+                            logger.error("startVPNTunnel failed: \(error.localizedDescription)")
+                            continuation.resume(returning: .failure(error))
+                            return
+                        }
+
                         MainActor.assumeIsolated { [weak self] in
                             self?.packetTunnelProvider = box.manager
+                            self?.observeTunnelStatus(box.manager)
                             continuation.resume(returning: .success(()))
                         }
                     }
@@ -273,53 +282,42 @@ class VPNService: ObservableObject {
         }
     }
 
-    // MARK: - WebSocket
+    // MARK: - Tunnel status observation
 
-    private func startWebSocketConnection(
-        server: VPNServer,
-        accessToken: String,
-        dnsIPv4: String,
-        dnsIPv6: String
-    ) {
-        websocketClient = WebsocketClientBridge(
-            serverIP: server.host,
-            serverPort: server.port,
-            tunInterfaceIPv4: "10.8.0.2",
-            sni: server.host,
-            accessToken: accessToken,
-            md5Fingerprint: server.md5_fingerprint,
-            packetCallback: { [weak self] packetData in
-                Task { @MainActor in
-                    self?.handleIncomingPacket(packetData)
-                }
-            },
-            connectedCallback: { [weak self] in
-                Task { @MainActor in
-                    self?.onWebSocketConnected()
-                }
+    /// Observe NEVPNStatusDidChange so isConnected tracks the real tunnel state,
+    /// not just whether a WebSocket started in the app process.
+    private func observeTunnelStatus(_ manager: NETunnelProviderManager) {
+        if let previous = tunnelStatusObserver {
+            NotificationCenter.default.removeObserver(previous)
+        }
+        tunnelStatusObserver = NotificationCenter.default.addObserver(
+            forName: .NEVPNStatusDidChange,
+            object: manager.connection,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.syncTunnelStatus()
             }
-        )
+        }
+    }
 
-        if websocketClient?.start() == true {
+    private func syncTunnelStatus() {
+        guard let status = packetTunnelProvider?.connection.status else { return }
+        logger.debug("Tunnel status changed: \(status.rawValue)")
+        switch status {
+        case .connected:
             connection.isConnected = true
             startTimer()
             startRealSpeedMonitoring()
+        case .disconnected, .invalid:
+            if connection.isConnected {
+                connection.isConnected = false
+                stopTimer()
+                stopSpeedMonitoring()
+            }
+        default:
+            break
         }
-    }
-
-    private func handleIncomingPacket(_ packetData: Data) {
-        guard let tunnelConnection = packetTunnelProvider?.connection as? NETunnelProviderSession else {
-            return
-        }
-        do {
-            try tunnelConnection.sendProviderMessage(packetData) { _ in }
-        } catch {
-            logger.error("Failed to send packet to tunnel: \(error.localizedDescription)")
-        }
-    }
-
-    private func onWebSocketConnected() {
-        logger.info("WebSocket connection established")
     }
 
     // MARK: - Timers

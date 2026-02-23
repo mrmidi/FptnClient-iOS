@@ -9,9 +9,12 @@
 /* Begin PBXBuildFile section */
 		3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0A2F4C62880020E4E3 /* Logging */; };
 		3AEA9E0C2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0D2F4C62880020E4E3 /* Logging */; };
+		3AEF123A2F5D123B00112233 /* WebScoketClientBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AEF123C2F5D123D00112233 /* WebScoketClientBridge.swift */; };
 		7994B7FD2E7A299E00624B08 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 79A890742E7582AB0062CD90 /* NetworkExtension.framework */; };
 		7994B7FE2E7A299E00624B08 /* NetworkExtension.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 79A890742E7582AB0062CD90 /* NetworkExtension.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7994B8002E7A299E00624B08 /* fptn_native_lib.framework in Embed Frameworks (Tunnel) */ = {isa = PBXBuildFile; fileRef = 798039E12E74177300BEA18D /* fptn_native_lib.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		79A8907D2E7582AB0062CD90 /* FptnVPNTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		79A890782E7582AB0062CD90 /* fptn_native_lib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 798039E12E74177300BEA18D /* fptn_native_lib.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +59,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				7994B7FE2E7A299E00624B08 /* NetworkExtension.framework in Embed Frameworks */,
+				7994B8002E7A299E00624B08 /* fptn_native_lib.framework in Embed Frameworks (Tunnel) */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -156,6 +160,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */,
+				79A890782E7582AB0062CD90 /* fptn_native_lib.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -447,6 +452,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/FptnVPN/Cpp",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FptnVPNTunnel/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FptnVPNTunnel;
@@ -458,10 +467,16 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = net.mrmidi.FptnVPN.FptnVPNTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -477,6 +492,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/FptnVPN/Cpp",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FptnVPNTunnel/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FptnVPNTunnel;
@@ -488,11 +507,17 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = net.mrmidi.FptnVPN.FptnVPNTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -664,6 +689,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -673,7 +699,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = net.mrmidi.FptnVPN;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -702,11 +727,11 @@
 					"$(PROJECT_DIR)/FptnVPN/Cpp",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
