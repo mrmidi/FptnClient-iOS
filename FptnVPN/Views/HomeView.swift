@@ -7,65 +7,63 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 import SwiftUI
 
 struct HomeView: View {
-    @StateObject private var vpnService = VPNService()
+    @ObservedObject var viewModel: HomeViewModel
+#if DEBUG
+    @State private var showingDebugLog = false
+#endif
     @State private var showingServerList = false
-    
+
     var body: some View {
         VStack {
             Spacer()
-            
+
             // Connection time
-            if vpnService.connection.isConnected {
-//                var name = "111"
-//                name = "1111"
-//                
-//                let a = 1;
-//                a = 5
-//                let colors = [1,2,3, "111"]
+            if viewModel.isConnected {
                 Text("Connection Time")
                     .foregroundColor(.white)
-                Text(vpnService.formatConnectionTime())
+                Text(viewModel.connectionTimeString)
                     .foregroundColor(.white)
                     .padding(.bottom, 10)
             }
-            
+
             // Toggle button
-            Button(action: {
+            Button {
                 withAnimation {
-                    if vpnService.connection.isConnected {
-                        vpnService.disconnect()
-                    } else {
-                        vpnService.connect()
-                    }
+                    viewModel.isConnected ? viewModel.disconnect() : viewModel.connect()
                 }
-            }, label: {
-                Image(vpnService.connection.isConnected ? "toggle_button_on" : "toggle_button_off")
+            } label: {
+                Image(viewModel.isConnected ? "toggle_button_on" : "toggle_button_off")
                     .resizable()
                     .frame(width: 180, height: 180)
                     .padding()
-            }).padding(.top, -200)
-            
+            }
+            .padding(.top, -200)
+
             // Status
-            Text(vpnService.connection.isConnected ? "Connected" : "Disconnected")
-                .foregroundColor(vpnService.connection.isConnected ? .yellow : .gray)
+            Text(viewModel.isConnected ? "Connected" : "Disconnected")
+                .foregroundColor(viewModel.isConnected ? .yellow : .gray)
                 .font(.headline)
                 .padding(.bottom, 4)
-            
-            // Server
-            if vpnService.connection.isConnected, let server = vpnService.connection.selectedServer {
-                Text("Server: \(server.name)")
+#if DEBUG
+                .onLongPressGesture { showingDebugLog = true }
+                .sheet(isPresented: $showingDebugLog) { DebugLogView() }
+#endif
+
+            // Server name
+            if viewModel.isConnected, let serverName = viewModel.selectedServerName {
+                Text("Server: \(serverName)")
                     .foregroundColor(.white)
                     .font(.subheadline)
                     .padding(.bottom, 20)
             }
-            
+
             // Speed
-            if vpnService.connection.isConnected {
+            if viewModel.isConnected {
                 HStack {
                     Image(systemName: "arrow.down.to.line.alt")
-                    Text(vpnService.formatSpeed(vpnService.connection.downloadSpeed))
+                    Text(viewModel.downloadSpeedString)
                     Spacer()
-                    Text(vpnService.formatSpeed(vpnService.connection.uploadSpeed))
+                    Text(viewModel.uploadSpeedString)
                     Image(systemName: "arrow.up.to.line.alt")
                 }
                 .foregroundColor(.white)
@@ -75,10 +73,11 @@ struct HomeView: View {
                 .padding(.horizontal)
             }
 
-            if !vpnService.connection.isConnected {
-                Button(action: {
+            // Server selector (disconnected only)
+            if !viewModel.isConnected {
+                Button {
                     showingServerList = true
-                }) {
+                } label: {
                     HStack {
                         Image(systemName: "shield")
                         Text(serverSelectionText)
@@ -94,31 +93,34 @@ struct HomeView: View {
                 }
                 .padding(.horizontal)
                 .sheet(isPresented: $showingServerList) {
-                    ServerListView(vpnService: vpnService)
+                    ServerListView(viewModel: ServerListViewModel(),
+                                   onSelectServer: { server in
+                                       viewModel.selectServer(server)
+                                   },
+                                   onSelectAuto: {
+                                       viewModel.setAutoMode()
+                                   })
                 }
             }
-            
+
             Spacer()
-            
-            // Bottom navigation
+
+            // Bottom navigation bar
             HStack {
                 Spacer()
                 VStack {
                     Image(systemName: "house.fill")
-                    Text("Home")
-                        .font(.caption)
+                    Text("Home").font(.caption)
                 }
                 Spacer()
                 VStack {
                     Image(systemName: "gear")
-                    Text("Settings")
-                        .font(.caption)
+                    Text("Settings").font(.caption)
                 }
                 Spacer()
                 VStack {
                     Image(systemName: "square.and.arrow.up")
-                    Text("Share")
-                        .font(.caption)
+                    Text("Share").font(.caption)
                 }
                 Spacer()
             }
@@ -129,17 +131,15 @@ struct HomeView: View {
         .background(Color.appBackground)
         .edgesIgnoringSafeArea(.bottom)
     }
-    
+
+    // MARK: - Private
+
     private var serverSelectionText: String {
-        switch vpnService.connection.connectionMode {
+        switch viewModel.connectionMode {
         case .auto:
             return "Auto"
         case .manual(let server):
             return server.name
         }
     }
-}
-
-#Preview {
-    HomeView()
 }

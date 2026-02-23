@@ -3,22 +3,23 @@
 
 
 ```bash
-
 sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
 
 cd FptnLib/
-
 git submodule update --init --recursive
+```
 
+### Xcode Integration (Recommended)
+We have added a script to build this automatically when you build the iOS app.
+1. Open `FptnVPN.xcodeproj` in Xcode
+2. Go to **FptnVPN** target -> **Build Phases**
+3. Add a **New Run Script Phase** at the very top
+4. Name it "Build FptnLib" and set the script to:
+   `"${SRCROOT}/build_fptn_lib.sh"`
 
-# emulator
-conan install . --profile:host=conan-simulator-profile --profile:build=default --build=missing --output-folder=build-simulator
-
-cd build-simulator
-cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake  -DCMAKE_BUILD_TYPE=Debug
-
-cmake --build . --config Debug
-
+### Manual Build (Alternative)
+```bash
+./build_fptn_lib.sh
 ```
 
 

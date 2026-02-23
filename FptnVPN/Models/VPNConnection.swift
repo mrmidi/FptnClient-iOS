@@ -6,15 +6,15 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 
-struct VPNConnection {
+struct VPNConnection: Sendable {
     var isConnected: Bool = false
     var selectedServer: VPNServer?
     var connectionTime: TimeInterval = 0
     var downloadSpeed: Double = 0
     var uploadSpeed: Double = 0
     var connectionMode: ConnectionMode = .auto
-    
-    enum ConnectionMode {
+
+    enum ConnectionMode: Sendable {
         case auto
         case manual(VPNServer)
     }

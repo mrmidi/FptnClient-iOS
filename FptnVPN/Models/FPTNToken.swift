@@ -6,7 +6,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 
-struct FPTNToken: Codable {
+struct FPTNToken: Codable, Sendable {
     let version: Int
     let service_name: String
     let username: String

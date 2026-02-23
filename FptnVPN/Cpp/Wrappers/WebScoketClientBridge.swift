@@ -72,11 +72,11 @@ public class WebsocketClientBridge {
         let cMd5Fingerprint = md5Fingerprint.cString(using: .utf8)
         
         // Convert Swift closures to Objective-C compatible blocks
-        let packetBlock: @convention(block) (NSData) -> Void = { data in
+        let _packetBlock: @convention(block) (NSData) -> Void = { data in
             packetCallback(data as Data)
         }
         
-        let connectedBlock: @convention(block) () -> Void = {
+        let _connectedBlock: @convention(block) () -> Void = {
             connectedCallback()
         }
         

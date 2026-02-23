@@ -3,6 +3,16 @@
 <plist version="1.0">
 <dict>
 	<key>com.apple.developer.networking.networkextension</key>
-	<array/>
+	<array>
+		<string>packet-tunnel-provider</string>
+		<string>dns-settings</string>
+		<string>content-filter-provider</string>
+		<string>dns-proxy</string>
+		<string>app-proxy-provider</string>
+	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.net.mrmidi.FptnVPN</string>
+	</array>
 </dict>
 </plist>

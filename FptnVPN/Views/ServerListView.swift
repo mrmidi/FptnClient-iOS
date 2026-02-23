@@ -7,53 +7,46 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 import SwiftUI
 
 struct ServerListView: View {
-    @Environment(\.dismiss) var dismiss
-    @ObservedObject var vpnService: VPNService
-    
-    private let serverService = ServerSelectionService.shared
-    
+    @Environment(\.dismiss) private var dismiss
+    @StateObject var viewModel: ServerListViewModel
+
+    // Callback to notify HomeViewModel of selection
+    var onSelectServer: ((VPNServer) -> Void)?
+    var onSelectAuto: (() -> Void)?
+
     var body: some View {
         NavigationView {
             List {
-                Section(header: Text("Режим подключения")) {
-                    Button(action: {
-                        vpnService.connection.connectionMode = .auto
+                Section(header: Text("Connection Mode")) {
+                    Button {
+                        onSelectAuto?()
                         dismiss()
-                    }) {
+                    } label: {
                         HStack {
                             Text("Auto")
                             Spacer()
-                            if case .auto = vpnService.connection.connectionMode {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.blue)
-                            }
                         }
                     }
                 }
-                
-                Section(header: Text("Серверы")) {
-                    ForEach(serverService.getAllServers()) { server in
-                        Button(action: {
-                            vpnService.connection.connectionMode = .manual(server)
+
+                Section(header: Text("Servers")) {
+                    ForEach(viewModel.servers) { server in
+                        Button {
+                            onSelectServer?(server)
                             dismiss()
-                        }) {
-                            HStack {
-                                Text(server.name)
-                                Spacer()
-                                if case .manual(let selectedServer) = vpnService.connection.connectionMode,
-                                   selectedServer.id == server.id {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.blue)
-                                }
-                            }
+                        } label: {
+                            Text(server.name)
                         }
                     }
                 }
             }
-            .navigationTitle("Выбор сервера")
-            .navigationBarItems(trailing: Button("Готово") {
+            .navigationTitle("Select Server")
+            .navigationBarItems(trailing: Button("Done") {
                 dismiss()
             })
+            .task {
+                await viewModel.loadServers()
+            }
         }
     }
 }
