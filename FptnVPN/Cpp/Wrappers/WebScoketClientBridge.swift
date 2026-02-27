@@ -29,6 +29,7 @@ final class WebsocketClientBridge {
         sni: String,
         accessToken: String,
         md5Fingerprint: String,
+        censorshipStrategy: String = "SNI",
         packetCallback: @escaping PacketCallback,
         connectedCallback: @escaping ConnectionCallback
     ) {
@@ -48,6 +49,7 @@ final class WebsocketClientBridge {
             sni,
             accessToken,
             md5Fingerprint,
+            censorshipStrategy,
             // IPPacketCallback
             { rawPtr, length, ctx in
                 guard let ctx, let rawPtr else { return }

@@ -9,7 +9,8 @@
 
 extern "C" {
 
-HttpsClientHandle createHttpsClient(const char* host, int port, const char* sni, const char* md5_fingerprint) {
+HttpsClientHandle createHttpsClient(const char* host, int port, const char* sni, const char* md5_fingerprint,
+                                    const char* censorship_strategy) {
     try {
         auto client = new fptn::protocol::https::HttpsClient(
             std::string(host),
@@ -17,6 +18,7 @@ HttpsClientHandle createHttpsClient(const char* host, int port, const char* sni,
             std::string(sni),
             std::string(md5_fingerprint)
         );
+        (void)censorship_strategy; // reserved: forwarded once fptn-protocol-lib exposes strategy param
         return static_cast<HttpsClientHandle>(client);
     } catch (const std::exception& e) {
         // Log error if needed

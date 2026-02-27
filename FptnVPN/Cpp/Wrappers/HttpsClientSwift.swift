@@ -10,8 +10,8 @@ import Foundation
 class HttpsClientSwift {
     private let client: UnsafeMutableRawPointer?
 
-    init(host: String, port: Int, sni: String, md5Fingerprint: String) {
-        client = createHttpsClient(host, Int32(port), sni, md5Fingerprint)
+    init(host: String, port: Int, sni: String, md5Fingerprint: String, censorshipStrategy: String = "SNI") {
+        client = createHttpsClient(host, Int32(port), sni, md5Fingerprint, censorshipStrategy)
     }
 
     func get(path: String, timeout: Int) -> [String: Any] {

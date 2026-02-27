@@ -39,6 +39,7 @@ struct WebsocketClientWrapper {
     std::string sni;
     std::string access_token;
     std::string md5_fingerprint;
+    std::string censorship_strategy;
     
     WebsocketClientWrapper(IPPacketCallback p_callback, 
                           ConnectionCallback c_callback,
@@ -143,19 +144,21 @@ WebsocketClientBridgePtr websocket_client_bridge_create(
     const char* sni,
     const char* access_token,
     const char* md5_fingerprint,
+    const char* censorship_strategy,
     IPPacketCallback packet_callback,
     ConnectionCallback connected_callback,
     void* context) {
-    
+
     try {
         auto wrapper = new WebsocketClientWrapper(packet_callback, connected_callback, context);
-        
+
         wrapper->server_ip = server_ip;
         wrapper->server_port = server_port;
         wrapper->tun_ipv4 = tun_ipv4;
         wrapper->sni = sni;
         wrapper->access_token = access_token;
         wrapper->md5_fingerprint = md5_fingerprint;
+        wrapper->censorship_strategy = censorship_strategy ? censorship_strategy : "SNI"; // reserved for future use
         
         return static_cast<WebsocketClientBridgePtr>(wrapper);
     } catch (...) {

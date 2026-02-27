@@ -16,7 +16,8 @@ typedef struct {
 } CHttpResponse;
 
 // Create and destroy
-HttpsClientHandle createHttpsClient(const char* host, int port, const char* sni, const char* md5_fingerprint);
+HttpsClientHandle createHttpsClient(const char* host, int port, const char* sni, const char* md5_fingerprint,
+                                    const char* censorship_strategy);
 void destroyHttpsClient(HttpsClientHandle handle);
 
 // Methods

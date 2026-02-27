@@ -29,6 +29,7 @@ WebsocketClientBridgePtr websocket_client_bridge_create(
     const char* sni,
     const char* access_token,
     const char* md5_fingerprint,
+    const char* censorship_strategy,
     IPPacketCallback packet_callback,
     ConnectionCallback connected_callback,
     void* context);
