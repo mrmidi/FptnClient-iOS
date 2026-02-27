@@ -128,7 +128,7 @@ class VPNService: ObservableObject {
 
     // MARK: - Login
 
-    private func loginToServer(
+    nonisolated private func loginToServer(
         server: VPNServer,
         username: String,
         password: String,
@@ -178,7 +178,7 @@ class VPNService: ObservableObject {
 
     // MARK: - DNS
 
-    private func getDNSInfo(
+    nonisolated private func getDNSInfo(
         server: VPNServer,
         accessToken: String,
         sni: String,

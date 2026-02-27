@@ -19,6 +19,7 @@ struct FptnVPNApp: App {
     var body: some Scene {
         WindowGroup {
             LoginView()
+                .preferredColorScheme(.dark)
         }
     }
 }
