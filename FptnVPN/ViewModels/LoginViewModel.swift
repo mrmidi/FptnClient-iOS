@@ -24,6 +24,8 @@ final class LoginViewModel: ObservableObject {
 
     init(tokenService: TokenService = .shared) {
         self.tokenService = tokenService
+        // Skip the login screen if credentials are already stored in Keychain/UserDefaults.
+        isLoggedIn = tokenService.isLoggedIn()
     }
 
     // MARK: - Commands

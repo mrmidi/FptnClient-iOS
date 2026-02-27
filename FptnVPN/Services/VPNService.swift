@@ -26,17 +26,26 @@ class VPNService: ObservableObject {
     private var packetTunnelProvider: NETunnelProviderManager?
     private var tunnelStatusObserver: NSObjectProtocol?
 
+    // Auto-reconnect state
+    private var reconnectTask: Task<Void, Never>?
+    private var userInitiatedDisconnect = false
+
     private let tokenService = TokenService.shared
 
     // MARK: - Public
 
     func connect() {
+        userInitiatedDisconnect = false
         Task {
             await performConnect()
         }
     }
 
     func disconnect() {
+        userInitiatedDisconnect = true
+        reconnectTask?.cancel()
+        reconnectTask = nil
+
         packetTunnelProvider?.connection.stopVPNTunnel()
         packetTunnelProvider = nil
 
@@ -46,6 +55,7 @@ class VPNService: ObservableObject {
         }
 
         connection.isConnected = false
+        connection.isReconnecting = false
         stopTimer()
         stopSpeedMonitoring()
     }
@@ -53,11 +63,18 @@ class VPNService: ObservableObject {
     // MARK: - Private connect flow
 
     private func performConnect() async {
-        // Resolve server
-        let servers = await tokenService.getServers()
-        guard let server = servers.first else {
-            logger.warning("No servers available — cannot connect")
-            return
+        // Resolve server — honour manual selection if set, fall back to auto (first).
+        let server: VPNServer
+        switch connection.connectionMode {
+        case .manual(let chosen):
+            server = chosen
+        case .auto:
+            let servers = await tokenService.getServers()
+            guard let first = servers.first else {
+                logger.warning("No servers available — cannot connect")
+                return
+            }
+            server = first
         }
 
         connection.selectedServer = server
@@ -67,11 +84,17 @@ class VPNService: ObservableObject {
             return
         }
 
+        let settings = SettingsService.shared
+        let sni = settings.sni
+        let strategy = settings.bypassMethod.rawValue
+
         // Login
         let accessTokenResult = await loginToServer(
             server: server,
             username: tokenData.username,
-            password: tokenData.password
+            password: tokenData.password,
+            sni: sni,
+            censorshipStrategy: strategy
         )
         guard case .success(let accessToken) = accessTokenResult else {
             if case .failure(let error) = accessTokenResult {
@@ -81,7 +104,7 @@ class VPNService: ObservableObject {
         }
 
         // DNS
-        let dnsResult = await getDNSInfo(server: server, accessToken: accessToken)
+        let dnsResult = await getDNSInfo(server: server, accessToken: accessToken, sni: sni, censorshipStrategy: strategy)
         guard case .success(let (dnsIPv4, dnsIPv6)) = dnsResult else {
             if case .failure(let error) = dnsResult {
                 logger.error("DNS info error: \(error.localizedDescription)")
@@ -90,13 +113,13 @@ class VPNService: ObservableObject {
         }
 
         // Save config and launch the PacketTunnelProvider extension.
-        // The extension owns the WebSocket and the TUN interface — the app
-        // process does not run a second WebSocket connection.
         let vpnResult = await configureAndStartVPN(
             server: server,
             accessToken: accessToken,
             dnsIPv4: dnsIPv4,
-            dnsIPv6: dnsIPv6
+            dnsIPv6: dnsIPv6,
+            sni: sni,
+            bypassMethod: strategy
         )
         if case .failure(let error) = vpnResult {
             logger.error("VPN configuration error: \(error.localizedDescription)")
@@ -108,13 +131,16 @@ class VPNService: ObservableObject {
     private func loginToServer(
         server: VPNServer,
         username: String,
-        password: String
+        password: String,
+        sni: String,
+        censorshipStrategy: String
     ) async -> Result<String, Error> {
         let httpsClient = HttpsClientSwift(
             host: server.host,
             port: server.port,
-            sni: server.host,
-            md5Fingerprint: server.md5_fingerprint
+            sni: sni,
+            md5Fingerprint: server.md5_fingerprint,
+            censorshipStrategy: censorshipStrategy
         )
 
         let requestBody = """
@@ -154,13 +180,16 @@ class VPNService: ObservableObject {
 
     private func getDNSInfo(
         server: VPNServer,
-        accessToken: String
+        accessToken: String,
+        sni: String,
+        censorshipStrategy: String
     ) async -> Result<(String, String), Error> {
         let httpsClient = HttpsClientSwift(
             host: server.host,
             port: server.port,
-            sni: server.host,
-            md5Fingerprint: server.md5_fingerprint
+            sni: sni,
+            md5Fingerprint: server.md5_fingerprint,
+            censorshipStrategy: censorshipStrategy
         )
 
         let response = httpsClient.get(path: "/api/v1/dns", timeout: 10)
@@ -196,7 +225,9 @@ class VPNService: ObservableObject {
         server: VPNServer,
         accessToken: String,
         dnsIPv4: String,
-        dnsIPv6: String
+        dnsIPv6: String,
+        sni: String,
+        bypassMethod: String
     ) async -> Result<Void, Error> {
         return await withCheckedContinuation { continuation in
             // Reuse the existing manager when one is already installed — creating a
@@ -220,20 +251,25 @@ class VPNService: ObservableObject {
                 let manager = existing?.first ?? NETunnelProviderManager()
 
                 let config = NETunnelProviderProtocol()
-                config.serverAddress = server.host
+                config.serverAddress = "FptnVPN"
 #if os(iOS)
                 config.providerBundleIdentifier = "net.mrmidi.FptnVPN.FptnVPNTunnel"
 #else
                 config.providerBundleIdentifier = "org.fptn.FptnVPN.mac.extension"
 #endif
+
+                let appFilter = AppFilterService.shared
                 config.providerConfiguration = [
                     "server": server.host,
                     "port": server.port,
                     "accessToken": accessToken,
                     "dnsIPv4": dnsIPv4,
                     "dnsIPv6": dnsIPv6,
-                    "sni": server.host,
-                    "md5Fingerprint": server.md5_fingerprint
+                    "sni": sni,
+                    "md5Fingerprint": server.md5_fingerprint,
+                    "bypassMethod": bypassMethod,
+                    "perAppMode": appFilter.mode.rawValue,
+                    "allowedApps": appFilter.selectedBundleIDs.joined(separator: ",")
                 ]
 
                 manager.protocolConfiguration = config
@@ -258,10 +294,6 @@ class VPNService: ObservableObject {
                             return
                         }
 
-                        // Start the PacketTunnelProvider extension. This is what
-                        // configures the TUN interface and routes all device traffic
-                        // through the VPN. Without this call the OS never touches the
-                        // tunnel and traffic continues over the regular network.
                         do {
                             try box.manager.connection.startVPNTunnel()
                             logger.info("VPN tunnel start requested")
@@ -284,8 +316,6 @@ class VPNService: ObservableObject {
 
     // MARK: - Tunnel status observation
 
-    /// Observe NEVPNStatusDidChange so isConnected tracks the real tunnel state,
-    /// not just whether a WebSocket started in the app process.
     private func observeTunnelStatus(_ manager: NETunnelProviderManager) {
         if let previous = tunnelStatusObserver {
             NotificationCenter.default.removeObserver(previous)
@@ -307,16 +337,57 @@ class VPNService: ObservableObject {
         switch status {
         case .connected:
             connection.isConnected = true
+            connection.isReconnecting = false
             startTimer()
             startRealSpeedMonitoring()
         case .disconnected, .invalid:
-            if connection.isConnected {
+            if connection.isConnected || connection.isReconnecting {
                 connection.isConnected = false
                 stopTimer()
                 stopSpeedMonitoring()
+
+                if !userInitiatedDisconnect && SettingsService.shared.reconnectEnabled {
+                    scheduleReconnect()
+                }
             }
         default:
             break
+        }
+    }
+
+    // MARK: - Auto-reconnect
+
+    private func scheduleReconnect() {
+        let maxAttempts = SettingsService.shared.maxReconnectAttempts
+        let delay = SettingsService.shared.reconnectDelay
+
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            var attempt = 0
+            while !Task.isCancelled {
+                if maxAttempts > 0 && attempt >= maxAttempts {
+                    logger.info("Auto-reconnect: reached max \(maxAttempts) attempt(s), giving up")
+                    break
+                }
+                attempt += 1
+                logger.info("Auto-reconnect: attempt \(attempt)\(maxAttempts > 0 ? "/\(maxAttempts)" : " (unlimited)")")
+
+                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+                guard !Task.isCancelled else { break }
+
+                await MainActor.run {
+                    self?.connection.isReconnecting = true
+                }
+                await self?.performConnect()
+
+                // If connect succeeded, tunnel status observer sets isConnected=true; stop looping.
+                if await MainActor.run(body: { self?.connection.isConnected ?? false }) {
+                    break
+                }
+            }
+            await MainActor.run {
+                self?.connection.isReconnecting = false
+            }
         }
     }
 

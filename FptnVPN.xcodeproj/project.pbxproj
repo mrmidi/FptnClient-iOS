@@ -7,14 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3A410EC92F4CB24300CB1F4E /* fptn.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3A410EC82F4CB24300CB1F4E /* fptn.icon */; };
 		3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0A2F4C62880020E4E3 /* Logging */; };
 		3AEA9E0C2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0D2F4C62880020E4E3 /* Logging */; };
-		3AEF123A2F5D123B00112233 /* WebScoketClientBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AEF123C2F5D123D00112233 /* WebScoketClientBridge.swift */; };
-		7994B7FD2E7A299E00624B08 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 79A890742E7582AB0062CD90 /* NetworkExtension.framework */; };
-		7994B7FE2E7A299E00624B08 /* NetworkExtension.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 79A890742E7582AB0062CD90 /* NetworkExtension.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		7994B8002E7A299E00624B08 /* fptn_native_lib.framework in Embed Frameworks (Tunnel) */ = {isa = PBXBuildFile; fileRef = 798039E12E74177300BEA18D /* fptn_native_lib.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7994B8002E7A299E00624B08 /* (null) in Embed Frameworks */ = {isa = PBXBuildFile; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		79A890782E7582AB0062CD90 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		79A8907D2E7582AB0062CD90 /* FptnVPNTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		79A890782E7582AB0062CD90 /* fptn_native_lib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 798039E12E74177300BEA18D /* fptn_native_lib.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,8 +56,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				7994B7FE2E7A299E00624B08 /* NetworkExtension.framework in Embed Frameworks */,
-				7994B8002E7A299E00624B08 /* fptn_native_lib.framework in Embed Frameworks (Tunnel) */,
+				7994B8002E7A299E00624B08 /* (null) in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -78,6 +75,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3A410EC82F4CB24300CB1F4E /* fptn.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = fptn.icon; sourceTree = "<group>"; };
 		79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FptnVPNTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		79A890742E7582AB0062CD90 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		85D5C3262DFD4A0600ABAD64 /* FptnVPN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FptnVPN.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -106,13 +104,6 @@
 				Cpp/fptn_native_lib.framework,
 			);
 		};
-		79D2799F2E7D6BE500B24EDB /* Exceptions for "FptnVPN" folder in "Copy Bundle Resources" phase from "FptnVPN" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = 85D5C3242DFD4A0600ABAD64 /* Resources */;
-			membershipExceptions = (
-				Cpp/fptn_native_lib.framework,
-			);
-		};
 /* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -127,7 +118,6 @@
 		85D5C3282DFD4A0600ABAD64 /* FptnVPN */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				79D2799F2E7D6BE500B24EDB /* Exceptions for "FptnVPN" folder in "Copy Bundle Resources" phase from "FptnVPN" target */,
 				79BEF5492E7D0AF7007E57BB /* Exceptions for "FptnVPN" folder in "Embed Frameworks" phase from "FptnVPN" target */,
 			);
 			path = FptnVPN;
@@ -150,7 +140,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7994B7FD2E7A299E00624B08 /* NetworkExtension.framework in Frameworks */,
 				3AEA9E0C2F4C62880020E4E3 /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -160,7 +149,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */,
-				79A890782E7582AB0062CD90 /* fptn_native_lib.framework in Frameworks */,
+				79A890782E7582AB0062CD90 /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -198,6 +187,7 @@
 				79A890762E7582AB0062CD90 /* FptnVPNTunnel */,
 				79A890732E7582AB0062CD90 /* Frameworks */,
 				85D5C3272DFD4A0600ABAD64 /* Products */,
+				3A410EC82F4CB24300CB1F4E /* fptn.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -248,6 +238,7 @@
 				85D5C3242DFD4A0600ABAD64 /* Resources */,
 				798039E22E74177300BEA18D /* Embed Frameworks */,
 				79A890822E7582AB0062CD90 /* Embed Foundation Extensions */,
+				3A41D5902F4CBE5900140B4E /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -375,6 +366,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A410EC92F4CB24300CB1F4E /* fptn.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -393,6 +385,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		3A41D5902F4CBE5900140B4E /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nDSYM_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework.dSYM\"\nif [ -d \"$DSYM_SRC\" ]; then\n   cp -R \"$DSYM_SRC\" \"${DWARF_DSYM_FOLDER_PATH}/\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		79A8906E2E7582AB0062CD90 /* Sources */ = {
@@ -460,7 +472,7 @@
 				INFOPLIST_FILE = FptnVPNTunnel/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FptnVPNTunnel;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -500,7 +512,7 @@
 				INFOPLIST_FILE = FptnVPNTunnel/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FptnVPNTunnel;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -562,7 +574,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/FptnVPN/Cpp/**",
 					"$(PROJECT_DIR)/FptnVPN/Cpp",
@@ -634,7 +646,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/FptnVPN/Cpp/**",
 					"$(PROJECT_DIR)/FptnVPN/Cpp",
@@ -665,7 +677,7 @@
 		85D5C3482DFD4A0800ABAD64 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = fptn;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -713,7 +725,7 @@
 		85D5C3492DFD4A0800ABAD64 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = fptn;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;

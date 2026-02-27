@@ -8,10 +8,12 @@ import SwiftUI
 
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
+    var onLogout: () -> Void = {}
 #if DEBUG
     @State private var showingDebugLog = false
 #endif
     @State private var showingServerList = false
+    @State private var showingSettings = false
 
     var body: some View {
         VStack {
@@ -113,16 +115,24 @@ struct HomeView: View {
                     Text("Home").font(.caption)
                 }
                 Spacer()
-                VStack {
-                    Image(systemName: "gear")
-                    Text("Settings").font(.caption)
+                Button {
+                    showingSettings = true
+                } label: {
+                    VStack {
+                        Image(systemName: "gear")
+                        Text("Settings").font(.caption)
+                    }
+                }
+                .sheet(isPresented: $showingSettings) {
+                    SettingsView(viewModel: SettingsViewModel(onLogout: onLogout))
                 }
                 Spacer()
-                VStack {
-                    Image(systemName: "square.and.arrow.up")
-                    Text("Share").font(.caption)
-                }
-                Spacer()
+                // TODO: Uncomment when app is on App Store for sharing/promotion
+                // VStack {
+                //     Image(systemName: "square.and.arrow.up")
+                //     Text("Share").font(.caption)
+                // }
+                // Spacer()
             }
             .foregroundColor(.white)
             .padding()
