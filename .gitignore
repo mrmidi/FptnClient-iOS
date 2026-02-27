@@ -1,3 +1,6 @@
+# Android app is refernce only here
+FptnClient-Android/
+
 # Xcode
 .DS_Store
 *.DS_Store
@@ -89,3 +92,16 @@ fastlane/*.env
 # https://github.com/johnno1962/injectionforxcode
 
 iOSInjectionProject/
+
+# my test tokens
+*.txt
+
+# tools
+token_debug.py
+token_decoder.py
+
+# icons
+fptn.icon/
+
+# artifacts
+FptnLib/build*
