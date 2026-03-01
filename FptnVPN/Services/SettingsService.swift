@@ -16,6 +16,7 @@ actor SettingsService {
     private static let maxReconnectKey       = "fptn.settings.maxReconnectAttempts"
     private static let reconnectDelayKey     = "fptn.settings.reconnectDelay"
     private static let colorSchemeKey        = "fptn.settings.colorScheme"
+    private static let logLevelKey           = "fptn.settings.logLevel"
 
     // MARK: - Nonisolated reads (UserDefaults is thread-safe)
 
@@ -56,6 +57,12 @@ actor SettingsService {
         return scheme
     }
 
+    nonisolated var logLevel: LogLevel {
+        guard let raw = UserDefaults.standard.string(forKey: Self.logLevelKey),
+              let level = LogLevel(rawValue: raw) else { return .warning }
+        return level
+    }
+
     // MARK: - Setters
 
     func setSni(_ value: String) {
@@ -84,6 +91,10 @@ actor SettingsService {
 
     func setColorScheme(_ scheme: AppColorScheme) {
         UserDefaults.standard.set(scheme.rawValue, forKey: Self.colorSchemeKey)
+    }
+
+    func setLogLevel(_ level: LogLevel) {
+        UserDefaults.standard.set(level.rawValue, forKey: Self.logLevelKey)
     }
 
     // MARK: - SNI sanitization

@@ -6,6 +6,16 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import NetworkExtension
 
+private struct TunnelControlMessage: Codable {
+    let action: String
+    let logLevel: String?
+}
+
+private struct TunnelControlResponse: Codable {
+    let ok: Bool
+    let message: String
+}
+
 // MARK: - PacketTunnelProvider
 
 /// NEPacketTunnelProvider for the FptnVPN tunnel extension.
@@ -38,6 +48,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
+                setTunnelLogLevel(rawValue: providerConfig["logLevel"] as? String)
+                logger.warning("Tunnel started (level=\((providerConfig["logLevel"] as? String) ?? "warning"))")
+
         guard
             let serverIP   = providerConfig["server"]       as? String,
             let serverPort = providerConfig["port"]         as? Int,
@@ -69,7 +82,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 self?.packetFlow.writePackets([data], withProtocols: [AF_INET as NSNumber])
             },
             connectedCallback: { [weak self] in
-                logger.info("WebSocket connected — applying network settings")
+                logger.warning("Tunnel websocket connected — applying network settings")
                 self?.applyNetworkSettings(
                     tunIPv4: tunIPv4,
                     tunIPv4Gateway: tunIPv4Gateway,
@@ -129,7 +142,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 completionHandler(error)
                 return
             }
-            logger.info("Tunnel network settings applied — starting packet read loop")
+            logger.warning("Tunnel network settings applied — packet loop started")
             self?.startReadLoop()
             completionHandler(nil)
         }
@@ -157,7 +170,26 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler: ((Data?) -> Void)?
     ) {
         logger.debug("handleAppMessage \(messageData.count) bytes")
-        completionHandler?(messageData)
+
+        guard let message = try? JSONDecoder().decode(TunnelControlMessage.self, from: messageData) else {
+            let response = TunnelControlResponse(ok: false, message: "invalid_payload")
+            completionHandler?(try? JSONEncoder().encode(response))
+            return
+        }
+
+        switch message.action {
+        case "set_log_level":
+            setTunnelLogLevel(rawValue: message.logLevel)
+            logger.info("Tunnel log level updated via IPC: \(message.logLevel ?? "warning")")
+            let response = TunnelControlResponse(ok: true, message: "log_level_updated")
+            completionHandler?(try? JSONEncoder().encode(response))
+        case "ping":
+            let response = TunnelControlResponse(ok: true, message: "pong")
+            completionHandler?(try? JSONEncoder().encode(response))
+        default:
+            let response = TunnelControlResponse(ok: false, message: "unknown_action")
+            completionHandler?(try? JSONEncoder().encode(response))
+        }
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {

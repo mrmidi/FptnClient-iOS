@@ -15,6 +15,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var maxReconnectAttempts: Int
     @Published var reconnectDelay: Int
     @Published var colorScheme: AppColorScheme
+    @Published var logLevel: LogLevel
 
     var onLogout: (() -> Void)?
 
@@ -35,6 +36,7 @@ final class SettingsViewModel: ObservableObject {
         self.maxReconnectAttempts = settingsService.maxReconnectAttempts
         self.reconnectDelay = settingsService.reconnectDelay
         self.colorScheme = settingsService.colorScheme
+        self.logLevel = settingsService.logLevel
     }
 
     func saveSni() {
@@ -71,6 +73,14 @@ final class SettingsViewModel: ObservableObject {
     func saveColorScheme(_ scheme: AppColorScheme) {
         colorScheme = scheme
         Task { await settingsService.setColorScheme(scheme) }
+    }
+
+    func saveLogLevel(_ level: LogLevel) {
+        logLevel = level
+        Task {
+            await settingsService.setLogLevel(level)
+            await VPNService.pushLogLevelToActiveTunnel(level)
+        }
     }
 
     func logout() {

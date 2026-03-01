@@ -8,6 +8,55 @@ import Foundation
 import Logging
 import OSLog
 
+private enum TunnelRuntimeLogLevel: String {
+    case warning
+    case info
+    case debug
+
+    var loggingLevel: Logging.Logger.Level {
+        switch self {
+        case .warning: return .warning
+        case .info: return .info
+        case .debug: return .debug
+        }
+    }
+
+    static func from(loggingLevel: Logging.Logger.Level) -> TunnelRuntimeLogLevel {
+        switch loggingLevel {
+        case .critical, .error, .warning:
+            return .warning
+        case .notice, .info:
+            return .info
+        case .debug, .trace:
+            return .debug
+        }
+    }
+}
+
+private final class TunnelLogLevelStore: @unchecked Sendable {
+    static let shared = TunnelLogLevelStore()
+
+    private let lock = NSLock()
+    private var current: TunnelRuntimeLogLevel = .warning
+
+    func get() -> TunnelRuntimeLogLevel {
+        lock.lock()
+        defer { lock.unlock() }
+        return current
+    }
+
+    func set(rawValue: String?) {
+        guard let rawValue, let level = TunnelRuntimeLogLevel(rawValue: rawValue) else { return }
+        set(level)
+    }
+
+    func set(_ level: TunnelRuntimeLogLevel) {
+        lock.lock()
+        current = level
+        lock.unlock()
+    }
+}
+
 // MARK: - Module-level logger (tunnel target)
 
 let logger = Logging.Logger(label: "org.fptn.tunnel")
@@ -21,6 +70,10 @@ func bootstrapLogging() {
     }
 }
 
+func setTunnelLogLevel(rawValue: String?) {
+    TunnelLogLevelStore.shared.set(rawValue: rawValue)
+}
+
 // MARK: - TunnelLogHandler
 
 /// Mirror of AppLogHandler for the tunnel extension process.
@@ -29,13 +82,10 @@ struct TunnelLogHandler: Logging.LogHandler {
 
     let label: String
     var metadata: Logging.Logger.Metadata = [:]
-    var logLevel: Logging.Logger.Level = {
-#if DEBUG
-        return .debug
-#else
-        return .info
-#endif
-    }()
+    var logLevel: Logging.Logger.Level {
+        get { TunnelLogLevelStore.shared.get().loggingLevel }
+        set { TunnelLogLevelStore.shared.set(TunnelRuntimeLogLevel.from(loggingLevel: newValue)) }
+    }
 
     private let osLog: OSLog
 

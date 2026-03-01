@@ -8,6 +8,11 @@ import Foundation
 import Combine
 @preconcurrency import NetworkExtension
 
+private struct TunnelControlMessage: Codable {
+    let action: String
+    let logLevel: String?
+}
+
 @MainActor
 class VPNService: ObservableObject {
     @Published var connection = VPNConnection()
@@ -51,6 +56,40 @@ class VPNService: ObservableObject {
         connection.errorMessage = nil
         stopTimer()
         stopSpeedMonitoring()
+    }
+
+    static func pushLogLevelToActiveTunnel(_ level: LogLevel) async {
+        await withCheckedContinuation { continuation in
+            NETunnelProviderManager.loadAllFromPreferences { managers, error in
+                guard error == nil else {
+                    logger.error("Failed to load tunnel managers for log-level sync")
+                    continuation.resume()
+                    return
+                }
+
+                guard let manager = managers?.first,
+                      let session = manager.connection as? NETunnelProviderSession,
+                      manager.connection.status == .connected || manager.connection.status == .connecting else {
+                    continuation.resume()
+                    return
+                }
+
+                let message = TunnelControlMessage(action: "set_log_level", logLevel: level.rawValue)
+                guard let data = try? JSONEncoder().encode(message) else {
+                    continuation.resume()
+                    return
+                }
+
+                do {
+                    try session.sendProviderMessage(data) { _ in
+                        continuation.resume()
+                    }
+                } catch {
+                    logger.warning("Failed to send log-level update to tunnel: \(error.localizedDescription)")
+                    continuation.resume()
+                }
+            }
+        }
     }
 
     // MARK: - Private connect flow
@@ -263,6 +302,7 @@ class VPNService: ObservableObject {
                     "dnsIPv4": dnsIPv4,
                     "dnsIPv6": dnsIPv6,
                     "sni": sni,
+                    "logLevel": SettingsService.shared.logLevel.rawValue,
                     "md5Fingerprint": server.md5_fingerprint,
                     "bypassMethod": bypassMethod,
                     "perAppMode": appFilter.mode.rawValue,

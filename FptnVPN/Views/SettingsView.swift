@@ -135,6 +135,28 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Color.appSurface)
 
+                // MARK: Logging
+
+                Section {
+                    Picker("Log Level", selection: Binding(
+                        get: { viewModel.logLevel },
+                        set: { viewModel.saveLogLevel($0) }
+                    )) {
+                        ForEach(LogLevel.allCases) { level in
+                            Text(level.displayName).tag(level)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(Color.appAccent)
+                } header: {
+                    Text("Logging")
+                        .foregroundStyle(Color.appAccent)
+                } footer: {
+                    Text("Default is Warning. Use Debug only for troubleshooting because it can produce high-volume logs.")
+                        .foregroundStyle(Color.appSecondaryText)
+                }
+                .listRowBackground(Color.appSurface)
+
                 // MARK: Per-App VPN
 
                 Section {

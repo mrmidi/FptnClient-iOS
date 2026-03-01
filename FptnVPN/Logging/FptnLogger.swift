@@ -30,13 +30,15 @@ struct AppLogHandler: Logging.LogHandler {
 
     let label: String
     var metadata: Logging.Logger.Metadata = [:]
-    var logLevel: Logging.Logger.Level = {
-#if DEBUG
-        return .debug
-#else
-        return .info
-#endif
-    }()
+    var logLevel: Logging.Logger.Level {
+        get { SettingsService.shared.logLevel.loggingLevel }
+        set {
+            let mapped = LogLevel.from(loggingLevel: newValue)
+            Task {
+                await SettingsService.shared.setLogLevel(mapped)
+            }
+        }
+    }
 
     private let osLog: OSLog
 

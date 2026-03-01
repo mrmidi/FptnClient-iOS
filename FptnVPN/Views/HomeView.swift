@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var showingServerList = false
     @State private var showingSettings = false
     @State private var showingTools = false
+    @State private var showingLogs = false
 
     var body: some View {
         VStack {
@@ -147,6 +148,18 @@ struct HomeView: View {
                 }
                 .sheet(isPresented: $showingTools) {
                     ToolsView(initialConnectionMode: viewModel.connectionMode)
+                }
+                Spacer()
+                Button {
+                    showingLogs = true
+                } label: {
+                    VStack {
+                        Image(systemName: "doc.text")
+                        Text("Logs").font(.caption)
+                    }
+                }
+                .sheet(isPresented: $showingLogs) {
+                    LogsView()
                 }
                 Spacer()
                 Button {
