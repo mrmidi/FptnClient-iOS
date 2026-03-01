@@ -14,6 +14,7 @@ struct HomeView: View {
 #endif
     @State private var showingServerList = false
     @State private var showingSettings = false
+    @State private var showingTools = false
 
     var body: some View {
         VStack {
@@ -137,6 +138,18 @@ struct HomeView: View {
                 }
                 Spacer()
                 Button {
+                    showingTools = true
+                } label: {
+                    VStack {
+                        Image(systemName: "wrench.and.screwdriver")
+                        Text("Tools").font(.caption)
+                    }
+                }
+                .sheet(isPresented: $showingTools) {
+                    ToolsView(initialConnectionMode: viewModel.connectionMode)
+                }
+                Spacer()
+                Button {
                     showingSettings = true
                 } label: {
                     VStack {
@@ -148,12 +161,6 @@ struct HomeView: View {
                     SettingsView(viewModel: SettingsViewModel(onLogout: onLogout))
                 }
                 Spacer()
-                // TODO: Uncomment when app is on App Store for sharing/promotion
-                // VStack {
-                //     Image(systemName: "square.and.arrow.up")
-                //     Text("Share").font(.caption)
-                // }
-                // Spacer()
             }
             .foregroundStyle(Color.appPrimaryText)
             .padding()

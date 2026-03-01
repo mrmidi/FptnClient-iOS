@@ -13,6 +13,7 @@ All notable changes to this repository will be documented in this file.
 - Added `MetricKitManager` to subscribe to MetricKit payloads and log metrics/diagnostics (crash, hang, CPU exceptions, disk write exceptions).
 - Added connection-progress and error state propagation to UI view models (`isConnecting`, `errorMessage`).
 - Added light/dark SwiftUI previews for key settings/routing views.
+- Added a new `Tools -> SNI Checker` flow to probe candidate SNI hostnames against `/api/v1/dns` and quickly apply a selected/best result.
 
 ### Changed
 - App startup now respects persisted appearance selection instead of forcing dark mode.
@@ -43,3 +44,4 @@ All notable changes to this repository will be documented in this file.
 ### Notes
 - Existing compatibility alias `Color.cian` now maps to `appAccent`.
 - This release focuses on iOS UX/theming and connection observability without changing core server API contracts.
+- The SNI checker is highly experimental and is not expected to work reliably in all environments yet; it is provided for exploratory testing only.
