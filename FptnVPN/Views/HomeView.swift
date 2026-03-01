@@ -22,9 +22,9 @@ struct HomeView: View {
             // Connection time
             if viewModel.isConnected {
                 Text("Connection Time")
-                    .foregroundColor(.white)
+                    .foregroundStyle(Color.appPrimaryText)
                 Text(viewModel.connectionTimeString)
-                    .foregroundColor(.white)
+                    .foregroundStyle(Color.appPrimaryText)
                     .padding(.bottom, 10)
             }
 
@@ -39,22 +39,42 @@ struct HomeView: View {
                     .frame(width: 180, height: 180)
                     .padding()
             }
-            .padding(.top, -200)
+            .disabled(viewModel.isConnecting)
 
             // Status
-            Text(viewModel.isConnected ? "Connected" : "Disconnected")
-                .foregroundColor(viewModel.isConnected ? .yellow : .gray)
-                .font(.headline)
+            if viewModel.isConnecting {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .tint(Color.appAccent)
+                    Text("Connecting...")
+                        .foregroundStyle(Color.appPrimaryText)
+                        .font(.headline)
+                }
                 .padding(.bottom, 4)
+            } else {
+                Text(viewModel.isConnected ? "Connected" : "Disconnected")
+                    .foregroundStyle(viewModel.isConnected ? Color.appSuccess : Color.appSecondaryText)
+                    .font(.headline)
+                    .padding(.bottom, 4)
+            }
+
+            // Error message
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .foregroundStyle(Color.appError)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
 #if DEBUG
-                .onLongPressGesture { showingDebugLog = true }
-                .sheet(isPresented: $showingDebugLog) { DebugLogView() }
+                    .onLongPressGesture { showingDebugLog = true }
+                    .sheet(isPresented: $showingDebugLog) { DebugLogView() }
 #endif
+            }
 
             // Server name
             if viewModel.isConnected, let serverName = viewModel.selectedServerName {
                 Text("Server: \(serverName)")
-                    .foregroundColor(.white)
+                    .foregroundStyle(Color.appPrimaryText)
                     .font(.subheadline)
                     .padding(.bottom, 20)
             }
@@ -68,9 +88,9 @@ struct HomeView: View {
                     Text(viewModel.uploadSpeedString)
                     Image(systemName: "arrow.up.to.line.alt")
                 }
-                .foregroundColor(.white)
+                .foregroundStyle(Color.appPrimaryText)
                 .padding()
-                .background(Color.purple.opacity(0.3))
+                .background(Color.appElevatedSurface)
                 .cornerRadius(20)
                 .padding(.horizontal)
             }
@@ -89,9 +109,10 @@ struct HomeView: View {
                     .padding()
                     .frame(height: 50)
                     .frame(maxWidth: .infinity)
-                    .background(Color.white)
+                    .foregroundStyle(Color.appPrimaryText)
+                    .background(Color.appSurface)
                     .cornerRadius(20)
-                    .shadow(radius: 2)
+                    .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
                 }
                 .padding(.horizontal)
                 .sheet(isPresented: $showingServerList) {
@@ -134,9 +155,9 @@ struct HomeView: View {
                 // }
                 // Spacer()
             }
-            .foregroundColor(.white)
+            .foregroundStyle(Color.appPrimaryText)
             .padding()
-            .background(Color.black.opacity(0.9))
+            .background(Color.appSurface.opacity(0.96))
         }
         .background(Color.appBackground)
         .edgesIgnoringSafeArea(.bottom)

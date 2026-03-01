@@ -8,7 +8,9 @@ import Foundation
 
 struct VPNConnection: Sendable {
     var isConnected: Bool = false
+    var isConnecting: Bool = false
     var isReconnecting: Bool = false
+    var errorMessage: String? = nil
     var selectedServer: VPNServer?
     var connectionTime: TimeInterval = 0
     var downloadSpeed: Double = 0

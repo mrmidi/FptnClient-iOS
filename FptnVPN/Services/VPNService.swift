@@ -8,15 +8,6 @@ import Foundation
 import Combine
 @preconcurrency import NetworkExtension
 
-// NETunnelProviderManager is documented to be used on the main thread but
-// Apple hasn't added Sendable conformance to it yet. This box lets us
-// carry it through assumeIsolated's @Sendable closure without unsafely
-// suppressing Sendable checking across the whole type.
-private struct NEManagerBox: @unchecked Sendable {
-    let manager: NETunnelProviderManager
-    init(_ manager: NETunnelProviderManager) { self.manager = manager }
-}
-
 @MainActor
 class VPNService: ObservableObject {
     @Published var connection = VPNConnection()
@@ -55,7 +46,9 @@ class VPNService: ObservableObject {
         }
 
         connection.isConnected = false
+        connection.isConnecting = false
         connection.isReconnecting = false
+        connection.errorMessage = nil
         stopTimer()
         stopSpeedMonitoring()
     }
@@ -63,6 +56,10 @@ class VPNService: ObservableObject {
     // MARK: - Private connect flow
 
     private func performConnect() async {
+        connection.isConnecting = true
+        connection.errorMessage = nil
+        defer { connection.isConnecting = false }
+
         // Resolve server — honour manual selection if set, fall back to auto (first).
         let server: VPNServer
         switch connection.connectionMode {
@@ -71,6 +68,7 @@ class VPNService: ObservableObject {
         case .auto:
             let servers = await tokenService.getServers()
             guard let first = servers.first else {
+                connection.errorMessage = "No servers available"
                 logger.warning("No servers available — cannot connect")
                 return
             }
@@ -80,6 +78,7 @@ class VPNService: ObservableObject {
         connection.selectedServer = server
 
         guard let tokenData = await tokenService.getTokenData() else {
+            connection.errorMessage = "No token data available"
             logger.error("No token data available")
             return
         }
@@ -98,6 +97,7 @@ class VPNService: ObservableObject {
         )
         guard case .success(let accessToken) = accessTokenResult else {
             if case .failure(let error) = accessTokenResult {
+                connection.errorMessage = "Login failed: \(error.localizedDescription)"
                 logger.error("Login error: \(error.localizedDescription)")
             }
             return
@@ -107,6 +107,7 @@ class VPNService: ObservableObject {
         let dnsResult = await getDNSInfo(server: server, accessToken: accessToken, sni: sni, censorshipStrategy: strategy)
         guard case .success(let (dnsIPv4, dnsIPv6)) = dnsResult else {
             if case .failure(let error) = dnsResult {
+                connection.errorMessage = "DNS lookup failed: \(error.localizedDescription)"
                 logger.error("DNS info error: \(error.localizedDescription)")
             }
             return
@@ -121,7 +122,12 @@ class VPNService: ObservableObject {
             sni: sni,
             bypassMethod: strategy
         )
-        if case .failure(let error) = vpnResult {
+        switch vpnResult {
+        case .success(let manager):
+            self.packetTunnelProvider = manager
+            self.observeTunnelStatus(manager)
+        case .failure(let error):
+            connection.errorMessage = "VPN configuration failed: \(error.localizedDescription)"
             logger.error("VPN configuration error: \(error.localizedDescription)")
         }
     }
@@ -228,21 +234,12 @@ class VPNService: ObservableObject {
         dnsIPv6: String,
         sni: String,
         bypassMethod: String
-    ) async -> Result<Void, Error> {
+    ) async -> Result<NETunnelProviderManager, Error> {
         return await withCheckedContinuation { continuation in
             // Reuse the existing manager when one is already installed — creating a
             // fresh NETunnelProviderManager() on every connect would accumulate
             // duplicate VPN profiles in Settings.
-            NETunnelProviderManager.loadAllFromPreferences { [weak self] existing, error in
-                guard let self else {
-                    continuation.resume(returning: .failure(NSError(
-                        domain: "VPNService",
-                        code: 5,
-                        userInfo: [NSLocalizedDescriptionKey: "VPNService deallocated"]
-                    )))
-                    return
-                }
-
+            NETunnelProviderManager.loadAllFromPreferences { existing, error in
                 if let error {
                     continuation.resume(returning: .failure(error))
                     return
@@ -276,9 +273,7 @@ class VPNService: ObservableObject {
                 manager.localizedDescription = "FPTN"
                 manager.isEnabled = true
 
-                let box = NEManagerBox(manager)
-
-                box.manager.saveToPreferences { error in
+                manager.saveToPreferences { error in
                     if let error {
                         logger.error("Save preferences error: \(error.localizedDescription)")
                         continuation.resume(returning: .failure(error))
@@ -287,7 +282,7 @@ class VPNService: ObservableObject {
 
                     logger.info("VPN configuration saved successfully")
 
-                    box.manager.loadFromPreferences { [weak self] error in
+                    manager.loadFromPreferences { error in
                         if let error {
                             logger.error("Load preferences error: \(error.localizedDescription)")
                             continuation.resume(returning: .failure(error))
@@ -295,7 +290,7 @@ class VPNService: ObservableObject {
                         }
 
                         do {
-                            try box.manager.connection.startVPNTunnel()
+                            try manager.connection.startVPNTunnel()
                             logger.info("VPN tunnel start requested")
                         } catch {
                             logger.error("startVPNTunnel failed: \(error.localizedDescription)")
@@ -303,11 +298,7 @@ class VPNService: ObservableObject {
                             return
                         }
 
-                        MainActor.assumeIsolated { [weak self] in
-                            self?.packetTunnelProvider = box.manager
-                            self?.observeTunnelStatus(box.manager)
-                            continuation.resume(returning: .success(()))
-                        }
+                        continuation.resume(returning: .success(manager))
                     }
                 }
             }

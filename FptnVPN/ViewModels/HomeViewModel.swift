@@ -18,6 +18,8 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var uploadSpeedString = "0.0 Kbps"
     @Published private(set) var selectedServerName: String? = nil
     @Published private(set) var connectionMode: VPNConnection.ConnectionMode = .auto
+    @Published private(set) var isConnecting = false
+    @Published private(set) var errorMessage: String? = nil
 
     // MARK: - Dependencies (injected)
 
@@ -69,5 +71,7 @@ final class HomeViewModel: ObservableObject {
         connectionTimeString = vpnService.formatConnectionTime()
         downloadSpeedString = vpnService.formatSpeed(conn.downloadSpeed)
         uploadSpeedString = vpnService.formatSpeed(conn.uploadSpeed)
+        isConnecting = conn.isConnecting
+        errorMessage = conn.errorMessage
     }
 }

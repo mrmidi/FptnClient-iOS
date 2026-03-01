@@ -15,6 +15,7 @@ actor SettingsService {
     private static let reconnectEnabledKey   = "fptn.settings.reconnectEnabled"
     private static let maxReconnectKey       = "fptn.settings.maxReconnectAttempts"
     private static let reconnectDelayKey     = "fptn.settings.reconnectDelay"
+    private static let colorSchemeKey        = "fptn.settings.colorScheme"
 
     // MARK: - Nonisolated reads (UserDefaults is thread-safe)
 
@@ -49,6 +50,12 @@ actor SettingsService {
         return stored == nil ? 2 : UserDefaults.standard.integer(forKey: Self.reconnectDelayKey)
     }
 
+    nonisolated var colorScheme: AppColorScheme {
+        guard let raw = UserDefaults.standard.string(forKey: Self.colorSchemeKey),
+              let scheme = AppColorScheme(rawValue: raw) else { return .system }
+        return scheme
+    }
+
     // MARK: - Setters
 
     func setSni(_ value: String) {
@@ -73,6 +80,10 @@ actor SettingsService {
 
     func setReconnectDelay(_ value: Int) {
         UserDefaults.standard.set(value, forKey: Self.reconnectDelayKey)
+    }
+
+    func setColorScheme(_ scheme: AppColorScheme) {
+        UserDefaults.standard.set(scheme.rawValue, forKey: Self.colorSchemeKey)
     }
 
     // MARK: - SNI sanitization

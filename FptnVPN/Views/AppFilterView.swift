@@ -21,13 +21,13 @@ struct AppFilterView: View {
                     Text("All except").tag(PerAppVPNMode.exceptDisallowed)
                 }
                 .pickerStyle(.inline)
-                .foregroundColor(.white)
+                .tint(Color.appAccent)
                 .onChange(of: mode) { _, newMode in
                     Task { await AppFilterService.shared.setMode(newMode) }
                 }
             } header: {
                 Text("Per-App VPN Mode")
-                    .foregroundColor(Color.cian)
+                    .foregroundStyle(Color.appAccent)
             } footer: {
                 Group {
                     switch mode {
@@ -39,8 +39,9 @@ struct AppFilterView: View {
                         Text("VPN applies to all apps except the selected ones.")
                     }
                 }
-                .foregroundColor(.gray)
+                .foregroundStyle(Color.appSecondaryText)
             }
+            .listRowBackground(Color.appSurface)
 
             // MARK: App list (visible when mode ≠ off)
 
@@ -49,24 +50,24 @@ struct AppFilterView: View {
                     ForEach($apps) { $app in
                         Toggle(isOn: $app.isSelected) {
                             Text(app.displayName)
-                                .foregroundColor(.white)
+                                .foregroundStyle(Color.appPrimaryText)
                         }
-                        .tint(Color.cian)
+                        .tint(Color.appAccent)
                         .onChange(of: app.isSelected) { _, _ in
                             Task { await AppFilterService.shared.saveApps(apps) }
                         }
                     }
                 } header: {
                     Text("Apps")
-                        .foregroundColor(Color.cian)
+                        .foregroundStyle(Color.appAccent)
                 }
+                .listRowBackground(Color.appSurface)
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
         .navigationTitle("Per-App VPN")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear {
             Task { apps = await AppFilterService.shared.loadApps() }
         }
@@ -74,6 +75,19 @@ struct AppFilterView: View {
 }
 
 #Preview {
+    NavigationStack {
+        AppFilterView()
+    }
+}
+
+#Preview("AppFilter Light") {
+    NavigationStack {
+        AppFilterView()
+    }
+    .preferredColorScheme(.light)
+}
+
+#Preview("AppFilter Dark") {
     NavigationStack {
         AppFilterView()
     }

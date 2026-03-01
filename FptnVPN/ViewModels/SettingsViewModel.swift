@@ -14,6 +14,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var reconnectEnabled: Bool
     @Published var maxReconnectAttempts: Int
     @Published var reconnectDelay: Int
+    @Published var colorScheme: AppColorScheme
 
     var onLogout: (() -> Void)?
 
@@ -33,6 +34,7 @@ final class SettingsViewModel: ObservableObject {
         self.reconnectEnabled = settingsService.reconnectEnabled
         self.maxReconnectAttempts = settingsService.maxReconnectAttempts
         self.reconnectDelay = settingsService.reconnectDelay
+        self.colorScheme = settingsService.colorScheme
     }
 
     func saveSni() {
@@ -64,6 +66,11 @@ final class SettingsViewModel: ObservableObject {
     func saveReconnectDelay(_ value: Int) {
         reconnectDelay = value
         Task { await settingsService.setReconnectDelay(value) }
+    }
+
+    func saveColorScheme(_ scheme: AppColorScheme) {
+        colorScheme = scheme
+        Task { await settingsService.setColorScheme(scheme) }
     }
 
     func logout() {

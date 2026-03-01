@@ -14,6 +14,25 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                // MARK: Appearance
+
+                Section {
+                    Picker("Color Scheme", selection: Binding(
+                        get: { viewModel.colorScheme },
+                        set: { viewModel.saveColorScheme($0) }
+                    )) {
+                        ForEach(AppColorScheme.allCases) { scheme in
+                            Text(scheme.displayName).tag(scheme)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .tint(Color.appAccent)
+                } header: {
+                    Text("Appearance")
+                        .foregroundStyle(Color.appAccent)
+                }
+                .listRowBackground(Color.appSurface)
+
                 // MARK: DPI Bypass
 
                 Section {
@@ -26,20 +45,21 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .foregroundColor(.white)
+                    .tint(Color.appAccent)
 
                     if viewModel.bypassMethod.requiresSNI {
                         TextField("e.g. rutube.ru", text: $viewModel.sni)
-                            .autocapitalization(.none)
+                            .textInputAutocapitalization(.never)
                             .disableAutocorrection(true)
                             .keyboardType(.URL)
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.appPrimaryText)
+                            .padding(.vertical, 6)
                             .onSubmit { viewModel.saveSni() }
                             .onChange(of: viewModel.sni) { _, _ in viewModel.saveSni() }
                     }
                 } header: {
                     Text("DPI Bypass")
-                        .foregroundColor(Color.cian)
+                        .foregroundStyle(Color.appAccent)
                 } footer: {
                     Group {
                         switch viewModel.bypassMethod {
@@ -51,8 +71,9 @@ struct SettingsView: View {
                             Text("SNI + REALITY: combines SNI spoofing with the REALITY protocol for stronger censorship resistance.")
                         }
                     }
-                    .foregroundColor(.gray)
+                    .foregroundStyle(Color.appSecondaryText)
                 }
+                .listRowBackground(Color.appSurface)
 
                 // MARK: Connection
 
@@ -62,18 +83,18 @@ struct SettingsView: View {
                         set: { viewModel.saveAutoConnect($0) }
                     )) {
                         Text("Auto-Connect on Launch")
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.appPrimaryText)
                     }
-                    .tint(Color.cian)
+                    .tint(Color.appAccent)
 
                     Toggle(isOn: Binding(
                         get: { viewModel.reconnectEnabled },
                         set: { viewModel.saveReconnectEnabled($0) }
                     )) {
                         Text("Auto-Reconnect on Drop")
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.appPrimaryText)
                     }
-                    .tint(Color.cian)
+                    .tint(Color.appAccent)
 
                     if viewModel.reconnectEnabled {
                         Stepper(
@@ -85,10 +106,10 @@ struct SettingsView: View {
                         ) {
                             HStack {
                                 Text("Max attempts")
-                                    .foregroundColor(.white)
+                                    .foregroundStyle(Color.appPrimaryText)
                                 Spacer()
                                 Text(viewModel.maxReconnectAttempts == 0 ? "∞" : "\(viewModel.maxReconnectAttempts)")
-                                    .foregroundColor(Color.cian)
+                                    .foregroundStyle(Color.appAccent)
                             }
                         }
 
@@ -101,17 +122,18 @@ struct SettingsView: View {
                         ) {
                             HStack {
                                 Text("Retry delay")
-                                    .foregroundColor(.white)
+                                    .foregroundStyle(Color.appPrimaryText)
                                 Spacer()
                                 Text("\(viewModel.reconnectDelay)s")
-                                    .foregroundColor(Color.cian)
+                                    .foregroundStyle(Color.appAccent)
                             }
                         }
                     }
                 } header: {
                     Text("Connection")
-                        .foregroundColor(Color.cian)
+                        .foregroundStyle(Color.appAccent)
                 }
+                .listRowBackground(Color.appSurface)
 
                 // MARK: Per-App VPN
 
@@ -120,15 +142,16 @@ struct SettingsView: View {
                         AppFilterView()
                     } label: {
                         Text("Per-App VPN")
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.appPrimaryText)
                     }
                 } header: {
                     Text("Routing")
-                        .foregroundColor(Color.cian)
+                        .foregroundStyle(Color.appAccent)
                 } footer: {
                     Text("Restrict VPN to specific apps or exclude selected apps from the tunnel.")
-                        .foregroundColor(.gray)
+                        .foregroundStyle(Color.appSecondaryText)
                 }
+                .listRowBackground(Color.appSurface)
 
                 // MARK: Account
 
@@ -145,18 +168,18 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Account")
-                        .foregroundColor(Color.cian)
+                        .foregroundStyle(Color.appAccent)
                 }
+                .listRowBackground(Color.appSurface)
             }
             .scrollContentBackground(.hidden)
             .background(Color.appBackground)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
-                        .foregroundColor(Color.cian)
+                        .foregroundStyle(Color.appAccent)
                 }
             }
         }
@@ -175,6 +198,15 @@ struct SettingsView: View {
 }
 
 #Preview {
+    SettingsView(viewModel: SettingsViewModel())
+}
+
+#Preview("Settings Light") {
+    SettingsView(viewModel: SettingsViewModel())
+        .preferredColorScheme(.light)
+}
+
+#Preview("Settings Dark") {
     SettingsView(viewModel: SettingsViewModel())
         .preferredColorScheme(.dark)
 }

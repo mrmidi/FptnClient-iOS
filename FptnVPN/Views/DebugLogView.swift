@@ -63,7 +63,6 @@ struct DebugLogView: View {
                 await startRefreshing()
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Private

@@ -8,6 +8,8 @@ FptnVPN is an iOS VPN client app that connects to FPTN servers. It uses a pre-bu
 
 ## Build
 
+ The project uses automatic file discovery (no explicit file references in pbxproj for Swift files).
+
 ### Native C++ Library (FptnLib)
 
 The C++ library relies on Conan (for dependencies like Protobuf/BoringSSL) and CMake.

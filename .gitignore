@@ -8,6 +8,9 @@ FptnClient-Android/
 .Spotlight-V100
 .Trashes
 
+# TestFlight feedbacks
+testflight/
+
 ## Build generated
 FptnVPN/Cpp/fptn_native_lib.framework/
 build/

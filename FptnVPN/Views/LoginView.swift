@@ -40,7 +40,7 @@ struct LoginView: View {
                                 .frame(width: 70, height: 70)
                                 .foregroundStyle(
                                     LinearGradient(
-                                        colors: [.white, Color.cian.opacity(0.9)],
+                                        colors: [Color.appPrimaryText, Color.appAccent.opacity(0.9)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -49,11 +49,11 @@ struct LoginView: View {
                         
                         Text("FPTN VPN")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.appPrimaryText)
                         
                         Text("Secure your connection")
                             .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundStyle(Color.appSecondaryText)
                     }
                     .padding(.bottom, 60)
                     
@@ -63,12 +63,12 @@ struct LoginView: View {
                         VStack(spacing: 8) {
                             HStack(spacing: 4) {
                                 Image(systemName: "info.circle.fill")
-                                    .foregroundColor(Color.cian)
+                                    .foregroundStyle(Color.appAccent)
                                     .font(.system(size: 14))
                                 
                                 Text("Get your free token from")
                                     .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.9))
+                                    .foregroundStyle(Color.appPrimaryText)
                             }
                             
                             Link(destination: URL(string: AppLinks.telegramBot)!) {
@@ -83,17 +83,17 @@ struct LoginView: View {
                                 .foregroundColor(Color.cian)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
-                                .background(Color.cian.opacity(0.15))
+                                .background(Color.appAccent.opacity(0.16))
                                 .cornerRadius(20)
                             }
                         }
                         .padding(.vertical, 16)
                         .frame(maxWidth: .infinity)
-                        .background(Color.white.opacity(0.05))
+                        .background(Color.appSurface)
                         .cornerRadius(16)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                .stroke(Color.appSeparator.opacity(0.45), lineWidth: 1)
                         )
                         
                         // Token input
@@ -101,17 +101,17 @@ struct LoginView: View {
                             Text("Token")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                                .foregroundColor(.white.opacity(0.9))
+                                .foregroundStyle(Color.appPrimaryText)
                                 .padding(.leading, 4)
                             
                             HStack(spacing: 12) {
                                 Image(systemName: "key.fill")
-                                    .foregroundColor(Color.cian.opacity(0.7))
+                                    .foregroundStyle(Color.appAccent.opacity(0.75))
                                     .frame(width: 20)
                                 
-                                TextField("", text: $viewModel.token, prompt: Text("Paste your token here").foregroundColor(.white.opacity(0.4)))
-                                    .foregroundColor(.white)
-                                    .autocapitalization(.none)
+                                TextField("", text: $viewModel.token, prompt: Text("Paste your token here").foregroundStyle(Color.appSecondaryText))
+                                    .foregroundStyle(Color.appPrimaryText)
+                                    .textInputAutocapitalization(.never)
                                     .disableAutocorrection(true)
                                     .textFieldStyle(.plain)
                                 
@@ -120,16 +120,16 @@ struct LoginView: View {
                                         viewModel.token = ""
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.white.opacity(0.5))
+                                            .foregroundStyle(Color.appSecondaryText)
                                     }
                                 }
                             }
                             .padding(16)
-                            .background(Color.white.opacity(0.1))
+                            .background(Color.appElevatedSurface)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.cian.opacity(viewModel.token.isEmpty ? 0 : 0.5), lineWidth: 1)
+                                    .stroke(Color.appAccent.opacity(viewModel.token.isEmpty ? 0 : 0.55), lineWidth: 1)
                             )
                         }
                         
@@ -154,18 +154,18 @@ struct LoginView: View {
                                 Group {
                                     if viewModel.isLoginButtonEnabled {
                                         LinearGradient(
-                                            colors: [Color.cian, Color.cian.opacity(0.8)],
+                                            colors: [Color.appAccent, Color.appAccent.opacity(0.82)],
                                             startPoint: .leading,
                                             endPoint: .trailing
                                         )
                                     } else {
-                                        Color.gray.opacity(0.3)
+                                        Color.appMutedControl
                                     }
                                 }
                             )
-                            .foregroundColor(.white)
+                            .foregroundStyle(viewModel.isLoginButtonEnabled ? Color.black.opacity(0.85) : Color.appSecondaryText)
                             .cornerRadius(12)
-                            .shadow(color: viewModel.isLoginButtonEnabled ? Color.cian.opacity(0.3) : .clear, radius: 8, x: 0, y: 4)
+                            .shadow(color: viewModel.isLoginButtonEnabled ? Color.appAccent.opacity(0.25) : .clear, radius: 8, x: 0, y: 4)
                         }
                         .disabled(!viewModel.isLoginButtonEnabled)
                         .animation(.easeInOut(duration: 0.2), value: viewModel.isLoginButtonEnabled)
