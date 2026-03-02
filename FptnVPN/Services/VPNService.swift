@@ -30,6 +30,23 @@ class VPNService: ObservableObject {
 
     // MARK: - Public
 
+    /// Load the existing tunnel manager from system preferences and sync UI state.
+    /// Call on appear and when returning to foreground so the app reflects VPN
+    /// status changes made from Control Center or Settings.
+    func syncWithSystem() {
+        Task { @MainActor in
+            do {
+                let managers = try await NETunnelProviderManager.loadAllFromPreferences()
+                guard let manager = managers.first else { return }
+                self.packetTunnelProvider = manager
+                self.observeTunnelStatus(manager)
+                self.syncTunnelStatus()
+            } catch {
+                logger.warning("syncWithSystem: failed to load preferences: \(error.localizedDescription)")
+            }
+        }
+    }
+
     func connect() {
         userInitiatedDisconnect = false
         Task {

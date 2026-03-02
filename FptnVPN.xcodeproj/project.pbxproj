@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		3A410EC92F4CB24300CB1F4E /* fptn.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3A410EC82F4CB24300CB1F4E /* fptn.icon */; };
+		3AE35AD22F55835C0036B059 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 79A890742E7582AB0062CD90 /* NetworkExtension.framework */; };
+		3AE35ADA2F55835C0036B059 /* Fptn-macOS-Tunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0A2F4C62880020E4E3 /* Logging */; };
 		3AEA9E0C2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0D2F4C62880020E4E3 /* Logging */; };
 		7994B8002E7A299E00624B08 /* (null) in Embed Frameworks */ = {isa = PBXBuildFile; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -16,6 +18,27 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		3AE35AB32F55828E0036B059 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85D5C31E2DFD4A0600ABAD64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3AE35AA52F55828B0036B059;
+			remoteInfo = "Fptn-macOS";
+		};
+		3AE35ABD2F55828E0036B059 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85D5C31E2DFD4A0600ABAD64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3AE35AA52F55828B0036B059;
+			remoteInfo = "Fptn-macOS";
+		};
+		3AE35AD82F55835C0036B059 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85D5C31E2DFD4A0600ABAD64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3AE35AD02F55835B0036B059;
+			remoteInfo = "Fptn-macOS-Tunnel";
+		};
 		79A8907B2E7582AB0062CD90 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 85D5C31E2DFD4A0600ABAD64 /* Project object */;
@@ -40,6 +63,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		3AE35ADF2F55835C0036B059 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3AE35ADA2F55835C0036B059 /* Fptn-macOS-Tunnel.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		798039E22E74177300BEA18D /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -76,6 +110,10 @@
 
 /* Begin PBXFileReference section */
 		3A410EC82F4CB24300CB1F4E /* fptn.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = fptn.icon; sourceTree = "<group>"; };
+		3AE35AA62F55828B0036B059 /* Fptn-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Fptn-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE35AB22F55828E0036B059 /* Fptn-macOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-macOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE35ABC2F55828E0036B059 /* Fptn-macOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-macOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fptn-macOS-Tunnel.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FptnVPNTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		79A890742E7582AB0062CD90 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		85D5C3262DFD4A0600ABAD64 /* FptnVPN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FptnVPN.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -84,6 +122,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		3AE35ADB2F55835C0036B059 /* Exceptions for "Fptn-macOS-Tunnel" folder in "Fptn-macOS-Tunnel" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3AE35AD02F55835B0036B059 /* Fptn-macOS-Tunnel */;
+		};
 		79A8907E2E7582AB0062CD90 /* Exceptions for "FptnVPNTunnel" folder in "FptnVPNTunnel" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -107,6 +152,29 @@
 /* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		3AE35AA72F55828B0036B059 /* Fptn-macOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Fptn-macOS";
+			sourceTree = "<group>";
+		};
+		3AE35AB52F55828E0036B059 /* Fptn-macOSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Fptn-macOSTests";
+			sourceTree = "<group>";
+		};
+		3AE35ABF2F55828E0036B059 /* Fptn-macOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Fptn-macOSUITests";
+			sourceTree = "<group>";
+		};
+		3AE35AD32F55835C0036B059 /* Fptn-macOS-Tunnel */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3AE35ADB2F55835C0036B059 /* Exceptions for "Fptn-macOS-Tunnel" folder in "Fptn-macOS-Tunnel" target */,
+			);
+			path = "Fptn-macOS-Tunnel";
+			sourceTree = "<group>";
+		};
 		79A890762E7582AB0062CD90 /* FptnVPNTunnel */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -136,6 +204,35 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		3AE35AA32F55828B0036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35AAF2F55828E0036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35AB92F55828E0036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35ACE2F55835B0036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3AE35AD22F55835C0036B059 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		79A8906F2E7582AB0062CD90 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -185,6 +282,10 @@
 				85D5C3362DFD4A0800ABAD64 /* FptnVPNTests */,
 				85D5C3402DFD4A0800ABAD64 /* FptnVPNUITests */,
 				79A890762E7582AB0062CD90 /* FptnVPNTunnel */,
+				3AE35AA72F55828B0036B059 /* Fptn-macOS */,
+				3AE35AB52F55828E0036B059 /* Fptn-macOSTests */,
+				3AE35ABF2F55828E0036B059 /* Fptn-macOSUITests */,
+				3AE35AD32F55835C0036B059 /* Fptn-macOS-Tunnel */,
 				79A890732E7582AB0062CD90 /* Frameworks */,
 				85D5C3272DFD4A0600ABAD64 /* Products */,
 				3A410EC82F4CB24300CB1F4E /* fptn.icon */,
@@ -198,6 +299,10 @@
 				85D5C3332DFD4A0800ABAD64 /* FptnVPNTests.xctest */,
 				85D5C33D2DFD4A0800ABAD64 /* FptnVPNUITests.xctest */,
 				79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */,
+				3AE35AA62F55828B0036B059 /* Fptn-macOS.app */,
+				3AE35AB22F55828E0036B059 /* Fptn-macOSTests.xctest */,
+				3AE35ABC2F55828E0036B059 /* Fptn-macOSUITests.xctest */,
+				3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -205,6 +310,98 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		3AE35AA52F55828B0036B059 /* Fptn-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE35AC42F55828E0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOS" */;
+			buildPhases = (
+				3AE35AA22F55828B0036B059 /* Sources */,
+				3AE35AA32F55828B0036B059 /* Frameworks */,
+				3AE35AA42F55828B0036B059 /* Resources */,
+				3AE35ADF2F55835C0036B059 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3AE35AD92F55835C0036B059 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3AE35AA72F55828B0036B059 /* Fptn-macOS */,
+			);
+			name = "Fptn-macOS";
+			packageProductDependencies = (
+			);
+			productName = "Fptn-macOS";
+			productReference = 3AE35AA62F55828B0036B059 /* Fptn-macOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3AE35AB12F55828E0036B059 /* Fptn-macOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE35AC72F55828E0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOSTests" */;
+			buildPhases = (
+				3AE35AAE2F55828E0036B059 /* Sources */,
+				3AE35AAF2F55828E0036B059 /* Frameworks */,
+				3AE35AB02F55828E0036B059 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3AE35AB42F55828E0036B059 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3AE35AB52F55828E0036B059 /* Fptn-macOSTests */,
+			);
+			name = "Fptn-macOSTests";
+			packageProductDependencies = (
+			);
+			productName = "Fptn-macOSTests";
+			productReference = 3AE35AB22F55828E0036B059 /* Fptn-macOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		3AE35ABB2F55828E0036B059 /* Fptn-macOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE35ACA2F55828E0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOSUITests" */;
+			buildPhases = (
+				3AE35AB82F55828E0036B059 /* Sources */,
+				3AE35AB92F55828E0036B059 /* Frameworks */,
+				3AE35ABA2F55828E0036B059 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3AE35ABE2F55828E0036B059 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3AE35ABF2F55828E0036B059 /* Fptn-macOSUITests */,
+			);
+			name = "Fptn-macOSUITests";
+			packageProductDependencies = (
+			);
+			productName = "Fptn-macOSUITests";
+			productReference = 3AE35ABC2F55828E0036B059 /* Fptn-macOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		3AE35AD02F55835B0036B059 /* Fptn-macOS-Tunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE35ADC2F55835C0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOS-Tunnel" */;
+			buildPhases = (
+				3AE35ACD2F55835B0036B059 /* Sources */,
+				3AE35ACE2F55835B0036B059 /* Frameworks */,
+				3AE35ACF2F55835B0036B059 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3AE35AD32F55835C0036B059 /* Fptn-macOS-Tunnel */,
+			);
+			name = "Fptn-macOS-Tunnel";
+			packageProductDependencies = (
+			);
+			productName = "Fptn-macOS-Tunnel";
+			productReference = 3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		79A890712E7582AB0062CD90 /* FptnVPNTunnel */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 79A8907F2E7582AB0062CD90 /* Build configuration list for PBXNativeTarget "FptnVPNTunnel" */;
@@ -309,9 +506,23 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
+				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 1640;
 				TargetAttributes = {
+					3AE35AA52F55828B0036B059 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					3AE35AB12F55828E0036B059 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 3AE35AA52F55828B0036B059;
+					};
+					3AE35ABB2F55828E0036B059 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 3AE35AA52F55828B0036B059;
+					};
+					3AE35AD02F55835B0036B059 = {
+						CreatedOnToolsVersion = 26.4;
+					};
 					79A890712E7582AB0062CD90 = {
 						CreatedOnToolsVersion = 16.4;
 					};
@@ -350,11 +561,43 @@
 				85D5C3322DFD4A0800ABAD64 /* FptnVPNTests */,
 				85D5C33C2DFD4A0800ABAD64 /* FptnVPNUITests */,
 				79A890712E7582AB0062CD90 /* FptnVPNTunnel */,
+				3AE35AA52F55828B0036B059 /* Fptn-macOS */,
+				3AE35AB12F55828E0036B059 /* Fptn-macOSTests */,
+				3AE35ABB2F55828E0036B059 /* Fptn-macOSUITests */,
+				3AE35AD02F55835B0036B059 /* Fptn-macOS-Tunnel */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		3AE35AA42F55828B0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35AB02F55828E0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35ABA2F55828E0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35ACF2F55835B0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		79A890702E7582AB0062CD90 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -407,6 +650,34 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		3AE35AA22F55828B0036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35AAE2F55828E0036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35AB82F55828E0036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35ACD2F55835B0036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		79A8906E2E7582AB0062CD90 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -438,6 +709,21 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		3AE35AB42F55828E0036B059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3AE35AA52F55828B0036B059 /* Fptn-macOS */;
+			targetProxy = 3AE35AB32F55828E0036B059 /* PBXContainerItemProxy */;
+		};
+		3AE35ABE2F55828E0036B059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3AE35AA52F55828B0036B059 /* Fptn-macOS */;
+			targetProxy = 3AE35ABD2F55828E0036B059 /* PBXContainerItemProxy */;
+		};
+		3AE35AD92F55835C0036B059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3AE35AD02F55835B0036B059 /* Fptn-macOS-Tunnel */;
+			targetProxy = 3AE35AD82F55835C0036B059 /* PBXContainerItemProxy */;
+		};
 		79A8907C2E7582AB0062CD90 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 79A890712E7582AB0062CD90 /* FptnVPNTunnel */;
@@ -456,6 +742,240 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		3AE35AC52F55828E0036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3AE35AC62F55828E0036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3AE35AC82F55828E0036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-macOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-macOS";
+			};
+			name = Debug;
+		};
+		3AE35AC92F55828E0036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-macOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-macOS";
+			};
+			name = Release;
+		};
+		3AE35ACB2F55828E0036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = "Fptn-macOS";
+			};
+			name = Debug;
+		};
+		3AE35ACC2F55828E0036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = "Fptn-macOS";
+			};
+			name = Release;
+		};
+		3AE35ADD2F55835C0036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-macOS-Tunnel/Fptn_macOS_Tunnel.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-macOS-Tunnel";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3AE35ADE2F55835C0036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-macOS-Tunnel/Fptn_macOS_Tunnel.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-macOS-Tunnel";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		79A890802E7582AB0062CD90 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -832,6 +1352,42 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		3AE35AC42F55828E0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE35AC52F55828E0036B059 /* Debug */,
+				3AE35AC62F55828E0036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3AE35AC72F55828E0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE35AC82F55828E0036B059 /* Debug */,
+				3AE35AC92F55828E0036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3AE35ACA2F55828E0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE35ACB2F55828E0036B059 /* Debug */,
+				3AE35ACC2F55828E0036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3AE35ADC2F55835C0036B059 /* Build configuration list for PBXNativeTarget "Fptn-macOS-Tunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE35ADD2F55835C0036B059 /* Debug */,
+				3AE35ADE2F55835C0036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		79A8907F2E7582AB0062CD90 /* Build configuration list for PBXNativeTarget "FptnVPNTunnel" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

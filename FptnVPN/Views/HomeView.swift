@@ -12,6 +12,7 @@ struct HomeView: View {
 #if DEBUG
     @State private var showingDebugLog = false
 #endif
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingServerList = false
     @State private var showingSettings = false
     @State private var showingTools = false
@@ -181,6 +182,10 @@ struct HomeView: View {
         }
         .background(Color.appBackground)
         .edgesIgnoringSafeArea(.bottom)
+        .onAppear { viewModel.syncWithSystem() }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active { viewModel.syncWithSystem() }
+        }
     }
 
     // MARK: - Private

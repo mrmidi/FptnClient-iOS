@@ -32,6 +32,10 @@ final class HomeViewModel: ObservableObject {
 
     // MARK: - Commands
 
+    func syncWithSystem() {
+        vpnService.syncWithSystem()
+    }
+
     func connect() {
         vpnService.connect()
     }
