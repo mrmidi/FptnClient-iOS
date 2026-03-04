@@ -1,4 +1,5 @@
 import SwiftUI
+import FptnSharedCore
 
 struct ContentView: View {
     @State private var token: TvTokenPayload?
