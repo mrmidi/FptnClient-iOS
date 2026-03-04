@@ -4,8 +4,15 @@ project(fptn_native_lib VERSION 1.0.0 LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# iOS specific settings
-set(CMAKE_OSX_DEPLOYMENT_TARGET 17.0)
+# Platform-specific deployment target defaults
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 17.0)
+elseif(APPLE)
+    # Keep macOS target explicit and valid for local/App Store builds.
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0)
+    endif()
+endif()
 set(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE NO)
 set(CMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT "dwarf-with-dsym")
 set(CMAKE_XCODE_ATTRIBUTE_DWARF_DSYM_FOLDER_PATH "${CMAKE_CURRENT_BINARY_DIR}")

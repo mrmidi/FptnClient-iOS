@@ -8,6 +8,7 @@ import SwiftUI
 
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
+    var isCloudSynced: Bool = false
     var onLogout: () -> Void = {}
 #if DEBUG
     @State private var showingDebugLog = false
@@ -131,6 +132,18 @@ struct HomeView: View {
 
             Spacer()
 
+            // iCloud sync indicator
+            if isCloudSynced {
+                HStack(spacing: 5) {
+                    Image(systemName: "icloud.fill")
+                        .font(.system(size: 11))
+                    Text("Token synced from iCloud")
+                        .font(.system(size: 12))
+                }
+                .foregroundStyle(Color.appSecondaryText.opacity(0.7))
+                .padding(.bottom, 8)
+            }
+
             // Bottom navigation bar
             HStack {
                 Spacer()
@@ -182,6 +195,7 @@ struct HomeView: View {
         }
         .background(Color.appBackground)
         .edgesIgnoringSafeArea(.bottom)
+        .navigationBarBackButtonHidden(true)
         .onAppear { viewModel.syncWithSystem() }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active { viewModel.syncWithSystem() }

@@ -184,7 +184,11 @@ struct LoginView: View {
             .navigationDestination(isPresented: $viewModel.isLoggedIn) {
                 HomeView(
                     viewModel: HomeViewModel(vpnService: VPNService()),
-                    onLogout: { viewModel.isLoggedIn = false }
+                    isCloudSynced: viewModel.isCloudSynced,
+                    onLogout: {
+                        viewModel.isCloudSynced = false
+                        viewModel.isLoggedIn = false
+                    }
                 )
             }
         }

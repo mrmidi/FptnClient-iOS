@@ -5,19 +5,16 @@
 //=============================================================================*/
 
 import Foundation
+import FptnSharedCore
 
-struct VPNServer: Codable, Identifiable, Hashable, Sendable {
-    var id: String { name }
-    let name: String
-    let host: String
-    let md5_fingerprint: String
-    let port: Int
-    
-    static func == (lhs: VPNServer, rhs: VPNServer) -> Bool {
-        return lhs.id == rhs.id
+typealias VPNServer = FptnSharedCore.VPNServer
+
+extension VPNServer {
+    init(name: String, host: String, md5_fingerprint: String, port: Int) {
+        self.init(name: name, host: host, port: port, md5Fingerprint: md5_fingerprint)
     }
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
+
+    var md5_fingerprint: String {
+        md5Fingerprint
     }
 }

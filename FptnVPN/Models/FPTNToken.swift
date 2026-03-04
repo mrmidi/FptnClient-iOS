@@ -5,11 +5,22 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import FptnSharedCore
 
-struct FPTNToken: Codable, Sendable {
-    let version: Int
-    let service_name: String
-    let username: String
-    let password: String
-    let servers: [VPNServer]
+typealias FPTNToken = FptnSharedCore.FPTNToken
+
+extension FPTNToken {
+    init(version: Int, service_name: String, username: String, password: String, servers: [VPNServer]) {
+        self.init(
+            version: version,
+            serviceName: service_name,
+            username: username,
+            password: password,
+            servers: servers
+        )
+    }
+
+    var service_name: String {
+        serviceName
+    }
 }

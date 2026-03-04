@@ -18,6 +18,9 @@ struct FptnVPNApp: App {
 
         // Start collecting crash/hang diagnostics via MetricKit.
         _ = MetricKitManager.shared
+
+        // Begin observing iCloud KVS changes for cross-device token sync.
+        TokenService.shared.startCloudSync()
     }
 
     var body: some Scene {

@@ -10,6 +10,14 @@
 		3A410EC92F4CB24300CB1F4E /* fptn.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3A410EC82F4CB24300CB1F4E /* fptn.icon */; };
 		3AE35AD22F55835C0036B059 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 79A890742E7582AB0062CD90 /* NetworkExtension.framework */; };
 		3AE35ADA2F55835C0036B059 /* Fptn-macOS-Tunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3AE3729F2F5820150036B059 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 79A890742E7582AB0062CD90 /* NetworkExtension.framework */; };
+		3AE372A72F5820150036B059 /* Fptn-tvOS-Tunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3AE3729E2F5820150036B059 /* Fptn-tvOS-Tunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3AE374252F58379E0036B059 /* FptnSharedCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374242F58379E0036B059 /* FptnSharedCore */; };
+		3AE374272F58379E0036B059 /* FptnSharedTunnel in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374262F58379E0036B059 /* FptnSharedTunnel */; };
+		3AE374282F58379E0036B059 /* FptnSharedCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374242F58379E0036B059 /* FptnSharedCore */; };
+		3AE374292F58379E0036B059 /* FptnSharedCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374242F58379E0036B059 /* FptnSharedCore */; };
+		3AE3742A2F58379E0036B059 /* FptnSharedTunnel in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374262F58379E0036B059 /* FptnSharedTunnel */; };
+		3AE3742B2F58379E0036B059 /* FptnSharedTunnel in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374262F58379E0036B059 /* FptnSharedTunnel */; };
 		3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0A2F4C62880020E4E3 /* Logging */; };
 		3AEA9E0C2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0D2F4C62880020E4E3 /* Logging */; };
 		7994B8002E7A299E00624B08 /* (null) in Embed Frameworks */ = {isa = PBXBuildFile; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -38,6 +46,27 @@
 			proxyType = 1;
 			remoteGlobalIDString = 3AE35AD02F55835B0036B059;
 			remoteInfo = "Fptn-macOS-Tunnel";
+		};
+		3AE372802F581FAC0036B059 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85D5C31E2DFD4A0600ABAD64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3AE372722F581FAA0036B059;
+			remoteInfo = "Fptn-tvOS";
+		};
+		3AE3728A2F581FAC0036B059 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85D5C31E2DFD4A0600ABAD64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3AE372722F581FAA0036B059;
+			remoteInfo = "Fptn-tvOS";
+		};
+		3AE372A52F5820150036B059 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85D5C31E2DFD4A0600ABAD64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3AE3729D2F5820150036B059;
+			remoteInfo = "Fptn-tvOS-Tunnel";
 		};
 		79A8907B2E7582AB0062CD90 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -70,6 +99,27 @@
 			dstSubfolderSpec = 13;
 			files = (
 				3AE35ADA2F55835C0036B059 /* Fptn-macOS-Tunnel.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE35AE12F558F5C0036B059 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE372AC2F5820150036B059 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3AE372A72F5820150036B059 /* Fptn-tvOS-Tunnel.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -114,6 +164,10 @@
 		3AE35AB22F55828E0036B059 /* Fptn-macOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-macOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AE35ABC2F55828E0036B059 /* Fptn-macOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-macOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fptn-macOS-Tunnel.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE372732F581FAA0036B059 /* Fptn-tvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Fptn-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE3727F2F581FAC0036B059 /* Fptn-tvOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-tvOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE372892F581FAC0036B059 /* Fptn-tvOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-tvOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE3729E2F5820150036B059 /* Fptn-tvOS-Tunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fptn-tvOS-Tunnel.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FptnVPNTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		79A890742E7582AB0062CD90 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		85D5C3262DFD4A0600ABAD64 /* FptnVPN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FptnVPN.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -129,6 +183,13 @@
 			);
 			target = 3AE35AD02F55835B0036B059 /* Fptn-macOS-Tunnel */;
 		};
+		3AE372A82F5820150036B059 /* Exceptions for "Fptn-tvOS-Tunnel" folder in "Fptn-tvOS-Tunnel" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3AE3729D2F5820150036B059 /* Fptn-tvOS-Tunnel */;
+		};
 		79A8907E2E7582AB0062CD90 /* Exceptions for "FptnVPNTunnel" folder in "FptnVPNTunnel" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -139,6 +200,16 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		3AE35AE22F558F5C0036B059 /* Exceptions for "Fptn-macOS" folder in "Embed Frameworks" phase from "Fptn-macOS" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			attributesByRelativePath = {
+				Cpp/fptn_native_lib.framework = (CodeSignOnCopy, RemoveHeadersOnCopy, );
+			};
+			buildPhase = 3AE35AE12F558F5C0036B059 /* Embed Frameworks */;
+			membershipExceptions = (
+				Cpp/fptn_native_lib.framework,
+			);
+		};
 		79BEF5492E7D0AF7007E57BB /* Exceptions for "FptnVPN" folder in "Embed Frameworks" phase from "FptnVPN" target */ = {
 			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
 			attributesByRelativePath = {
@@ -154,6 +225,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3AE35AA72F55828B0036B059 /* Fptn-macOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3AE35AE22F558F5C0036B059 /* Exceptions for "Fptn-macOS" folder in "Embed Frameworks" phase from "Fptn-macOS" target */,
+			);
 			path = "Fptn-macOS";
 			sourceTree = "<group>";
 		};
@@ -173,6 +247,29 @@
 				3AE35ADB2F55835C0036B059 /* Exceptions for "Fptn-macOS-Tunnel" folder in "Fptn-macOS-Tunnel" target */,
 			);
 			path = "Fptn-macOS-Tunnel";
+			sourceTree = "<group>";
+		};
+		3AE372742F581FAA0036B059 /* Fptn-tvOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Fptn-tvOS";
+			sourceTree = "<group>";
+		};
+		3AE372822F581FAC0036B059 /* Fptn-tvOSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Fptn-tvOSTests";
+			sourceTree = "<group>";
+		};
+		3AE3728C2F581FAC0036B059 /* Fptn-tvOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Fptn-tvOSUITests";
+			sourceTree = "<group>";
+		};
+		3AE372A02F5820150036B059 /* Fptn-tvOS-Tunnel */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3AE372A82F5820150036B059 /* Exceptions for "Fptn-tvOS-Tunnel" folder in "Fptn-tvOS-Tunnel" target */,
+			);
+			path = "Fptn-tvOS-Tunnel";
 			sourceTree = "<group>";
 		};
 		79A890762E7582AB0062CD90 /* FptnVPNTunnel */ = {
@@ -208,6 +305,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3AE374282F58379E0036B059 /* FptnSharedCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,7 +327,39 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3AE3742A2F58379E0036B059 /* FptnSharedTunnel in Frameworks */,
 				3AE35AD22F55835C0036B059 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE372702F581FAA0036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3AE374292F58379E0036B059 /* FptnSharedCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE3727C2F581FAC0036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE372862F581FAC0036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE3729B2F5820150036B059 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3AE3742B2F58379E0036B059 /* FptnSharedTunnel in Frameworks */,
+				3AE3729F2F5820150036B059 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,6 +368,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3AEA9E0C2F4C62880020E4E3 /* Logging in Frameworks */,
+				3AE374272F58379E0036B059 /* FptnSharedTunnel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -246,6 +377,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */,
+				3AE374252F58379E0036B059 /* FptnSharedCore in Frameworks */,
 				79A890782E7582AB0062CD90 /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -286,6 +418,10 @@
 				3AE35AB52F55828E0036B059 /* Fptn-macOSTests */,
 				3AE35ABF2F55828E0036B059 /* Fptn-macOSUITests */,
 				3AE35AD32F55835C0036B059 /* Fptn-macOS-Tunnel */,
+				3AE372742F581FAA0036B059 /* Fptn-tvOS */,
+				3AE372822F581FAC0036B059 /* Fptn-tvOSTests */,
+				3AE3728C2F581FAC0036B059 /* Fptn-tvOSUITests */,
+				3AE372A02F5820150036B059 /* Fptn-tvOS-Tunnel */,
 				79A890732E7582AB0062CD90 /* Frameworks */,
 				85D5C3272DFD4A0600ABAD64 /* Products */,
 				3A410EC82F4CB24300CB1F4E /* fptn.icon */,
@@ -303,6 +439,10 @@
 				3AE35AB22F55828E0036B059 /* Fptn-macOSTests.xctest */,
 				3AE35ABC2F55828E0036B059 /* Fptn-macOSUITests.xctest */,
 				3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */,
+				3AE372732F581FAA0036B059 /* Fptn-tvOS.app */,
+				3AE3727F2F581FAC0036B059 /* Fptn-tvOSTests.xctest */,
+				3AE372892F581FAC0036B059 /* Fptn-tvOSUITests.xctest */,
+				3AE3729E2F5820150036B059 /* Fptn-tvOS-Tunnel.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -317,6 +457,7 @@
 				3AE35AA22F55828B0036B059 /* Sources */,
 				3AE35AA32F55828B0036B059 /* Frameworks */,
 				3AE35AA42F55828B0036B059 /* Resources */,
+				3AE35AE12F558F5C0036B059 /* Embed Frameworks */,
 				3AE35ADF2F55835C0036B059 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -329,6 +470,7 @@
 			);
 			name = "Fptn-macOS";
 			packageProductDependencies = (
+				3AE374242F58379E0036B059 /* FptnSharedCore */,
 			);
 			productName = "Fptn-macOS";
 			productReference = 3AE35AA62F55828B0036B059 /* Fptn-macOS.app */;
@@ -397,9 +539,104 @@
 			);
 			name = "Fptn-macOS-Tunnel";
 			packageProductDependencies = (
+				3AE374262F58379E0036B059 /* FptnSharedTunnel */,
 			);
 			productName = "Fptn-macOS-Tunnel";
 			productReference = 3AE35AD12F55835B0036B059 /* Fptn-macOS-Tunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		3AE372722F581FAA0036B059 /* Fptn-tvOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE372912F581FAC0036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOS" */;
+			buildPhases = (
+				3AE3726F2F581FAA0036B059 /* Sources */,
+				3AE372702F581FAA0036B059 /* Frameworks */,
+				3AE372712F581FAA0036B059 /* Resources */,
+				3AE372AC2F5820150036B059 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3AE372A62F5820150036B059 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3AE372742F581FAA0036B059 /* Fptn-tvOS */,
+			);
+			name = "Fptn-tvOS";
+			packageProductDependencies = (
+				3AE374242F58379E0036B059 /* FptnSharedCore */,
+			);
+			productName = "Fptn-tvOS";
+			productReference = 3AE372732F581FAA0036B059 /* Fptn-tvOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3AE3727E2F581FAC0036B059 /* Fptn-tvOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE372942F581FAC0036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOSTests" */;
+			buildPhases = (
+				3AE3727B2F581FAC0036B059 /* Sources */,
+				3AE3727C2F581FAC0036B059 /* Frameworks */,
+				3AE3727D2F581FAC0036B059 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3AE372812F581FAC0036B059 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3AE372822F581FAC0036B059 /* Fptn-tvOSTests */,
+			);
+			name = "Fptn-tvOSTests";
+			packageProductDependencies = (
+			);
+			productName = "Fptn-tvOSTests";
+			productReference = 3AE3727F2F581FAC0036B059 /* Fptn-tvOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		3AE372882F581FAC0036B059 /* Fptn-tvOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE372972F581FAC0036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOSUITests" */;
+			buildPhases = (
+				3AE372852F581FAC0036B059 /* Sources */,
+				3AE372862F581FAC0036B059 /* Frameworks */,
+				3AE372872F581FAC0036B059 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3AE3728B2F581FAC0036B059 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3AE3728C2F581FAC0036B059 /* Fptn-tvOSUITests */,
+			);
+			name = "Fptn-tvOSUITests";
+			packageProductDependencies = (
+			);
+			productName = "Fptn-tvOSUITests";
+			productReference = 3AE372892F581FAC0036B059 /* Fptn-tvOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		3AE3729D2F5820150036B059 /* Fptn-tvOS-Tunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AE372A92F5820150036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOS-Tunnel" */;
+			buildPhases = (
+				3AE3729A2F5820150036B059 /* Sources */,
+				3AE3729B2F5820150036B059 /* Frameworks */,
+				3AE3729C2F5820150036B059 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3AE372A02F5820150036B059 /* Fptn-tvOS-Tunnel */,
+			);
+			name = "Fptn-tvOS-Tunnel";
+			packageProductDependencies = (
+				3AE374262F58379E0036B059 /* FptnSharedTunnel */,
+			);
+			productName = "Fptn-tvOS-Tunnel";
+			productReference = 3AE3729E2F5820150036B059 /* Fptn-tvOS-Tunnel.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		79A890712E7582AB0062CD90 /* FptnVPNTunnel */ = {
@@ -421,6 +658,7 @@
 			name = FptnVPNTunnel;
 			packageProductDependencies = (
 				3AEA9E0D2F4C62880020E4E3 /* Logging */,
+				3AE374262F58379E0036B059 /* FptnSharedTunnel */,
 			);
 			productName = FptnVPNTunnel;
 			productReference = 79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */;
@@ -448,6 +686,7 @@
 			name = FptnVPN;
 			packageProductDependencies = (
 				3AEA9E0A2F4C62880020E4E3 /* Logging */,
+				3AE374242F58379E0036B059 /* FptnSharedCore */,
 			);
 			productName = FptnVPN;
 			productReference = 85D5C3262DFD4A0600ABAD64 /* FptnVPN.app */;
@@ -523,6 +762,20 @@
 					3AE35AD02F55835B0036B059 = {
 						CreatedOnToolsVersion = 26.4;
 					};
+					3AE372722F581FAA0036B059 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					3AE3727E2F581FAC0036B059 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 3AE372722F581FAA0036B059;
+					};
+					3AE372882F581FAC0036B059 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 3AE372722F581FAA0036B059;
+					};
+					3AE3729D2F5820150036B059 = {
+						CreatedOnToolsVersion = 26.4;
+					};
 					79A890712E7582AB0062CD90 = {
 						CreatedOnToolsVersion = 16.4;
 					};
@@ -551,6 +804,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				3AEA9E092F4C62880020E4E3 /* XCRemoteSwiftPackageReference "swift-log" */,
+				3AE374232F58379E0036B059 /* XCRemoteSwiftPackageReference "FptnShared" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 85D5C3272DFD4A0600ABAD64 /* Products */;
@@ -565,6 +819,10 @@
 				3AE35AB12F55828E0036B059 /* Fptn-macOSTests */,
 				3AE35ABB2F55828E0036B059 /* Fptn-macOSUITests */,
 				3AE35AD02F55835B0036B059 /* Fptn-macOS-Tunnel */,
+				3AE372722F581FAA0036B059 /* Fptn-tvOS */,
+				3AE3727E2F581FAC0036B059 /* Fptn-tvOSTests */,
+				3AE372882F581FAC0036B059 /* Fptn-tvOSUITests */,
+				3AE3729D2F5820150036B059 /* Fptn-tvOS-Tunnel */,
 			);
 		};
 /* End PBXProject section */
@@ -592,6 +850,34 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		3AE35ACF2F55835B0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE372712F581FAA0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE3727D2F581FAC0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE372872F581FAC0036B059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE3729C2F5820150036B059 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -678,6 +964,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		3AE3726F2F581FAA0036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE3727B2F581FAC0036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE372852F581FAC0036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AE3729A2F5820150036B059 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		79A8906E2E7582AB0062CD90 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -724,6 +1038,21 @@
 			target = 3AE35AD02F55835B0036B059 /* Fptn-macOS-Tunnel */;
 			targetProxy = 3AE35AD82F55835C0036B059 /* PBXContainerItemProxy */;
 		};
+		3AE372812F581FAC0036B059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3AE372722F581FAA0036B059 /* Fptn-tvOS */;
+			targetProxy = 3AE372802F581FAC0036B059 /* PBXContainerItemProxy */;
+		};
+		3AE3728B2F581FAC0036B059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3AE372722F581FAA0036B059 /* Fptn-tvOS */;
+			targetProxy = 3AE3728A2F581FAC0036B059 /* PBXContainerItemProxy */;
+		};
+		3AE372A62F5820150036B059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3AE3729D2F5820150036B059 /* Fptn-tvOS-Tunnel */;
+			targetProxy = 3AE372A52F5820150036B059 /* PBXContainerItemProxy */;
+		};
 		79A8907C2E7582AB0062CD90 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 79A890712E7582AB0062CD90 /* FptnVPNTunnel */;
@@ -746,8 +1075,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = fptn;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-macOS/Fptn_macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -757,14 +1087,16 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -773,6 +1105,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS/Cpp/Fptn_macOS-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -782,8 +1115,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = fptn;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-macOS/Fptn_macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -793,14 +1127,16 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -809,6 +1145,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS/Cpp/Fptn_macOS-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -824,7 +1161,7 @@
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -848,7 +1185,7 @@
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -871,7 +1208,7 @@
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -894,7 +1231,7 @@
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -919,6 +1256,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-macOS-Tunnel";
@@ -928,8 +1266,13 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -937,6 +1280,7 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS-Tunnel/Cpp/Fptn_macOS_Tunnel-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -953,6 +1297,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-macOS-Tunnel";
@@ -962,8 +1307,13 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -971,8 +1321,241 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS-Tunnel/Cpp/Fptn_macOS_Tunnel-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3AE372922F581FAC0036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-tvOS/Fptn_tvOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		3AE372932F581FAC0036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-tvOS/Fptn_tvOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
+		3AE372952F581FAC0036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-tvOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-tvOS";
+				TVOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		3AE372962F581FAC0036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-tvOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-tvOS";
+				TVOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
+		3AE372982F581FAC0036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = "Fptn-tvOS";
+				TVOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		3AE372992F581FAC0036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = "Fptn-tvOS";
+				TVOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
+		3AE372AA2F5820150036B059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-tvOS-Tunnel/Fptn_tvOS_Tunnel.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fptn-tvOS-Tunnel/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-tvOS-Tunnel";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS.Fptn-tvOS-Tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		3AE372AB2F5820150036B059 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_ENTITLEMENTS = "Fptn-tvOS-Tunnel/Fptn_tvOS_Tunnel.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6YA6B56LR;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fptn-tvOS-Tunnel/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-tvOS-Tunnel";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS.Fptn-tvOS-Tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.4;
 			};
 			name = Release;
 		};
@@ -1388,6 +1971,42 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		3AE372912F581FAC0036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE372922F581FAC0036B059 /* Debug */,
+				3AE372932F581FAC0036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3AE372942F581FAC0036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE372952F581FAC0036B059 /* Debug */,
+				3AE372962F581FAC0036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3AE372972F581FAC0036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE372982F581FAC0036B059 /* Debug */,
+				3AE372992F581FAC0036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3AE372A92F5820150036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOS-Tunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AE372AA2F5820150036B059 /* Debug */,
+				3AE372AB2F5820150036B059 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		79A8907F2E7582AB0062CD90 /* Build configuration list for PBXNativeTarget "FptnVPNTunnel" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1436,6 +2055,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		3AE374232F58379E0036B059 /* XCRemoteSwiftPackageReference "FptnShared" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mrmidi/FptnShared";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.1;
+			};
+		};
 		3AEA9E092F4C62880020E4E3 /* XCRemoteSwiftPackageReference "swift-log" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-log";
@@ -1447,6 +2074,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		3AE374242F58379E0036B059 /* FptnSharedCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3AE374232F58379E0036B059 /* XCRemoteSwiftPackageReference "FptnShared" */;
+			productName = FptnSharedCore;
+		};
+		3AE374262F58379E0036B059 /* FptnSharedTunnel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3AE374232F58379E0036B059 /* XCRemoteSwiftPackageReference "FptnShared" */;
+			productName = FptnSharedTunnel;
+		};
 		3AEA9E0A2F4C62880020E4E3 /* Logging */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 3AEA9E092F4C62880020E4E3 /* XCRemoteSwiftPackageReference "swift-log" */;

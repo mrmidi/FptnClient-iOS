@@ -15,6 +15,8 @@ final class LoginViewModel: ObservableObject {
     @Published var token = ""
     @Published private(set) var errorMessage: String? = nil
     @Published var isLoggedIn = false
+    /// True when the token was loaded from iCloud rather than entered locally.
+    @Published var isCloudSynced = false
 
     var isLoginButtonEnabled: Bool { !token.isEmpty }
 
@@ -22,10 +24,34 @@ final class LoginViewModel: ObservableObject {
 
     private let tokenService: TokenService
 
+    private nonisolated(unsafe) var cloudObserver: Any?
+
     init(tokenService: TokenService = .shared) {
         self.tokenService = tokenService
-        // Skip the login screen if credentials are already stored in Keychain/UserDefaults.
+
         isLoggedIn = tokenService.isLoggedIn()
+        isCloudSynced = tokenService.wasCloudSynced()
+
+        // Listen for iCloud KVS changes that arrive after launch.
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                if !self.isLoggedIn && tokenService.isLoggedIn() {
+                    self.isLoggedIn = true
+                    self.isCloudSynced = true
+                }
+            }
+        }
+    }
+
+    deinit {
+        if let observer = cloudObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     // MARK: - Commands

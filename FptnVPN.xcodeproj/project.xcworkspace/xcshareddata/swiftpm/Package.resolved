@@ -1,6 +1,15 @@
 {
-  "originHash" : "da87e42933fd9dd87d81b5052dc1aa8466ce1783d4d45bb4ed531b8649992e13",
+  "originHash" : "179c20673fa65a708d3aab0e78d1137e80c12a67c5a35612fe7672ec2d9842f4",
   "pins" : [
+    {
+      "identity" : "fptnshared",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mrmidi/FptnShared",
+      "state" : {
+        "revision" : "cc829aa505c9d8157a76f6b386c5fd060ed23a8b",
+        "version" : "0.1.1"
+      }
+    },
     {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
