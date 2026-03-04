@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FptnSharedCore
 
 struct ContentView: View {
     @StateObject private var vpnService = MacVPNService()

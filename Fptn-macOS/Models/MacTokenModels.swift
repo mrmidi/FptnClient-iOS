@@ -1,19 +1,33 @@
 import Foundation
+import FptnSharedCore
 
-struct MacVPNServer: Codable, Identifiable, Hashable {
-    var id: String { "\(host):\(port)" }
-    let name: String
-    let host: String
-    let port: Int
-    let md5_fingerprint: String
+typealias MacVPNServer = FptnSharedCore.VPNServer
+typealias MacTokenPayload = FptnSharedCore.FPTNToken
+
+extension MacVPNServer {
+    init(name: String, host: String, port: Int, md5_fingerprint: String) {
+        self.init(name: name, host: host, port: port, md5Fingerprint: md5_fingerprint)
+    }
+
+    var md5_fingerprint: String {
+        md5Fingerprint
+    }
 }
 
-struct MacTokenPayload: Codable {
-    let version: Int
-    let service_name: String
-    let username: String
-    let password: String
-    let servers: [MacVPNServer]
+extension MacTokenPayload {
+    init(version: Int, service_name: String, username: String, password: String, servers: [MacVPNServer]) {
+        self.init(
+            version: version,
+            serviceName: service_name,
+            username: username,
+            password: password,
+            servers: servers
+        )
+    }
+
+    var service_name: String {
+        serviceName
+    }
 }
 
 enum MacTunnelMessageAction: String, Codable {

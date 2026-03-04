@@ -643,6 +643,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 79A8907F2E7582AB0062CD90 /* Build configuration list for PBXNativeTarget "FptnVPNTunnel" */;
 			buildPhases = (
+				3AF0A0012F6000010036B059 /* Sync Native Framework Slice */,
 				79A8906E2E7582AB0062CD90 /* Sources */,
 				79A8906F2E7582AB0062CD90 /* Frameworks */,
 				79A890702E7582AB0062CD90 /* Resources */,
@@ -931,7 +932,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nDSYM_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework.dSYM\"\nif [ -d \"$DSYM_SRC\" ]; then\n   cp -R \"$DSYM_SRC\" \"${DWARF_DSYM_FOLDER_PATH}/\"\nfi\n";
+			shellScript = "set -e\n\n# Keep the linked framework path stable while selecting the correct slice for the active SDK.\nFRAMEWORK_DST=\"${SRCROOT}/FptnVPN/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  iphonesimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework\"\n    DSYM_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework.dSYM\"\n    ;;\n  iphoneos)\n    if [ -d \"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\" ]; then\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\"\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework.dSYM\"\n    else\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework\"\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework.dSYM\"\n    fi\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    DSYM_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nelse\n  echo \"warning: fptn_native_lib framework slice not found for PLATFORM_NAME=${PLATFORM_NAME}\"\nfi\n\nif [ -n \"${DSYM_SRC}\" ] && [ -d \"${DSYM_SRC}\" ] && [ -n \"${DWARF_DSYM_FOLDER_PATH:-}\" ]; then\n  cp -R \"${DSYM_SRC}\" \"${DWARF_DSYM_FOLDER_PATH}/\"\nfi\n";
+		};
+		3AF0A0012F6000010036B059 /* Sync Native Framework Slice */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n\nFRAMEWORK_DST=\"${SRCROOT}/FptnVPN/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  iphonesimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework\"\n    ;;\n  iphoneos)\n    if [ -d \"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\" ]; then\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\"\n    else\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework\"\n    fi\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

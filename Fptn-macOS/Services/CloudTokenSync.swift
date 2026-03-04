@@ -1,4 +1,5 @@
 import Foundation
+import FptnSharedCore
 
 /// Reads and writes FPTN token metadata from iCloud Key-Value Store.
 /// Uses the same keys as the iOS TokenService so data syncs cross-platform.

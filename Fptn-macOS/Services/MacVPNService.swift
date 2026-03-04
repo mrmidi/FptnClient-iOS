@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import NetworkExtension
+import FptnSharedCore
 
 @MainActor
 final class MacVPNService: ObservableObject {
