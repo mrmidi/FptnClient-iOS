@@ -13,12 +13,14 @@ final class WebsocketClientBridge {
 
     typealias PacketCallback     = (Data) -> Void
     typealias ConnectionCallback = () -> Void
+    typealias DisconnectionCallback = (_ wasConnected: Bool, _ reason: String) -> Void
 
     // MARK: - Private state
 
     private var handle: WebsocketClientBridgePtr?
     private let packetCallback: PacketCallback
     private let connectedCallback: ConnectionCallback
+    private let disconnectedCallback: DisconnectionCallback
 
     // MARK: - Init / deinit
 
@@ -31,10 +33,12 @@ final class WebsocketClientBridge {
         md5Fingerprint: String,
         censorshipStrategy: String = "SNI",
         packetCallback: @escaping PacketCallback,
-        connectedCallback: @escaping ConnectionCallback
+        connectedCallback: @escaping ConnectionCallback,
+        disconnectedCallback: @escaping DisconnectionCallback = { _, _ in }
     ) {
         self.packetCallback    = packetCallback
         self.connectedCallback = connectedCallback
+        self.disconnectedCallback = disconnectedCallback
         self.handle            = nil   // all stored properties now initialised
 
         // passUnretained is correct here: VPNService (the owner) already holds
@@ -63,6 +67,14 @@ final class WebsocketClientBridge {
                 Unmanaged<WebsocketClientBridge>
                     .fromOpaque(ctx).takeUnretainedValue()
                     .connectedCallback()
+            },
+            // DisconnectedCallback
+            { wasConnected, reason, ctx in
+                guard let ctx else { return }
+                let bridge = Unmanaged<WebsocketClientBridge>
+                    .fromOpaque(ctx).takeUnretainedValue()
+                let message = reason.map { String(cString: $0) } ?? "connection_closed"
+                bridge.disconnectedCallback(wasConnected, message)
             },
             ctx
         )

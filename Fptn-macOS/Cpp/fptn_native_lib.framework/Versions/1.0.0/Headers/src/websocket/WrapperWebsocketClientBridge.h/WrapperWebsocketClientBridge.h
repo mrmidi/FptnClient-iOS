@@ -20,6 +20,7 @@ typedef void* WebsocketClientBridgePtr;
 // Callback types
 typedef void (*IPPacketCallback)(const uint8_t* packet_data, uint32_t length, void* context);
 typedef void (*ConnectionCallback)(void* context);
+typedef void (*DisconnectedCallback)(bool was_connected, const char* reason, void* context);
 
 // Creates new websocket client instance
 WebsocketClientBridgePtr websocket_client_bridge_create(
@@ -32,6 +33,7 @@ WebsocketClientBridgePtr websocket_client_bridge_create(
     const char* censorship_strategy,
     IPPacketCallback packet_callback,
     ConnectionCallback connected_callback,
+    DisconnectedCallback disconnected_callback,
     void* context);
 
 // Destroys websocket client instance

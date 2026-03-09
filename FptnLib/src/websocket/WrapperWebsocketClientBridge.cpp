@@ -4,40 +4,40 @@ Copyright (c) 2024-2025 Stas Skokov
 Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
-#include <memory>
-#include <string>
-#include <thread>
 #include <atomic>
-#include <chrono>
 #include <cstdlib>
+#include <memory>
 #include <mutex>
+#include <string>
 #include <string_view>
+#include <thread>
 
 #include <fptn-protocol-lib/websocket/websocket_client.h>
 
+#ifndef FPTN_VERSION
+#define FPTN_VERSION "unknown"
+#endif
+
+#include "common/logger/logger.h"
 #include "WrapperWebsocketClientBridge.h"
 
 #ifndef FPTN_CLIENT_DEFAULT_ADDRESS_IP6
 #define FPTN_CLIENT_DEFAULT_ADDRESS_IP6 "fd00::1"
 #endif
 
-constexpr const int kDefaultMaxReconnectionAttempts = 0;
 constexpr const int kDefaultIdleTimeoutSeconds = 60;
 
-// Internal C++ websocket client wrapper
 struct WebsocketClientWrapper {
     IPPacketCallback packet_callback;
     ConnectionCallback connected_callback;
+    DisconnectedCallback disconnected_callback;
     void* context;
     std::shared_ptr<fptn::protocol::websocket::WebsocketClient> client;
     std::thread client_thread;
     std::atomic<bool> running{false};
     std::mutex mutex;
-    int reconnection_attempts;
-    int max_reconnection_attempts;
     int idle_timeout_seconds;
-    
-    // Configuration
+
     std::string server_ip;
     int server_port;
     std::string tun_ipv4;
@@ -45,14 +45,17 @@ struct WebsocketClientWrapper {
     std::string access_token;
     std::string md5_fingerprint;
     std::string censorship_strategy;
-    
-    WebsocketClientWrapper(IPPacketCallback p_callback, 
-                          ConnectionCallback c_callback,
-                          void* ctx)
-        : packet_callback(p_callback), connected_callback(c_callback),
+
+    WebsocketClientWrapper(
+        IPPacketCallback p_callback,
+        ConnectionCallback c_callback,
+        DisconnectedCallback d_callback,
+        void* ctx
+    )
+        : packet_callback(p_callback),
+          connected_callback(c_callback),
+          disconnected_callback(d_callback),
           context(ctx),
-          reconnection_attempts(kDefaultMaxReconnectionAttempts),
-          max_reconnection_attempts(kDefaultMaxReconnectionAttempts),
           idle_timeout_seconds(kDefaultIdleTimeoutSeconds) {}
 };
 
@@ -84,14 +87,13 @@ int parse_int_option(const std::string& options,
 }
 
 namespace {
-void packet_callback_adapter(fptn::common::network::IPPacketPtr packet, 
-                            void* user_data) {
+void packet_callback_adapter(fptn::common::network::IPPacketPtr packet,
+                             void* user_data) {
     auto wrapper = static_cast<WebsocketClientWrapper*>(user_data);
     if (wrapper && wrapper->packet_callback && packet) {
         const auto* raw_packet = packet->GetRawPacket();
         const auto* data = static_cast<const uint8_t*>(raw_packet->getRawData());
         const auto len = raw_packet->getRawDataLen();
-
         wrapper->packet_callback(data, len, wrapper->context);
     }
 }
@@ -103,79 +105,69 @@ void connected_callback_adapter(void* user_data) {
     }
 }
 
+void disconnected_callback_adapter(bool was_connected,
+                                   const std::string& reason,
+                                   void* user_data) {
+    auto wrapper = static_cast<WebsocketClientWrapper*>(user_data);
+    if (wrapper && wrapper->disconnected_callback) {
+        wrapper->disconnected_callback(
+            was_connected,
+            reason.c_str(),
+            wrapper->context
+        );
+    }
+}
+
+void initialize_logger_once() {
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        (void)fptn::logger::init("fptn-ios-tunnel");
+    });
+}
+
 void client_run_thread(WebsocketClientWrapper* wrapper) {
-    // Time window for counting attempts (1 minute)
-    constexpr auto kReconnectionWindow = std::chrono::seconds(60);
-    // Delay between reconnection attempts
-    constexpr auto kReconnectionDelay = std::chrono::milliseconds(300);
+    initialize_logger_once();
 
-    // Current count of reconnection attempts
-    wrapper->reconnection_attempts = wrapper->max_reconnection_attempts;
-    auto window_start_time = std::chrono::steady_clock::now();
+    try {
+        {
+            std::unique_lock<std::mutex> lock(wrapper->mutex);
+            if (!wrapper->running) {
+                return;
+            }
 
-    while (wrapper->running &&
-           (wrapper->max_reconnection_attempts == 0 || wrapper->reconnection_attempts > 0)) {
-        try {
-            {
-                std::unique_lock<std::mutex> lock(wrapper->mutex);
-                
-                if (wrapper->running) {
-                    wrapper->client = std::make_shared<fptn::protocol::websocket::WebsocketClient>(
-                        fptn::common::network::IPv4Address::Create(wrapper->server_ip),
-                        wrapper->server_port,
-                        fptn::common::network::IPv4Address::Create(wrapper->tun_ipv4),
-                        fptn::common::network::IPv6Address::Create(FPTN_CLIENT_DEFAULT_ADDRESS_IP6),
-                        [wrapper](auto packet) {
-                            packet_callback_adapter(std::move(packet), wrapper);
-                        },
-                        wrapper->sni,
-                        wrapper->access_token,
-                        wrapper->md5_fingerprint,
-                        wrapper->idle_timeout_seconds,
-                        [wrapper]() {
-                            connected_callback_adapter(wrapper);
-                        });
+            wrapper->client = std::make_shared<fptn::protocol::websocket::WebsocketClient>(
+                fptn::common::network::IPv4Address::Create(wrapper->server_ip),
+                wrapper->server_port,
+                fptn::common::network::IPv4Address::Create(wrapper->tun_ipv4),
+                fptn::common::network::IPv6Address::Create(FPTN_CLIENT_DEFAULT_ADDRESS_IP6),
+                [wrapper](auto packet) {
+                    packet_callback_adapter(std::move(packet), wrapper);
+                },
+                wrapper->sni,
+                wrapper->access_token,
+                wrapper->md5_fingerprint,
+                wrapper->idle_timeout_seconds,
+                [wrapper]() {
+                    connected_callback_adapter(wrapper);
+                },
+                [wrapper](bool was_connected, const std::string& reason) {
+                    disconnected_callback_adapter(was_connected, reason, wrapper);
                 }
-            }
-            
-            if (wrapper->running && wrapper->client) {
-                wrapper->client->Run();  // This will block until connection fails
-            }
-        } catch (const std::exception& ex) {
-            // Log exception if needed
-        } catch (...) {
-            // Log unknown exception if needed
+            );
         }
 
-        if (!wrapper->running) {
-            break;
+        if (wrapper->running && wrapper->client) {
+            wrapper->client->Run();
         }
-
-        // Calculate time since last window start
-        auto current_time = std::chrono::steady_clock::now();
-        auto elapsed = current_time - window_start_time;
-
-        // Reconnection attempt counting logic
-        if (elapsed >= kReconnectionWindow) {
-            // Reset counter if we're past the time window
-            wrapper->reconnection_attempts = wrapper->max_reconnection_attempts;
-            window_start_time = current_time;
-        } else if (wrapper->max_reconnection_attempts > 0) {
-            // Decrement counter if within time window
-            wrapper->reconnection_attempts--;
-        }
-
-        if (wrapper->running &&
-            (wrapper->max_reconnection_attempts == 0 || wrapper->reconnection_attempts > 0)) {
-            std::this_thread::sleep_for(kReconnectionDelay);
-        }
+    } catch (const std::exception& ex) {
+        disconnected_callback_adapter(false,
+                                      std::string("WebSocket wrapper exception: ") + ex.what(),
+                                      wrapper);
+    } catch (...) {
+        disconnected_callback_adapter(false, "WebSocket wrapper unknown exception", wrapper);
     }
 
-    if (wrapper->running && wrapper->max_reconnection_attempts > 0 &&
-        wrapper->reconnection_attempts <= 0) {
-        SPDLOG_WARN("WebSocket wrapper exhausted reconnect attempts: {}",
-                    wrapper->max_reconnection_attempts);
-    }
+    wrapper->running = false;
 }
 } // namespace
 
@@ -191,10 +183,16 @@ WebsocketClientBridgePtr websocket_client_bridge_create(
     const char* censorship_strategy,
     IPPacketCallback packet_callback,
     ConnectionCallback connected_callback,
+    DisconnectedCallback disconnected_callback,
     void* context) {
 
     try {
-        auto wrapper = new WebsocketClientWrapper(packet_callback, connected_callback, context);
+        auto wrapper = new WebsocketClientWrapper(
+            packet_callback,
+            connected_callback,
+            disconnected_callback,
+            context
+        );
 
         wrapper->server_ip = server_ip;
         wrapper->server_port = server_port;
@@ -202,24 +200,18 @@ WebsocketClientBridgePtr websocket_client_bridge_create(
         wrapper->sni = sni;
         wrapper->access_token = access_token;
         wrapper->md5_fingerprint = md5_fingerprint;
-        wrapper->censorship_strategy = censorship_strategy ? censorship_strategy : "SNI"; // reserved for future use
-        wrapper->max_reconnection_attempts = parse_int_option(
-            wrapper->censorship_strategy,
-            "reconnect_attempts",
-            kDefaultMaxReconnectionAttempts);
+        wrapper->censorship_strategy = censorship_strategy ? censorship_strategy : "SNI";
         wrapper->idle_timeout_seconds = parse_int_option(
             wrapper->censorship_strategy,
             "idle_timeout",
-            kDefaultIdleTimeoutSeconds);
-        wrapper->reconnection_attempts = wrapper->max_reconnection_attempts;
+            kDefaultIdleTimeoutSeconds
+        );
 
         SPDLOG_INFO(
-            "WebSocket bridge config idle_timeout={}s reconnect_attempts={}",
-            wrapper->idle_timeout_seconds,
-            wrapper->max_reconnection_attempts == 0
-                ? std::string("infinite")
-                : std::to_string(wrapper->max_reconnection_attempts));
-        
+            "WebSocket bridge config idle_timeout={}s",
+            wrapper->idle_timeout_seconds
+        );
+
         return static_cast<WebsocketClientBridgePtr>(wrapper);
     } catch (...) {
         return nullptr;
@@ -237,12 +229,13 @@ void websocket_client_bridge_destroy(WebsocketClientBridgePtr client) {
 bool websocket_client_bridge_start(WebsocketClientBridgePtr client) {
     try {
         auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-        if (!wrapper->running) {
-            wrapper->running = true;
-            wrapper->client_thread = std::thread(client_run_thread, wrapper);
-            return true;
+        if (!wrapper || wrapper->running || wrapper->client_thread.joinable()) {
+            return false;
         }
-        return false;
+
+        wrapper->running = true;
+        wrapper->client_thread = std::thread(client_run_thread, wrapper);
+        return true;
     } catch (...) {
         return false;
     }
@@ -251,31 +244,36 @@ bool websocket_client_bridge_start(WebsocketClientBridgePtr client) {
 bool websocket_client_bridge_stop(WebsocketClientBridgePtr client) {
     try {
         auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-        if (wrapper->running) {
-            wrapper->running = false;
-            
-            {
-                std::unique_lock<std::mutex> lock(wrapper->mutex);
-                if (wrapper->client) {
-                    wrapper->client->Stop();
-                    wrapper->client.reset();
-                }
-            }
-            
-            if (wrapper->client_thread.joinable()) {
-                wrapper->client_thread.join();
-            }
-            return true;
+        if (!wrapper) {
+            return false;
         }
-        return false;
+
+        wrapper->running = false;
+
+        std::shared_ptr<fptn::protocol::websocket::WebsocketClient> active_client;
+        {
+            std::unique_lock<std::mutex> lock(wrapper->mutex);
+            active_client = wrapper->client;
+            wrapper->client.reset();
+        }
+
+        if (active_client) {
+            active_client->Stop();
+        }
+
+        if (wrapper->client_thread.joinable()) {
+            wrapper->client_thread.join();
+        }
+
+        return active_client != nullptr;
     } catch (...) {
         return false;
     }
 }
 
 bool websocket_client_bridge_send_packet(WebsocketClientBridgePtr client,
-                                        const uint8_t* packet_data,
-                                        uint32_t length) {
+                                         const uint8_t* packet_data,
+                                         uint32_t length) {
     try {
         auto wrapper = static_cast<WebsocketClientWrapper*>(client);
         if (wrapper && wrapper->client && wrapper->running) {
@@ -286,7 +284,6 @@ bool websocket_client_bridge_send_packet(WebsocketClientBridgePtr client,
             return false;
         }
     } catch (...) {
-        // Log error if needed
     }
     return false;
 }

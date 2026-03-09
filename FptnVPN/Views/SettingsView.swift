@@ -148,26 +148,11 @@ struct SettingsView: View {
                         }
                     }
 
-                    Stepper(
-                        value: Binding(
-                            get: { viewModel.websocketReconnectAttempts },
-                            set: { viewModel.saveWebsocketReconnectAttempts($0) }
-                        ),
-                        in: 0...100
-                    ) {
-                        HStack {
-                            Text("Tunnel reconnect attempts")
-                                .foregroundStyle(Color.appPrimaryText)
-                            Spacer()
-                            Text(viewModel.websocketReconnectAttempts == 0 ? "∞" : "\(viewModel.websocketReconnectAttempts)")
-                                .foregroundStyle(Color.appAccent)
-                        }
-                    }
                 } header: {
                     Text("Connection")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
-                    Text("Tunnel settings control how aggressively the packet tunnel websocket treats idle periods and how long it keeps retrying after socket-level drops. 0 reconnect attempts means retry forever.")
+                    Text("Runtime reconnect now happens inside the packet tunnel provider. Auto-Reconnect controls the retry budget and delay, while Tunnel idle timeout controls how quickly the websocket is treated as dead.")
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)

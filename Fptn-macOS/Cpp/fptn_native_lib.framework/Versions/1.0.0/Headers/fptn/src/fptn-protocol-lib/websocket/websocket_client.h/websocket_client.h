@@ -43,6 +43,8 @@ class WebsocketClient : public std::enable_shared_from_this<WebsocketClient> {
   using NewIPPacketCallback =
       std::function<void(fptn::common::network::IPPacketPtr packet)>;
   using OnConnectedCallback = std::function<void()>;
+  using OnDisconnectedCallback = std::function<void(bool was_connected,
+      const std::string& reason)>;
 
  public:
   explicit WebsocketClient(fptn::common::network::IPv4Address server_ip,
@@ -53,7 +55,9 @@ class WebsocketClient : public std::enable_shared_from_this<WebsocketClient> {
       std::string sni,
       std::string access_token,
       std::string expected_md5_fingerprint,
-      OnConnectedCallback on_connected_callback = nullptr);
+      int idle_timeout_seconds = 60,
+      OnConnectedCallback on_connected_callback = nullptr,
+      OnDisconnectedCallback on_disconnected_callback = nullptr);
 
   virtual ~WebsocketClient();
 
@@ -62,6 +66,8 @@ class WebsocketClient : public std::enable_shared_from_this<WebsocketClient> {
   bool Stop();
   bool Send(fptn::common::network::IPPacketPtr packet);
   bool IsStarted();
+  bool WasConnected() const;
+  std::string LastDisconnectReason() const;
 
  protected:
   void onResolve(boost::beast::error_code ec,
@@ -77,6 +83,8 @@ class WebsocketClient : public std::enable_shared_from_this<WebsocketClient> {
   void DoRead();
   void DoWrite();
   void Fail(boost::beast::error_code ec, char const* what);
+  bool StopWithReason(std::string reason, bool notify_disconnect);
+  void NotifyDisconnected(bool was_connected, const std::string& reason);
 
  private:
   const std::string kUrlWebSocket_ = "/fptn";
@@ -108,8 +116,12 @@ class WebsocketClient : public std::enable_shared_from_this<WebsocketClient> {
   const std::string sni_;
   const std::string access_token_;
   const std::string expected_md5_fingerprint_;
+    const int idle_timeout_seconds_;
 
   OnConnectedCallback on_connected_callback_;
+  OnDisconnectedCallback on_disconnected_callback_;
+  std::string last_disconnect_reason_;
+  mutable std::atomic<bool> disconnect_notified_{false};
 
   SSL* ssl_{nullptr};
 };

@@ -16,7 +16,6 @@ actor SettingsService {
     private static let maxReconnectKey       = "fptn.settings.maxReconnectAttempts"
     private static let reconnectDelayKey     = "fptn.settings.reconnectDelay"
     private static let websocketIdleTimeoutKey = "fptn.settings.websocketIdleTimeoutSeconds"
-    private static let websocketReconnectAttemptsKey = "fptn.settings.websocketReconnectAttempts"
     private static let colorSchemeKey        = "fptn.settings.colorScheme"
     private static let logLevelKey           = "fptn.settings.logLevel"
 
@@ -59,12 +58,6 @@ actor SettingsService {
         return stored == nil ? 60 : UserDefaults.standard.integer(forKey: Self.websocketIdleTimeoutKey)
     }
 
-    /// 0 = infinite retries inside the tunnel websocket worker.
-    nonisolated var websocketReconnectAttempts: Int {
-        let stored = UserDefaults.standard.object(forKey: Self.websocketReconnectAttemptsKey)
-        return stored == nil ? 0 : UserDefaults.standard.integer(forKey: Self.websocketReconnectAttemptsKey)
-    }
-
     nonisolated var colorScheme: AppColorScheme {
         guard let raw = UserDefaults.standard.string(forKey: Self.colorSchemeKey),
               let scheme = AppColorScheme(rawValue: raw) else { return .system }
@@ -73,7 +66,7 @@ actor SettingsService {
 
     nonisolated var logLevel: LogLevel {
         guard let raw = UserDefaults.standard.string(forKey: Self.logLevelKey),
-              let level = LogLevel(rawValue: raw) else { return .warning }
+              let level = LogLevel(rawValue: raw) else { return .info }
         return level
     }
 
@@ -105,10 +98,6 @@ actor SettingsService {
 
     func setWebsocketIdleTimeoutSeconds(_ value: Int) {
         UserDefaults.standard.set(value, forKey: Self.websocketIdleTimeoutKey)
-    }
-
-    func setWebsocketReconnectAttempts(_ value: Int) {
-        UserDefaults.standard.set(value, forKey: Self.websocketReconnectAttemptsKey)
     }
 
     func setColorScheme(_ scheme: AppColorScheme) {

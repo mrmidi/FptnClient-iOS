@@ -781,7 +781,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2640;
-				LastUpgradeCheck = 1640;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					3AE35AA52F55828B0036B059 = {
 						CreatedOnToolsVersion = 26.4;
@@ -969,7 +969,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\n# Keep the linked framework path stable while selecting the correct slice for the active SDK.\nFRAMEWORK_DST=\"${SRCROOT}/FptnVPN/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  iphonesimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework\"\n    DSYM_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework.dSYM\"\n    ;;\n  iphoneos)\n    if [ -d \"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\" ]; then\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\"\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework.dSYM\"\n    else\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework\"\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework.dSYM\"\n    fi\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    DSYM_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nelse\n  echo \"warning: fptn_native_lib framework slice not found for PLATFORM_NAME=${PLATFORM_NAME}\"\nfi\n\nif [ -n \"${DSYM_SRC}\" ] && [ -d \"${DSYM_SRC}\" ] && [ -n \"${DWARF_DSYM_FOLDER_PATH:-}\" ]; then\n  cp -R \"${DSYM_SRC}\" \"${DWARF_DSYM_FOLDER_PATH}/\"\nfi\n";
+			shellScript = "set -e\n\n# Keep the linked framework path stable while selecting the correct slice for the active SDK.\nFRAMEWORK_DST=\"${SRCROOT}/FptnVPN/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  iphonesimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework\"\n    DSYM_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework.dSYM\"\n    ;;\n  iphoneos)\n    if [ -d \"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\" ]; then\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\"\n    else\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework\"\n    fi\n\n    if [ -d \"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework.dSYM\" ]; then\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework.dSYM\"\n    else\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework.dSYM\"\n    fi\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    DSYM_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nelse\n  echo \"warning: fptn_native_lib framework slice not found for PLATFORM_NAME=${PLATFORM_NAME}\"\nfi\n\nif [ -n \"${DSYM_SRC}\" ] && [ -d \"${DSYM_SRC}\" ] && [ -n \"${DWARF_DSYM_FOLDER_PATH:-}\" ]; then\n  rm -rf \"${DWARF_DSYM_FOLDER_PATH}/$(basename \"${DSYM_SRC}\")\"\n  cp -R \"${DSYM_SRC}\" \"${DWARF_DSYM_FOLDER_PATH}/\"\nfi\n";
 		};
 		3AF0A0012F6000010036B059 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -1359,7 +1359,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_ARCHS = x86_64;
-				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/Fptn-macOS/Cpp",
+					"$(PROJECT_DIR)/Fptn-macOS-Tunnel/Cpp",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-macOS-Tunnel";
@@ -1402,7 +1405,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_ARCHS = x86_64;
-				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/Fptn-macOS/Cpp",
+					"$(PROJECT_DIR)/Fptn-macOS-Tunnel/Cpp",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-macOS-Tunnel";

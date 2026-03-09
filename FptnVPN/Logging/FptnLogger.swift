@@ -8,6 +8,22 @@ import Foundation
 import Logging
 import OSLog
 
+private final class AppLoggingBootstrapState: @unchecked Sendable {
+    static let shared = AppLoggingBootstrapState()
+
+    private let lock = NSLock()
+    private var hasBootstrapped = false
+
+    func bootstrapIfNeeded(_ bootstrap: () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !hasBootstrapped else { return }
+        bootstrap()
+        hasBootstrapped = true
+    }
+}
+
 // MARK: - Module-level logger (app target)
 
 let logger = Logging.Logger(label: "org.fptn.app")
@@ -16,8 +32,10 @@ let logger = Logging.Logger(label: "org.fptn.app")
 
 /// Call once from FptnVPNApp before any other code runs.
 func bootstrapLogging() {
-    LoggingSystem.bootstrap { label in
-        AppLogHandler(label: label)
+    AppLoggingBootstrapState.shared.bootstrapIfNeeded {
+        LoggingSystem.bootstrap { label in
+            AppLogHandler(label: label)
+        }
     }
 }
 

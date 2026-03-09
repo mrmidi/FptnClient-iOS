@@ -8,13 +8,36 @@ import Foundation
 import Combine
 @preconcurrency import NetworkExtension
 
-private struct TunnelControlMessage: Codable {
-    let action: String
+private enum TunnelControlAction: String, Codable, Sendable {
+    case setLogLevel = "set_log_level"
+    case ping
+    case getStatus = "get_status"
+    case prepareStop = "prepare_stop"
+}
+
+private struct TunnelControlMessage: Codable, Sendable {
+    let action: TunnelControlAction
     let logLevel: String?
+    let initiator: String?
+
+    init(
+        action: TunnelControlAction,
+        logLevel: String? = nil,
+        initiator: String? = nil
+    ) {
+        self.action = action
+        self.logLevel = logLevel
+        self.initiator = initiator
+    }
+}
+
+private struct TunnelControlResponse: Codable, Sendable {
+    let ok: Bool
+    let message: String
 }
 
 @MainActor
-class VPNService: ObservableObject {
+final class VPNService: ObservableObject {
     @Published var connection = VPNConnection()
 
     private var timer: Timer?
@@ -22,26 +45,25 @@ class VPNService: ObservableObject {
     private var packetTunnelProvider: NETunnelProviderManager?
     private var tunnelStatusObserver: NSObjectProtocol?
 
-    // Auto-reconnect state
-    private var reconnectTask: Task<Void, Never>?
-    private var userInitiatedDisconnect = false
-
     private let tokenService = TokenService.shared
     private let serverSelectionService = ServerSelectionService.shared
 
     // MARK: - Public
 
-    /// Load the existing tunnel manager from system preferences and sync UI state.
-    /// Call on appear and when returning to foreground so the app reflects VPN
-    /// status changes made from Control Center or Settings.
     func syncWithSystem() {
         Task { @MainActor in
             do {
                 let managers = try await NETunnelProviderManager.loadAllFromPreferences()
-                guard let manager = managers.first else { return }
-                self.packetTunnelProvider = manager
-                self.observeTunnelStatus(manager)
-                self.syncTunnelStatus()
+                guard let manager = managers.first else {
+                    packetTunnelProvider = nil
+                    clearConnectionState(resetErrors: false)
+                    return
+                }
+
+                packetTunnelProvider = manager
+                observeTunnelStatus(manager)
+                syncTunnelStatus()
+                await refreshTunnelRuntimeSnapshot()
             } catch {
                 logger.warning("syncWithSystem: failed to load preferences: \(error.localizedDescription)")
             }
@@ -49,18 +71,13 @@ class VPNService: ObservableObject {
     }
 
     func connect() {
-        userInitiatedDisconnect = false
         Task {
             await performConnect()
         }
     }
 
     func disconnect() {
-        userInitiatedDisconnect = true
-        reconnectTask?.cancel()
-        reconnectTask = nil
-
-        packetTunnelProvider?.connection.stopVPNTunnel()
+        let manager = packetTunnelProvider
         packetTunnelProvider = nil
 
         if let observer = tunnelStatusObserver {
@@ -68,45 +85,41 @@ class VPNService: ObservableObject {
             tunnelStatusObserver = nil
         }
 
-        connection.isConnected = false
-        connection.isConnecting = false
-        connection.isReconnecting = false
-        connection.errorMessage = nil
-        stopTimer()
-        stopSpeedMonitoring()
+        clearConnectionState(resetErrors: true)
+
+        Task {
+            if let session = manager?.connection as? NETunnelProviderSession {
+                _ = try? await Self.sendProviderMessage(
+                    TunnelControlMessage(
+                        action: .prepareStop,
+                        initiator: "app_disconnect"
+                    ),
+                    via: session,
+                    expecting: TunnelControlResponse.self
+                )
+            }
+            manager?.connection.stopVPNTunnel()
+        }
     }
 
     static func pushLogLevelToActiveTunnel(_ level: LogLevel) async {
-        await withCheckedContinuation { continuation in
-            NETunnelProviderManager.loadAllFromPreferences { managers, error in
-                guard error == nil else {
-                    logger.error("Failed to load tunnel managers for log-level sync")
-                    continuation.resume()
-                    return
-                }
+        let managerResult = await loadActiveManager()
+        guard case .success(let manager) = managerResult,
+              let session = manager.connection as? NETunnelProviderSession,
+              [.connected, .connecting, .reasserting].contains(manager.connection.status) else {
+            return
+        }
 
-                guard let manager = managers?.first,
-                      let session = manager.connection as? NETunnelProviderSession,
-                      manager.connection.status == .connected || manager.connection.status == .connecting else {
-                    continuation.resume()
-                    return
-                }
+        _ = try? await sendProviderMessage(
+            TunnelControlMessage(action: .setLogLevel, logLevel: level.rawValue),
+            via: session,
+            expecting: TunnelControlResponse.self
+        )
+    }
 
-                let message = TunnelControlMessage(action: "set_log_level", logLevel: level.rawValue)
-                guard let data = try? JSONEncoder().encode(message) else {
-                    continuation.resume()
-                    return
-                }
-
-                do {
-                    try session.sendProviderMessage(data) { _ in
-                        continuation.resume()
-                    }
-                } catch {
-                    logger.warning("Failed to send log-level update to tunnel: \(error.localizedDescription)")
-                    continuation.resume()
-                }
-            }
+    func refreshCachedServerWarning() {
+        Task { @MainActor in
+            connection.warningMessage = await serverSelectionService.cachedWarningMessage()
         }
     }
 
@@ -114,10 +127,16 @@ class VPNService: ObservableObject {
 
     private func performConnect() async {
         connection.isConnecting = true
+        connection.isReconnecting = false
         connection.errorMessage = nil
-        defer { connection.isConnecting = false }
+        connection.runtimeState = .starting
+        defer {
+            connection.isConnecting = false
+            if !connection.isConnected && !connection.isReconnecting {
+                connection.runtimeState = nil
+            }
+        }
 
-        // Resolve server — honour manual selection if set, fall back to auto (first).
         let server: VPNServer
         switch connection.connectionMode {
         case .manual(let chosen):
@@ -153,7 +172,6 @@ class VPNService: ObservableObject {
         let sni = settings.sni
         let strategy = settings.bypassMethod.rawValue
 
-        // Login
         let accessTokenResult = await loginToServer(
             server: server,
             username: tokenData.username,
@@ -169,8 +187,12 @@ class VPNService: ObservableObject {
             return
         }
 
-        // DNS
-        let dnsResult = await getDNSInfo(server: server, accessToken: accessToken, sni: sni, censorshipStrategy: strategy)
+        let dnsResult = await getDNSInfo(
+            server: server,
+            accessToken: accessToken,
+            sni: sni,
+            censorshipStrategy: strategy
+        )
         guard case .success(let (dnsIPv4, dnsIPv6)) = dnsResult else {
             if case .failure(let error) = dnsResult {
                 connection.errorMessage = "DNS lookup failed: \(error.localizedDescription)"
@@ -179,7 +201,6 @@ class VPNService: ObservableObject {
             return
         }
 
-        // Save config and launch the PacketTunnelProvider extension.
         let vpnResult = await configureAndStartVPN(
             server: server,
             accessToken: accessToken,
@@ -188,19 +209,16 @@ class VPNService: ObservableObject {
             sni: sni,
             bypassMethod: strategy
         )
+
         switch vpnResult {
         case .success(let manager):
-            self.packetTunnelProvider = manager
-            self.observeTunnelStatus(manager)
+            packetTunnelProvider = manager
+            observeTunnelStatus(manager)
+            syncTunnelStatus()
+            await refreshTunnelRuntimeSnapshot()
         case .failure(let error):
             connection.errorMessage = "VPN configuration failed: \(error.localizedDescription)"
             logger.error("VPN configuration error: \(error.localizedDescription)")
-        }
-    }
-
-    func refreshCachedServerWarning() {
-        Task { @MainActor in
-            connection.warningMessage = await serverSelectionService.cachedWarningMessage()
         }
     }
 
@@ -268,6 +286,7 @@ class VPNService: ObservableObject {
         censorshipStrategy: String
     ) async -> Result<(String, String), Error> {
         logger.info("DNS request start host=\(server.host) port=\(server.port) sni=\(sni) strategy=\(censorshipStrategy)")
+        _ = accessToken
 
         let httpsClient = HttpsClientSwift(
             host: server.host,
@@ -317,10 +336,13 @@ class VPNService: ObservableObject {
         sni: String,
         bypassMethod: String
     ) async -> Result<NETunnelProviderManager, Error> {
+        let reconnectPolicy = TunnelReconnectPolicy(
+            isEnabled: SettingsService.shared.reconnectEnabled,
+            maxAttempts: SettingsService.shared.maxReconnectAttempts,
+            delaySeconds: SettingsService.shared.reconnectDelay
+        )
+
         return await withCheckedContinuation { continuation in
-            // Reuse the existing manager when one is already installed — creating a
-            // fresh NETunnelProviderManager() on every connect would accumulate
-            // duplicate VPN profiles in Settings.
             NETunnelProviderManager.loadAllFromPreferences { existing, error in
                 if let error {
                     continuation.resume(returning: .failure(error))
@@ -331,11 +353,7 @@ class VPNService: ObservableObject {
 
                 let config = NETunnelProviderProtocol()
                 config.serverAddress = "FptnVPN"
-#if os(iOS)
                 config.providerBundleIdentifier = "net.mrmidi.FptnVPN.FptnVPNTunnel"
-#else
-                config.providerBundleIdentifier = "org.fptn.FptnVPN.mac.extension"
-#endif
 
                 let appFilter = AppFilterService.shared
                 config.providerConfiguration = [
@@ -349,7 +367,9 @@ class VPNService: ObservableObject {
                     "md5Fingerprint": server.md5_fingerprint,
                     "bypassMethod": bypassMethod,
                     "websocketIdleTimeoutSeconds": SettingsService.shared.websocketIdleTimeoutSeconds,
-                    "websocketReconnectAttempts": SettingsService.shared.websocketReconnectAttempts,
+                    "reconnectEnabled": reconnectPolicy.isEnabled,
+                    "maxReconnectAttempts": reconnectPolicy.maxAttempts,
+                    "reconnectDelaySeconds": reconnectPolicy.delaySeconds,
                     "perAppMode": appFilter.mode.rawValue,
                     "allowedApps": appFilter.selectedBundleIDs.joined(separator: ",")
                 ]
@@ -374,13 +394,18 @@ class VPNService: ObservableObject {
                             return
                         }
 
-                        do {
-                            try manager.connection.startVPNTunnel()
-                            logger.info("VPN tunnel start requested")
-                        } catch {
-                            logger.error("startVPNTunnel failed: \(error.localizedDescription)")
-                            continuation.resume(returning: .failure(error))
-                            return
+                        switch manager.connection.status {
+                        case .connected, .connecting, .reasserting:
+                            logger.info("VPN tunnel already active with status=\(manager.connection.status.rawValue)")
+                        default:
+                            do {
+                                try manager.connection.startVPNTunnel()
+                                logger.info("VPN tunnel start requested")
+                            } catch {
+                                logger.error("startVPNTunnel failed: \(error.localizedDescription)")
+                                continuation.resume(returning: .failure(error))
+                                return
+                            }
                         }
 
                         continuation.resume(returning: .success(manager))
@@ -396,6 +421,7 @@ class VPNService: ObservableObject {
         if let previous = tunnelStatusObserver {
             NotificationCenter.default.removeObserver(previous)
         }
+
         tunnelStatusObserver = NotificationCenter.default.addObserver(
             forName: .NEVPNStatusDidChange,
             object: manager.connection,
@@ -403,77 +429,128 @@ class VPNService: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.syncTunnelStatus()
+                await self?.refreshTunnelRuntimeSnapshot()
             }
         }
     }
 
     private func syncTunnelStatus() {
-        guard let status = packetTunnelProvider?.connection.status else { return }
-        logger.debug("Tunnel status changed: \(status.rawValue)")
+        guard let tunnelConnection = packetTunnelProvider?.connection else {
+            clearConnectionState(resetErrors: false)
+            return
+        }
+
+        let status = tunnelConnection.status
+        logger.info("Tunnel status changed: \(status.diagnosticName) (\(status.rawValue))")
+
         switch status {
         case .connected:
             connection.isConnected = true
+            connection.isConnecting = false
             connection.isReconnecting = false
             startTimer()
             startRealSpeedMonitoring()
+        case .reasserting:
+            connection.isConnected = true
+            connection.isConnecting = false
+            connection.isReconnecting = true
+            connection.runtimeState = .reasserting
+            connection.downloadSpeed = 0
+            connection.uploadSpeed = 0
+            startTimer()
+            stopSpeedMonitoring()
+        case .connecting:
+            connection.isConnected = false
+            connection.isConnecting = true
+            connection.isReconnecting = false
+            connection.runtimeState = .starting
+            stopSpeedMonitoring()
+        case .disconnecting:
+            connection.isConnected = false
+            connection.isConnecting = false
+            connection.isReconnecting = false
+            connection.runtimeState = .stopping
+            stopSpeedMonitoring()
         case .disconnected, .invalid:
-            if connection.isConnected || connection.isReconnecting {
-                connection.isConnected = false
-                stopTimer()
-                stopSpeedMonitoring()
-
-                if !userInitiatedDisconnect && SettingsService.shared.reconnectEnabled {
-                    scheduleReconnect()
-                }
+            clearConnectionState(resetErrors: false)
+            if status == .disconnected {
+                logLastDisconnectError(from: tunnelConnection)
             }
-        default:
+        @unknown default:
             break
         }
     }
 
-    // MARK: - Auto-reconnect
+    private func refreshTunnelRuntimeSnapshot() async {
+        guard let manager = packetTunnelProvider,
+              let session = manager.connection as? NETunnelProviderSession,
+              [.connected, .connecting, .reasserting].contains(manager.connection.status) else {
+            return
+        }
 
-    private func scheduleReconnect() {
-        let maxAttempts = SettingsService.shared.maxReconnectAttempts
-        let delay = SettingsService.shared.reconnectDelay
+        let snapshot: TunnelRuntimeSnapshot
+        do {
+            snapshot = try await Self.sendProviderMessage(
+                TunnelControlMessage(action: .getStatus),
+                via: session,
+                expecting: TunnelRuntimeSnapshot.self
+            )
+        } catch {
+            logger.warning("Tunnel get_status failed: \(error.localizedDescription)")
+            return
+        }
 
-        reconnectTask?.cancel()
-        reconnectTask = Task { [weak self] in
-            var attempt = 0
-            while !Task.isCancelled {
-                if maxAttempts > 0 && attempt >= maxAttempts {
-                    logger.info("Auto-reconnect: reached max \(maxAttempts) attempt(s), giving up")
-                    break
-                }
-                attempt += 1
-                logger.info("Auto-reconnect: attempt \(attempt)\(maxAttempts > 0 ? "/\(maxAttempts)" : " (unlimited)")")
+        connection.runtimeState = snapshot.runtimeState
+        connection.lastTransportError = snapshot.lastTransportError
+        connection.lastStopReason = snapshot.lastStopReason
 
-                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
-                guard !Task.isCancelled else { break }
+        if snapshot.isReasserting {
+            connection.isConnected = true
+            connection.isConnecting = false
+            connection.isReconnecting = true
+        }
 
-                await MainActor.run {
-                    self?.connection.isReconnecting = true
-                }
-                await self?.performConnect()
+        logger.info(
+            "Tunnel snapshot state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) last_error=\(snapshot.lastTransportError ?? "-") last_stop=\(snapshot.lastStopReason ?? "-")"
+        )
+    }
 
-                // If connect succeeded, tunnel status observer sets isConnected=true; stop looping.
-                if await MainActor.run(body: { self?.connection.isConnected ?? false }) {
-                    break
-                }
+    private func clearConnectionState(resetErrors: Bool) {
+        connection.isConnected = false
+        connection.isConnecting = false
+        connection.isReconnecting = false
+        connection.runtimeState = nil
+        connection.lastTransportError = nil
+        connection.lastStopReason = nil
+        if resetErrors {
+            connection.errorMessage = nil
+        }
+        stopTimer()
+        stopSpeedMonitoring()
+    }
+
+    private func logLastDisconnectError(from connection: NEVPNConnection) {
+        connection.fetchLastDisconnectError { error in
+            guard let error else {
+                logger.info("Tunnel last disconnect error: none")
+                return
             }
-            await MainActor.run {
-                self?.connection.isReconnecting = false
-            }
+
+            let nsError = error as NSError
+            logger.warning(
+                "Tunnel last disconnect error domain=\(nsError.domain) code=\(nsError.code) reason=\(Self.describeDisconnectError(nsError)) description=\(nsError.localizedDescription)"
+            )
         }
     }
 
     // MARK: - Timers
 
     private func startRealSpeedMonitoring() {
+        guard speedTimer == nil else { return }
+
         speedTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.connection.isConnected else { return }
-                // TODO(phase3): replace with real stats from the websocket client
+                guard let self, self.connection.isConnected, !self.connection.isReconnecting else { return }
                 self.connection.downloadSpeed = Double.random(in: 5...15)
                 self.connection.uploadSpeed = Double.random(in: 2...8)
             }
@@ -481,6 +558,8 @@ class VPNService: ObservableObject {
     }
 
     private func startTimer() {
+        guard timer == nil else { return }
+
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.connection.connectionTime += 1
@@ -515,6 +594,140 @@ class VPNService: ObservableObject {
             return String(format: "%.1f Kbps", speed)
         } else {
             return String(format: "%.1f Mbps", speed / 1000)
+        }
+    }
+
+    // MARK: - Provider messaging
+
+    private static func loadActiveManager() async -> Result<NETunnelProviderManager, Error> {
+        await withCheckedContinuation { continuation in
+            NETunnelProviderManager.loadAllFromPreferences { managers, error in
+                if let error {
+                    continuation.resume(returning: .failure(error))
+                    return
+                }
+
+                guard let manager = managers?.first else {
+                    continuation.resume(returning: .failure(NSError(
+                        domain: "VPNService",
+                        code: -10,
+                        userInfo: [NSLocalizedDescriptionKey: "No active tunnel manager"]
+                    )))
+                    return
+                }
+
+                continuation.resume(returning: .success(manager))
+            }
+        }
+    }
+
+    nonisolated private static func sendProviderMessage<Response: Decodable & Sendable>(
+        _ message: TunnelControlMessage,
+        via session: NETunnelProviderSession,
+        expecting responseType: Response.Type
+    ) async throws -> Response {
+        guard let payload = try? JSONEncoder().encode(message) else {
+            throw NSError(
+                domain: "VPNService",
+                code: -11,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to encode provider message"]
+            )
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            do {
+                try session.sendProviderMessage(payload) { responseData in
+                    guard let responseData else {
+                        continuation.resume(throwing: NSError(
+                            domain: "VPNService",
+                            code: -12,
+                            userInfo: [NSLocalizedDescriptionKey: "Tunnel did not return a response"]
+                        ))
+                        return
+                    }
+
+                    do {
+                        let decoded = try JSONDecoder().decode(responseType, from: responseData)
+                        continuation.resume(returning: decoded)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+}
+
+private extension NEVPNStatus {
+    var diagnosticName: String {
+        switch self {
+        case .invalid:
+            return "invalid"
+        case .disconnected:
+            return "disconnected"
+        case .connecting:
+            return "connecting"
+        case .connected:
+            return "connected"
+        case .reasserting:
+            return "reasserting"
+        case .disconnecting:
+            return "disconnecting"
+        @unknown default:
+            return "unknown"
+        }
+    }
+}
+
+private extension VPNService {
+    nonisolated static func describeDisconnectError(_ error: NSError) -> String {
+        guard error.domain == NEVPNConnectionErrorDomain else {
+            return "provider_or_system_error"
+        }
+
+        switch error.code {
+        case NEVPNConnectionError.overslept.rawValue:
+            return "overslept"
+        case NEVPNConnectionError.noNetworkAvailable.rawValue:
+            return "no_network_available"
+        case NEVPNConnectionError.unrecoverableNetworkChange.rawValue:
+            return "unrecoverable_network_change"
+        case NEVPNConnectionError.configurationFailed.rawValue:
+            return "configuration_failed"
+        case NEVPNConnectionError.serverAddressResolutionFailed.rawValue:
+            return "server_address_resolution_failed"
+        case NEVPNConnectionError.serverNotResponding.rawValue:
+            return "server_not_responding"
+        case NEVPNConnectionError.serverDead.rawValue:
+            return "server_dead"
+        case NEVPNConnectionError.authenticationFailed.rawValue:
+            return "authentication_failed"
+        case NEVPNConnectionError.clientCertificateInvalid.rawValue:
+            return "client_certificate_invalid"
+        case NEVPNConnectionError.clientCertificateNotYetValid.rawValue:
+            return "client_certificate_not_yet_valid"
+        case NEVPNConnectionError.clientCertificateExpired.rawValue:
+            return "client_certificate_expired"
+        case NEVPNConnectionError.pluginFailed.rawValue:
+            return "plugin_failed"
+        case NEVPNConnectionError.configurationNotFound.rawValue:
+            return "configuration_not_found"
+        case NEVPNConnectionError.pluginDisabled.rawValue:
+            return "plugin_disabled"
+        case NEVPNConnectionError.negotiationFailed.rawValue:
+            return "negotiation_failed"
+        case NEVPNConnectionError.serverDisconnected.rawValue:
+            return "server_disconnected"
+        case NEVPNConnectionError.serverCertificateInvalid.rawValue:
+            return "server_certificate_invalid"
+        case NEVPNConnectionError.serverCertificateNotYetValid.rawValue:
+            return "server_certificate_not_yet_valid"
+        case NEVPNConnectionError.serverCertificateExpired.rawValue:
+            return "server_certificate_expired"
+        default:
+            return "unknown_nevpn_error"
         }
     }
 }

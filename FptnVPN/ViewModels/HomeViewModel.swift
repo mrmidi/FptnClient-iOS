@@ -19,6 +19,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var selectedServerName: String? = nil
     @Published private(set) var connectionMode: VPNConnection.ConnectionMode = .auto
     @Published private(set) var isConnecting = false
+    @Published private(set) var isReconnecting = false
     @Published private(set) var errorMessage: String? = nil
     @Published private(set) var warningMessage: String? = nil
 
@@ -82,6 +83,7 @@ final class HomeViewModel: ObservableObject {
         downloadSpeedString = vpnService.formatSpeed(conn.downloadSpeed)
         uploadSpeedString = vpnService.formatSpeed(conn.uploadSpeed)
         isConnecting = conn.isConnecting
+        isReconnecting = conn.isReconnecting
         errorMessage = conn.errorMessage
         warningMessage = conn.warningMessage
     }

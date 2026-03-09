@@ -46,11 +46,11 @@ struct HomeView: View {
             .disabled(viewModel.isConnecting)
 
             // Status
-            if viewModel.isConnecting {
+            if viewModel.isConnecting || viewModel.isReconnecting {
                 HStack(spacing: 8) {
                     ProgressView()
                         .tint(Color.appAccent)
-                    Text("Connecting...")
+                    Text(viewModel.isReconnecting ? "Reconnecting..." : "Connecting...")
                         .foregroundStyle(Color.appPrimaryText)
                         .font(.headline)
                 }

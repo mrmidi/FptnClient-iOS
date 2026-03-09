@@ -9,12 +9,89 @@ if ! command -v conan &> /dev/null || ! command -v cmake &> /dev/null; then
     exit 1
 fi
 
-ROOT_DIR="${SRCROOT:-$(cd "$(dirname "$0")" && pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
+ROOT_DIR="${SRCROOT:-${SCRIPT_DIR}}"
 LIB_DIR="${ROOT_DIR}/FptnLib"
 
 TARGET="${1:-ios-device}"
 
+resolve_framework_binary() {
+    local framework_path="$1"
+    if [ -f "${framework_path}/Versions/1.0.0/fptn_native_lib" ]; then
+        echo "${framework_path}/Versions/1.0.0/fptn_native_lib"
+    else
+        echo "${framework_path}/fptn_native_lib"
+    fi
+}
+
+generate_framework_dsym() {
+    local framework_path="$1"
+    local dsym_path="${framework_path}.dSYM"
+    local binary_path
+
+    binary_path="$(resolve_framework_binary "${framework_path}")"
+    if [ ! -f "${binary_path}" ]; then
+        echo "warning: framework binary not found for dSYM generation: ${binary_path}"
+        return 1
+    fi
+
+    rm -rf "${dsym_path}"
+    echo "Generating dSYM for ${framework_path}..."
+    dsymutil "${binary_path}" -o "${dsym_path}"
+}
+
+copy_dsym_to_archive_products() {
+    local dsym_path="$1"
+
+    if [ -n "${DWARF_DSYM_FOLDER_PATH:-}" ] && [ -d "${dsym_path}" ]; then
+        mkdir -p "${DWARF_DSYM_FOLDER_PATH}"
+        rm -rf "${DWARF_DSYM_FOLDER_PATH}/$(basename "${dsym_path}")"
+        cp -R "${dsym_path}" "${DWARF_DSYM_FOLDER_PATH}/"
+    fi
+}
+
+sync_ios_release_output() {
+    local source_framework_dir="$1"
+    local source_dsym_dir="$2"
+    local release_dir="${LIB_DIR}/build-ios-release"
+
+    mkdir -p "${release_dir}"
+    rm -rf "${release_dir}/fptn_native_lib.framework"
+    cp -R "${source_framework_dir}" "${release_dir}/"
+    rm -rf "${release_dir}/fptn_native_lib.framework.dSYM"
+    cp -R "${source_dsym_dir}" "${release_dir}/"
+}
+
+run_aggregate_build() {
+    local aggregate_name="$1"
+    local target_name
+    local targets=(
+        "ios-simulator"
+        "ios-device"
+        "tvos-simulator"
+        "tvos-device"
+        "macos"
+    )
+
+    echo "Building all Apple frameworks (${aggregate_name})..."
+    echo "Build order keeps copied iOS/tvOS frameworks on device slices."
+
+    for target_name in "${targets[@]}"; do
+        echo
+        echo "==== ${target_name} ===="
+        "${SCRIPT_PATH}" "${target_name}"
+    done
+
+    echo
+    echo "Build complete for all Apple frameworks."
+    exit 0
+}
+
 case "$TARGET" in
+    all|apple|all-apple)
+        run_aggregate_build "$TARGET"
+        ;;
     ios|ios-device)
         HOST_PROFILE="conan-device-profile"
         OUTPUT_DIR="build-ios"
@@ -56,7 +133,7 @@ case "$TARGET" in
         echo "Building fptn_native_lib for macOS (universal)..."
         ;;
     *)
-        echo "Usage: $0 [ios-device|ios-simulator|tvos-device|tvos-simulator|macos]"
+        echo "Usage: $0 [all|apple|all-apple|ios-device|ios-simulator|tvos-device|tvos-simulator|macos]"
         exit 1
         ;;
 esac
@@ -105,19 +182,25 @@ if [ "$TARGET" = "macos" ]; then
         "${X86_DIR}/fptn_native_lib.framework/${INNER_BIN}" \
         -output "${UNIVERSAL_FW}/${INNER_BIN}"
 
+    generate_framework_dsym "${UNIVERSAL_FW}"
+
     # ── Copy to all macOS destination directories ─────────────────────────────
     TUNNEL_DEST_DIR="${ROOT_DIR}/Fptn-macOS-Tunnel/Cpp"
     for DEST in "$DEST_DIR" "$TUNNEL_DEST_DIR"; do
         mkdir -p "$DEST"
         rm -rf "${DEST}/fptn_native_lib.framework"
         cp -R "$UNIVERSAL_FW" "$DEST/"
+        rm -rf "${DEST}/fptn_native_lib.framework.dSYM"
 
         SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
         echo "Signing ${DEST}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
         codesign --force --sign "${SIGN_IDENTITY}" "${DEST}/fptn_native_lib.framework"
     done
 
+    copy_dsym_to_archive_products "${UNIVERSAL_FW}.dSYM"
+
     rm -rf "$UNIVERSAL_FW"
+    rm -rf "${UNIVERSAL_FW}.dSYM"
     echo "Build complete. Universal framework copied to:"
     echo "  ${DEST_DIR}/fptn_native_lib.framework"
     echo "  ${TUNNEL_DEST_DIR}/fptn_native_lib.framework"
@@ -129,6 +212,11 @@ conan install . --profile:host="$HOST_PROFILE" --profile:build=default --build=m
 cd "$OUTPUT_DIR"
 cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
 cmake --build . --config Debug
+generate_framework_dsym "fptn_native_lib.framework"
+
+if [ "$TARGET" = "ios-device" ] || [ "$TARGET" = "ios" ]; then
+    sync_ios_release_output "fptn_native_lib.framework" "fptn_native_lib.framework.dSYM"
+fi
 
 copy_framework_to_dest() {
     local destination="$1"
@@ -144,10 +232,7 @@ copy_framework_to_dest() {
         /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string ${MIN_PLATFORM_VERSION}" "$framework_plist"
     fi
 
-    if [ -d "fptn_native_lib.framework.dSYM" ]; then
-        rm -rf "${destination}/fptn_native_lib.framework.dSYM"
-        cp -R fptn_native_lib.framework.dSYM "$destination/"
-    fi
+    rm -rf "${destination}/fptn_native_lib.framework.dSYM"
 
     SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
     echo "Signing ${destination}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
@@ -159,6 +244,8 @@ copy_framework_to_dest "$DEST_DIR"
 if [ -n "$SECONDARY_DEST_DIR" ]; then
     copy_framework_to_dest "$SECONDARY_DEST_DIR"
 fi
+
+copy_dsym_to_archive_products "fptn_native_lib.framework.dSYM"
 
 echo "Build complete. Framework output: ${DEST_DIR}/fptn_native_lib.framework"
 if [ -n "$SECONDARY_DEST_DIR" ]; then

@@ -33,11 +33,27 @@ private enum TunnelRuntimeLogLevel: String {
     }
 }
 
+private final class TunnelLoggingBootstrapState: @unchecked Sendable {
+    static let shared = TunnelLoggingBootstrapState()
+
+    private let lock = NSLock()
+    private var hasBootstrapped = false
+
+    func bootstrapIfNeeded(_ bootstrap: () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !hasBootstrapped else { return }
+        bootstrap()
+        hasBootstrapped = true
+    }
+}
+
 private final class TunnelLogLevelStore: @unchecked Sendable {
     static let shared = TunnelLogLevelStore()
 
     private let lock = NSLock()
-    private var current: TunnelRuntimeLogLevel = .warning
+    private var current: TunnelRuntimeLogLevel = .info
 
     func get() -> TunnelRuntimeLogLevel {
         lock.lock()
@@ -65,8 +81,10 @@ let logger = Logging.Logger(label: "org.fptn.tunnel")
 
 /// Call once from PacketTunnelProvider.startTunnel before any other code.
 func bootstrapLogging() {
-    LoggingSystem.bootstrap { label in
-        TunnelLogHandler(label: label)
+    TunnelLoggingBootstrapState.shared.bootstrapIfNeeded {
+        LoggingSystem.bootstrap { label in
+            TunnelLogHandler(label: label)
+        }
     }
 }
 
