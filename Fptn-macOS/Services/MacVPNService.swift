@@ -11,7 +11,7 @@ final class MacVPNService: ObservableObject {
     @Published private(set) var errorText: String?
 
     private var manager: NETunnelProviderManager?
-    private var observer: NSObjectProtocol?
+    private nonisolated(unsafe) var observer: NSObjectProtocol?
     private var requestedLogLevel: String = "warning"
     private let timeoutSeconds = 10
 
@@ -46,8 +46,8 @@ final class MacVPNService: ObservableObject {
         logLevel: String = "warning"
     ) {
         guard !isConnecting else { return }
-        guard !tokenPayload.username.isEmpty, !tokenPayload.password.isEmpty else {
-            errorText = "Token username/password are required"
+        guard !tokenPayload.username.isEmpty else {
+            errorText = "Token username is required"
             return
         }
 

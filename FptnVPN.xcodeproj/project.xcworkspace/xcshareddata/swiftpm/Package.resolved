@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mrmidi/FptnShared",
       "state" : {
-        "revision" : "cc829aa505c9d8157a76f6b386c5fd060ed23a8b",
-        "version" : "0.1.1"
+        "revision" : "c8d3e9f5a94c435c9c3a816e4dc452195ec06c40",
+        "version" : "0.1.2"
       }
     },
     {

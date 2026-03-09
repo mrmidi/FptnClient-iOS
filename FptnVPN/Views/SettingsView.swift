@@ -10,6 +10,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showLogoutConfirmation = false
+    @State private var showClearKeychainConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -129,9 +130,45 @@ struct SettingsView: View {
                             }
                         }
                     }
+
+                    Stepper(
+                        value: Binding(
+                            get: { viewModel.websocketIdleTimeoutSeconds },
+                            set: { viewModel.saveWebsocketIdleTimeoutSeconds($0) }
+                        ),
+                        in: 5...300,
+                        step: 5
+                    ) {
+                        HStack {
+                            Text("Tunnel idle timeout")
+                                .foregroundStyle(Color.appPrimaryText)
+                            Spacer()
+                            Text("\(viewModel.websocketIdleTimeoutSeconds)s")
+                                .foregroundStyle(Color.appAccent)
+                        }
+                    }
+
+                    Stepper(
+                        value: Binding(
+                            get: { viewModel.websocketReconnectAttempts },
+                            set: { viewModel.saveWebsocketReconnectAttempts($0) }
+                        ),
+                        in: 0...100
+                    ) {
+                        HStack {
+                            Text("Tunnel reconnect attempts")
+                                .foregroundStyle(Color.appPrimaryText)
+                            Spacer()
+                            Text(viewModel.websocketReconnectAttempts == 0 ? "∞" : "\(viewModel.websocketReconnectAttempts)")
+                                .foregroundStyle(Color.appAccent)
+                        }
+                    }
                 } header: {
                     Text("Connection")
                         .foregroundStyle(Color.appAccent)
+                } footer: {
+                    Text("Tunnel settings control how aggressively the packet tunnel websocket treats idle periods and how long it keeps retrying after socket-level drops. 0 reconnect attempts means retry forever.")
+                        .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)
 
@@ -179,6 +216,16 @@ struct SettingsView: View {
 
                 Section {
                     Button(role: .destructive) {
+                        showClearKeychainConfirmation = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("Clear Keychain Credentials")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                    }
+                    Button(role: .destructive) {
                         showLogoutConfirmation = true
                     } label: {
                         HStack {
@@ -191,6 +238,9 @@ struct SettingsView: View {
                 } header: {
                     Text("Account")
                         .foregroundStyle(Color.appAccent)
+                } footer: {
+                    Text("Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch.")
+                        .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)
             }
@@ -215,6 +265,18 @@ struct SettingsView: View {
                 viewModel.logout()
             }
             Button("Cancel", role: .cancel) { }
+        }
+        .confirmationDialog(
+            "Clear Keychain Credentials?",
+            isPresented: $showClearKeychainConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear", role: .destructive) {
+                viewModel.clearKeychain()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This removes the stored password from iCloud Keychain on all devices. The app will re-sync it on next launch.")
         }
     }
 }

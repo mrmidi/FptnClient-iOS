@@ -9,7 +9,9 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <mutex>
+#include <string_view>
 
 #include <fptn-protocol-lib/websocket/websocket_client.h>
 
@@ -19,7 +21,8 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #define FPTN_CLIENT_DEFAULT_ADDRESS_IP6 "fd00::1"
 #endif
 
-constexpr const int kMaxReconnectionAttempts = 3;
+constexpr const int kDefaultMaxReconnectionAttempts = 0;
+constexpr const int kDefaultIdleTimeoutSeconds = 60;
 
 // Internal C++ websocket client wrapper
 struct WebsocketClientWrapper {
@@ -31,6 +34,8 @@ struct WebsocketClientWrapper {
     std::atomic<bool> running{false};
     std::mutex mutex;
     int reconnection_attempts;
+    int max_reconnection_attempts;
+    int idle_timeout_seconds;
     
     // Configuration
     std::string server_ip;
@@ -45,8 +50,38 @@ struct WebsocketClientWrapper {
                           ConnectionCallback c_callback,
                           void* ctx)
         : packet_callback(p_callback), connected_callback(c_callback),
-          context(ctx), reconnection_attempts(kMaxReconnectionAttempts) {}
+          context(ctx),
+          reconnection_attempts(kDefaultMaxReconnectionAttempts),
+          max_reconnection_attempts(kDefaultMaxReconnectionAttempts),
+          idle_timeout_seconds(kDefaultIdleTimeoutSeconds) {}
 };
+
+int parse_int_option(const std::string& options,
+                     std::string_view key,
+                     int default_value) {
+    const std::string prefix = std::string(key) + "=";
+    std::size_t segment_start = 0;
+    while (segment_start <= options.size()) {
+        const std::size_t segment_end = options.find(';', segment_start);
+        const std::string segment = options.substr(
+            segment_start,
+            segment_end == std::string::npos ? std::string::npos : segment_end - segment_start);
+        if (segment.rfind(prefix, 0) == 0) {
+            const char* value = segment.c_str() + prefix.size();
+            char* end_ptr = nullptr;
+            const long parsed = std::strtol(value, &end_ptr, 10);
+            if (end_ptr != value && parsed >= 0 && parsed <= INT32_MAX) {
+                return static_cast<int>(parsed);
+            }
+            return default_value;
+        }
+        if (segment_end == std::string::npos) {
+            break;
+        }
+        segment_start = segment_end + 1;
+    }
+    return default_value;
+}
 
 namespace {
 void packet_callback_adapter(fptn::common::network::IPPacketPtr packet, 
@@ -75,10 +110,11 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
     constexpr auto kReconnectionDelay = std::chrono::milliseconds(300);
 
     // Current count of reconnection attempts
-    wrapper->reconnection_attempts = kMaxReconnectionAttempts;
+    wrapper->reconnection_attempts = wrapper->max_reconnection_attempts;
     auto window_start_time = std::chrono::steady_clock::now();
 
-    while (wrapper->running && wrapper->reconnection_attempts > 0) {
+    while (wrapper->running &&
+           (wrapper->max_reconnection_attempts == 0 || wrapper->reconnection_attempts > 0)) {
         try {
             {
                 std::unique_lock<std::mutex> lock(wrapper->mutex);
@@ -95,6 +131,7 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
                         wrapper->sni,
                         wrapper->access_token,
                         wrapper->md5_fingerprint,
+                        wrapper->idle_timeout_seconds,
                         [wrapper]() {
                             connected_callback_adapter(wrapper);
                         });
@@ -121,16 +158,23 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
         // Reconnection attempt counting logic
         if (elapsed >= kReconnectionWindow) {
             // Reset counter if we're past the time window
-            wrapper->reconnection_attempts = kMaxReconnectionAttempts;
+            wrapper->reconnection_attempts = wrapper->max_reconnection_attempts;
             window_start_time = current_time;
-        } else {
+        } else if (wrapper->max_reconnection_attempts > 0) {
             // Decrement counter if within time window
             wrapper->reconnection_attempts--;
         }
 
-        if (wrapper->running && wrapper->reconnection_attempts > 0) {
+        if (wrapper->running &&
+            (wrapper->max_reconnection_attempts == 0 || wrapper->reconnection_attempts > 0)) {
             std::this_thread::sleep_for(kReconnectionDelay);
         }
+    }
+
+    if (wrapper->running && wrapper->max_reconnection_attempts > 0 &&
+        wrapper->reconnection_attempts <= 0) {
+        SPDLOG_WARN("WebSocket wrapper exhausted reconnect attempts: {}",
+                    wrapper->max_reconnection_attempts);
     }
 }
 } // namespace
@@ -159,6 +203,22 @@ WebsocketClientBridgePtr websocket_client_bridge_create(
         wrapper->access_token = access_token;
         wrapper->md5_fingerprint = md5_fingerprint;
         wrapper->censorship_strategy = censorship_strategy ? censorship_strategy : "SNI"; // reserved for future use
+        wrapper->max_reconnection_attempts = parse_int_option(
+            wrapper->censorship_strategy,
+            "reconnect_attempts",
+            kDefaultMaxReconnectionAttempts);
+        wrapper->idle_timeout_seconds = parse_int_option(
+            wrapper->censorship_strategy,
+            "idle_timeout",
+            kDefaultIdleTimeoutSeconds);
+        wrapper->reconnection_attempts = wrapper->max_reconnection_attempts;
+
+        SPDLOG_INFO(
+            "WebSocket bridge config idle_timeout={}s reconnect_attempts={}",
+            wrapper->idle_timeout_seconds,
+            wrapper->max_reconnection_attempts == 0
+                ? std::string("infinite")
+                : std::to_string(wrapper->max_reconnection_attempts));
         
         return static_cast<WebsocketClientBridgePtr>(wrapper);
     } catch (...) {

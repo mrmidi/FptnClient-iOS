@@ -51,17 +51,24 @@ final class MacServerSelectionService: ObservableObject {
             }
 
             let conn = NWConnection(host: endpoint, port: nwPort, using: .tcp)
-            var finished = false
+            let lock = NSLock()
+            // Use a class box so the @Sendable closures can share mutable state safely
+            final class FinishState: @unchecked Sendable {
+                var finished = false
+            }
+            let state = FinishState()
 
-            func finish(_ value: Double?) {
-                guard !finished else { return }
-                finished = true
+            let finish: @Sendable (Double?) -> Void = { value in
+                lock.lock()
+                defer { lock.unlock() }
+                guard !state.finished else { return }
+                state.finished = true
                 conn.cancel()
                 continuation.resume(returning: value)
             }
 
-            conn.stateUpdateHandler = { state in
-                switch state {
+            conn.stateUpdateHandler = { nwState in
+                switch nwState {
                 case .ready:
                     let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     finish(elapsed)

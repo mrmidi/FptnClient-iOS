@@ -1,7 +1,7 @@
 import Foundation
 
-final class MacHttpsClientSwift {
-    private let client: UnsafeMutableRawPointer?
+final class MacHttpsClientSwift: @unchecked Sendable {
+    private nonisolated(unsafe) let client: UnsafeMutableRawPointer?
 
     init(host: String, port: Int, sni: String, md5Fingerprint: String, censorshipStrategy: String = "SNI") {
         client = createHttpsClient(host, Int32(port), sni, md5Fingerprint, censorshipStrategy)

@@ -15,6 +15,8 @@ actor SettingsService {
     private static let reconnectEnabledKey   = "fptn.settings.reconnectEnabled"
     private static let maxReconnectKey       = "fptn.settings.maxReconnectAttempts"
     private static let reconnectDelayKey     = "fptn.settings.reconnectDelay"
+    private static let websocketIdleTimeoutKey = "fptn.settings.websocketIdleTimeoutSeconds"
+    private static let websocketReconnectAttemptsKey = "fptn.settings.websocketReconnectAttempts"
     private static let colorSchemeKey        = "fptn.settings.colorScheme"
     private static let logLevelKey           = "fptn.settings.logLevel"
 
@@ -49,6 +51,18 @@ actor SettingsService {
     nonisolated var reconnectDelay: Int {
         let stored = UserDefaults.standard.object(forKey: Self.reconnectDelayKey)
         return stored == nil ? 2 : UserDefaults.standard.integer(forKey: Self.reconnectDelayKey)
+    }
+
+    /// Seconds before the native tunnel websocket is considered idle.
+    nonisolated var websocketIdleTimeoutSeconds: Int {
+        let stored = UserDefaults.standard.object(forKey: Self.websocketIdleTimeoutKey)
+        return stored == nil ? 60 : UserDefaults.standard.integer(forKey: Self.websocketIdleTimeoutKey)
+    }
+
+    /// 0 = infinite retries inside the tunnel websocket worker.
+    nonisolated var websocketReconnectAttempts: Int {
+        let stored = UserDefaults.standard.object(forKey: Self.websocketReconnectAttemptsKey)
+        return stored == nil ? 0 : UserDefaults.standard.integer(forKey: Self.websocketReconnectAttemptsKey)
     }
 
     nonisolated var colorScheme: AppColorScheme {
@@ -87,6 +101,14 @@ actor SettingsService {
 
     func setReconnectDelay(_ value: Int) {
         UserDefaults.standard.set(value, forKey: Self.reconnectDelayKey)
+    }
+
+    func setWebsocketIdleTimeoutSeconds(_ value: Int) {
+        UserDefaults.standard.set(value, forKey: Self.websocketIdleTimeoutKey)
+    }
+
+    func setWebsocketReconnectAttempts(_ value: Int) {
+        UserDefaults.standard.set(value, forKey: Self.websocketReconnectAttemptsKey)
     }
 
     func setColorScheme(_ scheme: AppColorScheme) {

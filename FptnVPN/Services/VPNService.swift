@@ -27,6 +27,7 @@ class VPNService: ObservableObject {
     private var userInitiatedDisconnect = false
 
     private let tokenService = TokenService.shared
+    private let serverSelectionService = ServerSelectionService.shared
 
     // MARK: - Public
 
@@ -123,12 +124,21 @@ class VPNService: ObservableObject {
             server = chosen
         case .auto:
             let servers = await tokenService.getServers()
-            guard let first = servers.first else {
+            guard !servers.isEmpty else {
                 connection.errorMessage = "No servers available"
                 logger.warning("No servers available — cannot connect")
                 return
             }
-            server = first
+
+            let selection = await serverSelectionService.refreshBestReachableServerForAutoMode()
+            connection.warningMessage = await serverSelectionService.warningMessage(for: selection.rows)
+
+            guard let best = selection.selectedServer else {
+                connection.errorMessage = "No reachable servers available right now"
+                logger.warning("Auto mode: no reachable servers available")
+                return
+            }
+            server = best
         }
 
         connection.selectedServer = server
@@ -188,6 +198,12 @@ class VPNService: ObservableObject {
         }
     }
 
+    func refreshCachedServerWarning() {
+        Task { @MainActor in
+            connection.warningMessage = await serverSelectionService.cachedWarningMessage()
+        }
+    }
+
     // MARK: - Login
 
     nonisolated private func loginToServer(
@@ -197,6 +213,8 @@ class VPNService: ObservableObject {
         sni: String,
         censorshipStrategy: String
     ) async -> Result<String, Error> {
+        logger.info("Login request start host=\(server.host) port=\(server.port) sni=\(sni) strategy=\(censorshipStrategy)")
+
         let httpsClient = HttpsClientSwift(
             host: server.host,
             port: server.port,
@@ -213,9 +231,11 @@ class VPNService: ObservableObject {
         """
 
         let response = httpsClient.post(path: "/api/v1/login", body: requestBody, timeout: 10)
+        let responseCode = response["code"] as? Int32 ?? -1
 
-        guard (response["code"] as? Int32) == 200 else {
+        guard responseCode == 200 else {
             let errorMessage = response["error"] as? String ?? "Unknown error"
+            logger.error("Login request failed host=\(server.host) port=\(server.port) sni=\(sni) code=\(responseCode) error=\(errorMessage)")
             return .failure(NSError(
                 domain: "VPNService",
                 code: 2,
@@ -227,6 +247,7 @@ class VPNService: ObservableObject {
               let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let accessToken = json["access_token"] as? String else {
+            logger.error("Login response parse failed host=\(server.host) port=\(server.port) code=\(responseCode)")
             return .failure(NSError(
                 domain: "VPNService",
                 code: 1,
@@ -246,6 +267,8 @@ class VPNService: ObservableObject {
         sni: String,
         censorshipStrategy: String
     ) async -> Result<(String, String), Error> {
+        logger.info("DNS request start host=\(server.host) port=\(server.port) sni=\(sni) strategy=\(censorshipStrategy)")
+
         let httpsClient = HttpsClientSwift(
             host: server.host,
             port: server.port,
@@ -255,9 +278,11 @@ class VPNService: ObservableObject {
         )
 
         let response = httpsClient.get(path: "/api/v1/dns", timeout: 10)
+        let responseCode = response["code"] as? Int32 ?? -1
 
-        guard (response["code"] as? Int32) == 200 else {
+        guard responseCode == 200 else {
             let errorMessage = response["error"] as? String ?? "Unknown error"
+            logger.error("DNS request failed host=\(server.host) port=\(server.port) sni=\(sni) code=\(responseCode) error=\(errorMessage)")
             return .failure(NSError(
                 domain: "VPNService",
                 code: 4,
@@ -269,6 +294,7 @@ class VPNService: ObservableObject {
               let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let dnsIPv4 = json["dns"] as? String else {
+            logger.error("DNS response parse failed host=\(server.host) port=\(server.port) code=\(responseCode)")
             return .failure(NSError(
                 domain: "VPNService",
                 code: 3,
@@ -322,6 +348,8 @@ class VPNService: ObservableObject {
                     "logLevel": SettingsService.shared.logLevel.rawValue,
                     "md5Fingerprint": server.md5_fingerprint,
                     "bypassMethod": bypassMethod,
+                    "websocketIdleTimeoutSeconds": SettingsService.shared.websocketIdleTimeoutSeconds,
+                    "websocketReconnectAttempts": SettingsService.shared.websocketReconnectAttempts,
                     "perAppMode": appFilter.mode.rawValue,
                     "allowedApps": appFilter.selectedBundleIDs.joined(separator: ",")
                 ]

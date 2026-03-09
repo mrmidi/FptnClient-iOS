@@ -75,6 +75,18 @@ struct HomeView: View {
 #endif
             }
 
+            if let warningMessage = viewModel.warningMessage, !viewModel.isConnected {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(warningMessage)
+                        .multilineTextAlignment(.leading)
+                }
+                .foregroundStyle(Color.appAccent)
+                .font(.caption)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+
             // Server name
             if viewModel.isConnected, let serverName = viewModel.selectedServerName {
                 Text("Server: \(serverName)")
@@ -199,6 +211,11 @@ struct HomeView: View {
         .onAppear { viewModel.syncWithSystem() }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active { viewModel.syncWithSystem() }
+        }
+        .onChange(of: showingServerList) { _, isPresented in
+            if !isPresented {
+                viewModel.refreshCachedServerWarning()
+            }
         }
     }
 

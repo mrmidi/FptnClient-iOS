@@ -14,6 +14,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var reconnectEnabled: Bool
     @Published var maxReconnectAttempts: Int
     @Published var reconnectDelay: Int
+    @Published var websocketIdleTimeoutSeconds: Int
+    @Published var websocketReconnectAttempts: Int
     @Published var colorScheme: AppColorScheme
     @Published var logLevel: LogLevel
 
@@ -35,6 +37,8 @@ final class SettingsViewModel: ObservableObject {
         self.reconnectEnabled = settingsService.reconnectEnabled
         self.maxReconnectAttempts = settingsService.maxReconnectAttempts
         self.reconnectDelay = settingsService.reconnectDelay
+        self.websocketIdleTimeoutSeconds = settingsService.websocketIdleTimeoutSeconds
+        self.websocketReconnectAttempts = settingsService.websocketReconnectAttempts
         self.colorScheme = settingsService.colorScheme
         self.logLevel = settingsService.logLevel
     }
@@ -70,6 +74,16 @@ final class SettingsViewModel: ObservableObject {
         Task { await settingsService.setReconnectDelay(value) }
     }
 
+    func saveWebsocketIdleTimeoutSeconds(_ value: Int) {
+        websocketIdleTimeoutSeconds = value
+        Task { await settingsService.setWebsocketIdleTimeoutSeconds(value) }
+    }
+
+    func saveWebsocketReconnectAttempts(_ value: Int) {
+        websocketReconnectAttempts = value
+        Task { await settingsService.setWebsocketReconnectAttempts(value) }
+    }
+
     func saveColorScheme(_ scheme: AppColorScheme) {
         colorScheme = scheme
         Task { await settingsService.setColorScheme(scheme) }
@@ -86,5 +100,12 @@ final class SettingsViewModel: ObservableObject {
     func logout() {
         Task { await tokenService.clearTokenData() }
         onLogout?()
+    }
+
+    func clearKeychain() {
+        Task {
+            guard let username = await tokenService.getTokenData()?.username else { return }
+            KeychainHelper.deletePassword(account: username)
+        }
     }
 }

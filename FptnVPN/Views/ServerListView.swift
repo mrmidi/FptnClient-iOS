@@ -25,17 +25,24 @@ struct ServerListView: View {
                         HStack {
                             Text("Auto")
                             Spacer()
+                            Text(viewModel.autoSummaryText)
+                                .foregroundStyle(Color.appSecondaryText)
                         }
                     }
                 }
 
                 Section(header: Text("Servers")) {
-                    ForEach(viewModel.servers) { server in
+                    ForEach(viewModel.rows) { row in
                         Button {
-                            onSelectServer?(server)
+                            onSelectServer?(row.server)
                             dismiss()
                         } label: {
-                            Text(server.name)
+                            HStack {
+                                Text(row.server.name)
+                                Spacer()
+                                Text(row.latencyText)
+                                    .foregroundStyle(row.isReachable ? Color.appSuccess : Color.appSecondaryText)
+                            }
                         }
                     }
                 }
@@ -44,6 +51,20 @@ struct ServerListView: View {
             .navigationBarItems(trailing: Button("Done") {
                 dismiss()
             })
+            .overlay(alignment: .top) {
+                if let progress = viewModel.progress, viewModel.isRefreshing {
+                    Text("Checking \(progress.done)/\(progress.total) servers")
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.appSurface)
+                        .clipShape(Capsule())
+                        .padding(.top, 8)
+                }
+            }
+            .refreshable {
+                await viewModel.refreshServers()
+            }
             .task {
                 await viewModel.loadServers()
             }

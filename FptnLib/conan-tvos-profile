@@ -1,0 +1,10 @@
+[settings]
+arch=armv8
+build_type=Debug
+compiler=apple-clang
+compiler.cppstd=gnu17
+compiler.libcxx=libc++
+compiler.version=15
+os=tvOS
+os.version=15.6
+os.sdk=appletvos

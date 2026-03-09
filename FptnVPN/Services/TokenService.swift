@@ -5,6 +5,9 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import OSLog
+
+private let tsLog = Logger(subsystem: "net.mrmidi.FptnVPN", category: "TokenService")
 
 actor TokenService {
     static let shared = TokenService()
@@ -26,6 +29,7 @@ actor TokenService {
     private static let cloudServersKey = "fptn.cloud.servers"
     private static let cloudUsernameKey = "fptn.cloud.username"
     private static let cloudServiceNameKey = "fptn.cloud.serviceName"
+    private static let cloudPasswordKey = "fptn.cloud.password"
 
     nonisolated(unsafe) private static let cloud = NSUbiquitousKeyValueStore.default
 
@@ -51,6 +55,9 @@ actor TokenService {
 
         // -- iCloud KVS (non-secret metadata syncs across devices) --
         // Token without password — we never put the password in KVS.
+        // Exception: we also store the password in KVS as a fallback for tvOS/macOS
+        // where iCloud Keychain sync may be delayed or unreliable.
+        Self.cloud.set(tokenData.password, forKey: Self.cloudPasswordKey)
         let tokenForCloud = FPTNToken(
             version: tokenData.version,
             service_name: tokenData.service_name,
@@ -91,6 +98,11 @@ actor TokenService {
                 password: password,
                 servers: token.servers
             )
+        } else if let passwordData = token.password.data(using: .utf8) {
+            // Self-heal: backfill iCloud Keychain so other devices (tvOS, macOS) can sync.
+            // Empty password is valid — the item must exist in Keychain for other targets
+            // to distinguish "synced with no password" from "not synced yet".
+            KeychainHelper.savePassword(passwordData, account: token.username)
         }
 
         // If we loaded from iCloud but local is empty, populate local cache
@@ -165,6 +177,10 @@ actor TokenService {
     nonisolated func startCloudSync() {
         Self.cloud.synchronize()
 
+        // Ensure legacy/local credentials are mirrored into shared iCloud Keychain
+        // even if getTokenData() is not called during this app launch.
+        Task { await self.repairSharedKeychainPasswordIfNeeded() }
+
         NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
             object: Self.cloud,
@@ -198,6 +214,64 @@ actor TokenService {
         }
         if let serviceName = Self.cloud.string(forKey: Self.cloudServiceNameKey) {
             UserDefaults.standard.set(serviceName, forKey: Self.serviceNameKey)
+        }
+    }
+
+    /// Repairs missing shared-keychain password from any local cache source.
+    /// This helps previously logged-in users propagate credentials to tvOS/macOS.
+    private func repairSharedKeychainPasswordIfNeeded() {
+        let decoder = JSONDecoder()
+
+        let cachedToken: FPTNToken? = UserDefaults.standard.data(forKey: Self.tokenKey)
+            .flatMap { try? decoder.decode(FPTNToken.self, from: $0) }
+
+        let username = cachedToken?.username
+            ?? UserDefaults.standard.string(forKey: Self.usernameKey)
+            ?? Self.cloud.string(forKey: Self.cloudUsernameKey)
+
+        tsLog.info("repairKeychain: username=\(username ?? "nil", privacy: .public) cachedTokenPassword=\(cachedToken?.password ?? "nil", privacy: .public)")
+
+        guard let username, !username.isEmpty else { return }
+
+        let existing = KeychainHelper.loadPassword(account: username)
+        tsLog.info("repairKeychain: existingKeychainItem=\(existing != nil, privacy: .public) len=\(existing?.count ?? -1, privacy: .public)")
+
+        // Regardless of Keychain state, also backfill KVS so tvOS can find the password.
+        let kvsPassword = Self.cloud.string(forKey: Self.cloudPasswordKey)
+        tsLog.info("repairKeychain: kvsPasswordPresent=\(kvsPassword != nil, privacy: .public)")
+
+        if existing == nil {
+            // Prefer password from decoded local token.
+            if let password = cachedToken?.password,
+               !password.isEmpty,
+               let data = password.data(using: .utf8) {
+                tsLog.info("repairKeychain: writing from local token password len=\(data.count, privacy: .public)")
+                KeychainHelper.savePassword(data, account: username)
+                if kvsPassword == nil { Self.cloud.set(password, forKey: Self.cloudPasswordKey) }
+                return
+            }
+
+            // Fall back to legacy plain string cache if present.
+            if let legacyPassword = UserDefaults.standard.string(forKey: Self.passwordKey),
+               !legacyPassword.isEmpty,
+               let data = legacyPassword.data(using: .utf8) {
+                tsLog.info("repairKeychain: writing from legacy UserDefaults password len=\(data.count, privacy: .public)")
+                KeychainHelper.savePassword(data, account: username)
+                if kvsPassword == nil { Self.cloud.set(legacyPassword, forKey: Self.cloudPasswordKey) }
+                return
+            }
+
+            tsLog.warning("repairKeychain: no non-empty password found anywhere — token has empty password")
+            return
+        }
+
+        // Keychain has the password — backfill KVS if it's missing.
+        if kvsPassword == nil,
+           let data = existing,
+           let password = String(data: data, encoding: .utf8),
+           !password.isEmpty {
+            tsLog.info("repairKeychain: backfilling KVS from existing Keychain item")
+            Self.cloud.set(password, forKey: Self.cloudPasswordKey)
         }
     }
 }

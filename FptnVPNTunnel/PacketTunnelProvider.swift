@@ -66,8 +66,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         let dnsIPv6 = providerConfig["dnsIPv6"] as? String ?? "fd00::1"
+        let bypassMethod = providerConfig["bypassMethod"] as? String ?? "SNI"
+        let websocketIdleTimeoutSeconds = providerConfig["websocketIdleTimeoutSeconds"] as? Int ?? 60
+        let websocketReconnectAttempts = providerConfig["websocketReconnectAttempts"] as? Int ?? 0
         let tunIPv4 = "10.8.0.2"
         let tunIPv4Gateway = "10.8.0.1"
+
+        let websocketStrategy = "\(bypassMethod);idle_timeout=\(websocketIdleTimeoutSeconds);reconnect_attempts=\(websocketReconnectAttempts)"
+        logger.info("Tunnel websocket settings idle_timeout=\(websocketIdleTimeoutSeconds)s reconnect_attempts=\(websocketReconnectAttempts == 0 ? "infinite" : String(websocketReconnectAttempts))")
 
         // Build WebSocket client
         wsClient = WebsocketClientBridge(
@@ -77,6 +83,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             sni: sni,
             accessToken: accessToken,
             md5Fingerprint: md5,
+            censorshipStrategy: websocketStrategy,
             packetCallback: { [weak self] data in
                 // Packets arriving from the server → write to tun interface
                 self?.packetFlow.writePackets([data], withProtocols: [AF_INET as NSNumber])

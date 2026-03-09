@@ -5,14 +5,17 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import OSLog
 import Security
 
 struct KeychainHelper {
-    static let serviceName = "org.fptn.credentials"
+    private static let log = Logger(subsystem: "net.mrmidi.FptnVPN", category: "Keychain")
+    static let serviceName = "net.mrmidi.fptn.credentials"
+    static let legacyServiceName = "org.fptn.credentials"
 
     /// Shared app-group used as keychain access group so that the main app,
     /// tunnel extension, and macOS counterpart can all read the same items.
-    static let accessGroup = "group.net.mrmidi.FptnVPN"
+    static let accessGroup = "F6YA6B56LR.group.net.mrmidi.FptnVPN"
 
     // MARK: - Public API
 
@@ -25,7 +28,8 @@ struct KeychainHelper {
         var addQuery = query
         addQuery[kSecValueData as String] = passwordData
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(addQuery as CFDictionary, nil)
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        log.info("savePassword: account=\(account, privacy: .public) dataLen=\(passwordData.count, privacy: .public) status=\(status, privacy: .public) accessGroup=\(accessGroup, privacy: .public) service=\(serviceName, privacy: .public)")
     }
 
     static func loadPassword(account: String) -> Data? {
@@ -35,11 +39,14 @@ struct KeychainHelper {
 
         var dataTypeRef: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
-
+        log.info("loadPassword: account=\(account, privacy: .public) status=\(status, privacy: .public) service=\(serviceName, privacy: .public)")
         if status == errSecSuccess {
             return dataTypeRef as? Data
         }
-        return nil
+
+        // Fall back to legacy service name; migrate on read so iCloud starts syncing
+        // the item under the new name.
+        return migrateFromLegacyServiceIfNeeded(account: account)
     }
 
     static func deletePassword(account: String) {
@@ -135,7 +142,45 @@ struct KeychainHelper {
         if SecItemCopyMatching(privateQuery as CFDictionary, &ref) == errSecSuccess,
            let data = ref as? Data {
             writeAndCleanup(data: data, account: account, legacyQuery: privateQuery)
+            return
         }
+
+    }
+
+    /// Reads from the old service name and writes to the current one so iCloud Keychain
+    /// picks up the item under the new name. Returns the data if found, nil otherwise.
+    @discardableResult
+    private static func migrateFromLegacyServiceIfNeeded(account: String) -> Data? {
+        var legacyQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: legacyServiceName,
+            kSecAttrAccount as String: account,
+            kSecAttrAccessGroup as String: accessGroup,
+            kSecAttrSynchronizable as String: true,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        #if os(macOS)
+        legacyQuery[kSecUseDataProtectionKeychain as String] = true
+        #endif
+
+        var ref: AnyObject?
+        guard SecItemCopyMatching(legacyQuery as CFDictionary, &ref) == errSecSuccess,
+              let data = ref as? Data else {
+            return nil
+        }
+
+        // Write to new service name so iCloud syncs the item to other devices.
+        var addQuery = baseQuery(account: account)
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        if SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess {
+            // Remove the old item.
+            legacyQuery.removeValue(forKey: kSecReturnData as String)
+            legacyQuery.removeValue(forKey: kSecMatchLimit as String)
+            SecItemDelete(legacyQuery as CFDictionary)
+        }
+        return data
     }
 
     private static func writeAndCleanup(data: Data, account: String, legacyQuery: [String: Any]) {

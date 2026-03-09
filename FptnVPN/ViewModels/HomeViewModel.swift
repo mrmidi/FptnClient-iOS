@@ -20,6 +20,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var connectionMode: VPNConnection.ConnectionMode = .auto
     @Published private(set) var isConnecting = false
     @Published private(set) var errorMessage: String? = nil
+    @Published private(set) var warningMessage: String? = nil
 
     // MARK: - Dependencies (injected)
 
@@ -34,6 +35,11 @@ final class HomeViewModel: ObservableObject {
 
     func syncWithSystem() {
         vpnService.syncWithSystem()
+        vpnService.refreshCachedServerWarning()
+    }
+
+    func refreshCachedServerWarning() {
+        vpnService.refreshCachedServerWarning()
     }
 
     func connect() {
@@ -77,5 +83,6 @@ final class HomeViewModel: ObservableObject {
         uploadSpeedString = vpnService.formatSpeed(conn.uploadSpeed)
         isConnecting = conn.isConnecting
         errorMessage = conn.errorMessage
+        warningMessage = conn.warningMessage
     }
 }

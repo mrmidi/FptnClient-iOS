@@ -7,13 +7,13 @@ enum CloudTokenSync {
     private static let cloud = NSUbiquitousKeyValueStore.default
 
     // Must match the keys in TokenService (iOS).
-    private static let tokenKey = "fptn.cloud.tokenData"
-    private static let serversKey = "fptn.cloud.servers"
-    private static let usernameKey = "fptn.cloud.username"
-    private static let serviceNameKey = "fptn.cloud.serviceName"
+    private nonisolated static let tokenKey = "fptn.cloud.tokenData"
+    private nonisolated static let serversKey = "fptn.cloud.servers"
+    private nonisolated static let usernameKey = "fptn.cloud.username"
+    private nonisolated static let serviceNameKey = "fptn.cloud.serviceName"
 
     /// Kick off iCloud KVS sync and register for remote change notifications.
-    static func startObserving(onChange: @escaping () -> Void) {
+    static func startObserving(onChange: @Sendable @escaping () -> Void) {
         cloud.synchronize()
 
         NotificationCenter.default.addObserver(
@@ -43,11 +43,14 @@ enum CloudTokenSync {
     }
 
     /// Reads the password from the shared iCloud Keychain for the given username.
-    static func loadPassword(username: String) -> String? {
-        MacKeychainStore.read(
-            service: "org.fptn.credentials",
+    /// Returns `(password, found: true)` when the keychain item exists (even if password is empty),
+    /// or `(nil, found: false)` when the item has not synced yet.
+    static func loadPassword(username: String) -> (password: String?, found: Bool) {
+        let result = MacKeychainStore.readWithStatus(
+            service: "net.mrmidi.fptn.credentials",
             account: username
         )
+        return (result.value, result.status == errSecSuccess)
     }
 
     /// Saves token metadata to iCloud KVS (called after local login on macOS).
@@ -75,7 +78,7 @@ enum CloudTokenSync {
     /// Saves the password to the shared iCloud Keychain.
     static func savePassword(_ password: String, username: String) {
         MacKeychainStore.save(
-            service: "org.fptn.credentials",
+            service: "net.mrmidi.fptn.credentials",
             account: username,
             value: password
         )

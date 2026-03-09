@@ -10,7 +10,11 @@
 	<array>
 		<string>group.net.mrmidi.FptnVPN</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)group.net.mrmidi.FptnVPN</string>
+	</array>
 	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
-	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
+	<string>$(TeamIdentifierPrefix)net.mrmidi.FptnVPN</string>
 </dict>
 </plist>

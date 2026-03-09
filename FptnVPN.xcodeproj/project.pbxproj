@@ -18,8 +18,12 @@
 		3AE374292F58379E0036B059 /* FptnSharedCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374242F58379E0036B059 /* FptnSharedCore */; };
 		3AE3742A2F58379E0036B059 /* FptnSharedTunnel in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374262F58379E0036B059 /* FptnSharedTunnel */; };
 		3AE3742B2F58379E0036B059 /* FptnSharedTunnel in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374262F58379E0036B059 /* FptnSharedTunnel */; };
+		3AE38F342F58B8450036B059 /* fptn.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3AE38F332F58B8450036B059 /* fptn.icon */; };
+		3AE38F352F58B8450036B059 /* fptn.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3AE38F332F58B8450036B059 /* fptn.icon */; };
+		3AE38F362F58B8450036B059 /* fptn.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3AE38F332F58B8450036B059 /* fptn.icon */; };
 		3AEA9E0B2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0A2F4C62880020E4E3 /* Logging */; };
 		3AEA9E0C2F4C62880020E4E3 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 3AEA9E0D2F4C62880020E4E3 /* Logging */; };
+		3B1000012F7000010036B059 /* FptnSharedCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3AE374242F58379E0036B059 /* FptnSharedCore */; };
 		7994B8002E7A299E00624B08 /* (null) in Embed Frameworks */ = {isa = PBXBuildFile; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		79A890782E7582AB0062CD90 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		79A8907D2E7582AB0062CD90 /* FptnVPNTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -124,7 +128,7 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		798039E22E74177300BEA18D /* Embed Frameworks */ = {
+		3AE388C52F589C350036B059 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
@@ -156,6 +160,16 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		85D5C3FF2DFD4A0600ABAD64 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -168,6 +182,7 @@
 		3AE3727F2F581FAC0036B059 /* Fptn-tvOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-tvOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AE372892F581FAC0036B059 /* Fptn-tvOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Fptn-tvOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AE3729E2F5820150036B059 /* Fptn-tvOS-Tunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fptn-tvOS-Tunnel.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3AE38F332F58B8450036B059 /* fptn.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = fptn.icon; sourceTree = "<group>"; };
 		79A890722E7582AB0062CD90 /* FptnVPNTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FptnVPNTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		79A890742E7582AB0062CD90 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		85D5C3262DFD4A0600ABAD64 /* FptnVPN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FptnVPN.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -210,12 +225,22 @@
 				Cpp/fptn_native_lib.framework,
 			);
 		};
-		79BEF5492E7D0AF7007E57BB /* Exceptions for "FptnVPN" folder in "Embed Frameworks" phase from "FptnVPN" target */ = {
+		3AE388C62F589C360036B059 /* Exceptions for "Fptn-tvOS" folder in "Embed Frameworks" phase from "Fptn-tvOS" target */ = {
 			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
 			attributesByRelativePath = {
 				Cpp/fptn_native_lib.framework = (CodeSignOnCopy, RemoveHeadersOnCopy, );
 			};
-			buildPhase = 798039E22E74177300BEA18D /* Embed Frameworks */;
+			buildPhase = 3AE388C52F589C350036B059 /* Embed Frameworks */;
+			membershipExceptions = (
+				Cpp/fptn_native_lib.framework,
+			);
+		};
+		85D5C3FE2DFD4A0600ABAD64 /* Exceptions for "FptnVPN" folder in "Embed Frameworks" phase from "FptnVPN" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			attributesByRelativePath = {
+				Cpp/fptn_native_lib.framework = (CodeSignOnCopy, RemoveHeadersOnCopy, );
+			};
+			buildPhase = 85D5C3FF2DFD4A0600ABAD64 /* Embed Frameworks */;
 			membershipExceptions = (
 				Cpp/fptn_native_lib.framework,
 			);
@@ -251,6 +276,9 @@
 		};
 		3AE372742F581FAA0036B059 /* Fptn-tvOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3AE388C62F589C360036B059 /* Exceptions for "Fptn-tvOS" folder in "Embed Frameworks" phase from "Fptn-tvOS" target */,
+			);
 			path = "Fptn-tvOS";
 			sourceTree = "<group>";
 		};
@@ -283,7 +311,7 @@
 		85D5C3282DFD4A0600ABAD64 /* FptnVPN */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				79BEF5492E7D0AF7007E57BB /* Exceptions for "FptnVPN" folder in "Embed Frameworks" phase from "FptnVPN" target */,
+				85D5C3FE2DFD4A0600ABAD64 /* Exceptions for "FptnVPN" folder in "Embed Frameworks" phase from "FptnVPN" target */,
 			);
 			path = FptnVPN;
 			sourceTree = "<group>";
@@ -358,6 +386,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3B1000012F7000010036B059 /* FptnSharedCore in Frameworks */,
 				3AE3742B2F58379E0036B059 /* FptnSharedTunnel in Frameworks */,
 				3AE3729F2F5820150036B059 /* NetworkExtension.framework in Frameworks */,
 			);
@@ -410,6 +439,7 @@
 		85D5C31D2DFD4A0600ABAD64 = {
 			isa = PBXGroup;
 			children = (
+				3AE38F332F58B8450036B059 /* fptn.icon */,
 				85D5C3282DFD4A0600ABAD64 /* FptnVPN */,
 				85D5C3362DFD4A0800ABAD64 /* FptnVPNTests */,
 				85D5C3402DFD4A0800ABAD64 /* FptnVPNUITests */,
@@ -549,10 +579,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3AE372912F581FAC0036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOS" */;
 			buildPhases = (
+				3AF0A1012F6000010036B059 /* ShellScript */,
 				3AE3726F2F581FAA0036B059 /* Sources */,
 				3AE372702F581FAA0036B059 /* Frameworks */,
 				3AE372712F581FAA0036B059 /* Resources */,
 				3AE372AC2F5820150036B059 /* Embed Foundation Extensions */,
+				3AE388C52F589C350036B059 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -620,6 +652,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3AE372A92F5820150036B059 /* Build configuration list for PBXNativeTarget "Fptn-tvOS-Tunnel" */;
 			buildPhases = (
+				3AF0A1022F6000010036B059 /* ShellScript */,
 				3AE3729A2F5820150036B059 /* Sources */,
 				3AE3729B2F5820150036B059 /* Frameworks */,
 				3AE3729C2F5820150036B059 /* Resources */,
@@ -633,6 +666,7 @@
 			);
 			name = "Fptn-tvOS-Tunnel";
 			packageProductDependencies = (
+				3AE374242F58379E0036B059 /* FptnSharedCore */,
 				3AE374262F58379E0036B059 /* FptnSharedTunnel */,
 			);
 			productName = "Fptn-tvOS-Tunnel";
@@ -643,7 +677,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 79A8907F2E7582AB0062CD90 /* Build configuration list for PBXNativeTarget "FptnVPNTunnel" */;
 			buildPhases = (
-				3AF0A0012F6000010036B059 /* Sync Native Framework Slice */,
+				3AF0A0012F6000010036B059 /* ShellScript */,
 				79A8906E2E7582AB0062CD90 /* Sources */,
 				79A8906F2E7582AB0062CD90 /* Frameworks */,
 				79A890702E7582AB0062CD90 /* Resources */,
@@ -672,7 +706,7 @@
 				85D5C3222DFD4A0600ABAD64 /* Sources */,
 				85D5C3232DFD4A0600ABAD64 /* Frameworks */,
 				85D5C3242DFD4A0600ABAD64 /* Resources */,
-				798039E22E74177300BEA18D /* Embed Frameworks */,
+				85D5C3FF2DFD4A0600ABAD64 /* Embed Frameworks */,
 				79A890822E7582AB0062CD90 /* Embed Foundation Extensions */,
 				3A41D5902F4CBE5900140B4E /* ShellScript */,
 			);
@@ -833,6 +867,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3AE38F362F58B8450036B059 /* fptn.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -861,6 +896,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3AE38F352F58B8450036B059 /* fptn.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -897,6 +933,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3A410EC92F4CB24300CB1F4E /* fptn.icon in Resources */,
+				3AE38F342F58B8450036B059 /* fptn.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -934,7 +971,7 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\n\n# Keep the linked framework path stable while selecting the correct slice for the active SDK.\nFRAMEWORK_DST=\"${SRCROOT}/FptnVPN/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  iphonesimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework\"\n    DSYM_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework.dSYM\"\n    ;;\n  iphoneos)\n    if [ -d \"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\" ]; then\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\"\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework.dSYM\"\n    else\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework\"\n      DSYM_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework.dSYM\"\n    fi\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    DSYM_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nelse\n  echo \"warning: fptn_native_lib framework slice not found for PLATFORM_NAME=${PLATFORM_NAME}\"\nfi\n\nif [ -n \"${DSYM_SRC}\" ] && [ -d \"${DSYM_SRC}\" ] && [ -n \"${DWARF_DSYM_FOLDER_PATH:-}\" ]; then\n  cp -R \"${DSYM_SRC}\" \"${DWARF_DSYM_FOLDER_PATH}/\"\nfi\n";
 		};
-		3AF0A0012F6000010036B059 /* Sync Native Framework Slice */ = {
+		3AF0A0012F6000010036B059 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -942,6 +979,9 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/FptnLib/build-ios/fptn_native_lib.framework",
+				"$(SRCROOT)/FptnLib/build-ios-release/fptn_native_lib.framework",
+				"$(SRCROOT)/FptnLib/build-simulator/fptn_native_lib.framework",
 			);
 			outputFileListPaths = (
 			);
@@ -950,6 +990,46 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -e\n\nFRAMEWORK_DST=\"${SRCROOT}/FptnVPN/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  iphonesimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-simulator/fptn_native_lib.framework\"\n    ;;\n  iphoneos)\n    if [ -d \"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\" ]; then\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios-release/fptn_native_lib.framework\"\n    else\n      FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-ios/fptn_native_lib.framework\"\n    fi\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nfi\n";
+		};
+		3AF0A1012F6000010036B059 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/FptnLib/build-tvos/fptn_native_lib.framework",
+				"$(SRCROOT)/FptnLib/build-tvos-simulator/fptn_native_lib.framework",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Fptn-tvOS/Cpp/fptn_native_lib.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n\nFRAMEWORK_DST=\"${SRCROOT}/Fptn-tvOS/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  appletvsimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-tvos-simulator/fptn_native_lib.framework\"\n    ;;\n  appletvos)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-tvos/fptn_native_lib.framework\"\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  mkdir -p \"${SRCROOT}/Fptn-tvOS/Cpp\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nfi\n";
+		};
+		3AF0A1022F6000010036B059 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/FptnLib/build-tvos/fptn_native_lib.framework",
+				"$(SRCROOT)/FptnLib/build-tvos-simulator/fptn_native_lib.framework",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n\nFRAMEWORK_DST=\"${SRCROOT}/Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework\"\n\ncase \"${PLATFORM_NAME}\" in\n  appletvsimulator)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-tvos-simulator/fptn_native_lib.framework\"\n    ;;\n  appletvos)\n    FRAMEWORK_SRC=\"${SRCROOT}/FptnLib/build-tvos/fptn_native_lib.framework\"\n    ;;\n  *)\n    FRAMEWORK_SRC=\"\"\n    ;;\nesac\n\nif [ -n \"${FRAMEWORK_SRC}\" ] && [ -d \"${FRAMEWORK_SRC}\" ]; then\n  rm -rf \"${FRAMEWORK_DST}\"\n  mkdir -p \"${SRCROOT}/Fptn-tvOS-Tunnel/Cpp\"\n  cp -R \"${FRAMEWORK_SRC}\" \"${FRAMEWORK_DST}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -1103,11 +1183,12 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				EXCLUDED_ARCHS = x86_64;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "2026, Alexandr Shabelnikov";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
@@ -1125,7 +1206,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS/Cpp/Fptn_macOS-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -1143,14 +1224,16 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				EXCLUDED_ARCHS = x86_64;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "2026, Alexandr Shabelnikov";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = (
 					"-framework",
 					fptn_native_lib,
@@ -1165,7 +1248,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS/Cpp/Fptn_macOS-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -1177,7 +1260,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
@@ -1188,7 +1271,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-macOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-macOS";
 			};
 			name = Debug;
@@ -1201,10 +1284,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOSTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -1212,7 +1296,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-macOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-macOS";
 			};
 			name = Release;
@@ -1224,7 +1308,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
@@ -1235,7 +1319,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TEST_TARGET_NAME = "Fptn-macOS";
 			};
 			name = Debug;
@@ -1247,7 +1331,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
@@ -1258,7 +1342,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TEST_TARGET_NAME = "Fptn-macOS";
 			};
 			name = Release;
@@ -1273,7 +1357,8 @@
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EXCLUDED_ARCHS = x86_64;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
@@ -1286,6 +1371,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
@@ -1300,7 +1386,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS-Tunnel/Cpp/Fptn_macOS_Tunnel-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -1314,7 +1400,8 @@
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EXCLUDED_ARCHS = x86_64;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-macOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Fptn-macOS-Tunnel/Info.plist";
@@ -1327,6 +1414,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
@@ -1341,7 +1429,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-macOS-Tunnel/Cpp/Fptn_macOS_Tunnel-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -1356,15 +1444,22 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-tvOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Fptn-tvOS/Cpp/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos-simulator/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos/fptn_native_lib.framework/Headers",
+				);
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -1372,10 +1467,11 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-tvOS/Cpp/Fptn_tvOS-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 26.4;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = Debug;
 		};
@@ -1390,15 +1486,22 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-tvOS/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Fptn-tvOS/Cpp/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos-simulator/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos/fptn_native_lib.framework/Headers",
+				);
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -1406,10 +1509,11 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-tvOS/Cpp/Fptn_tvOS-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 26.4;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = Release;
 		};
@@ -1421,7 +1525,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSTests";
@@ -1431,10 +1535,10 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-tvOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-tvOS";
-				TVOS_DEPLOYMENT_TARGET = 26.4;
+				TVOS_DEPLOYMENT_TARGET = 15.6;
 			};
 			name = Debug;
 		};
@@ -1446,7 +1550,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSTests";
@@ -1456,10 +1560,10 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fptn-tvOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Fptn-tvOS";
-				TVOS_DEPLOYMENT_TARGET = 26.4;
+				TVOS_DEPLOYMENT_TARGET = 15.6;
 			};
 			name = Release;
 		};
@@ -1470,7 +1574,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSUITests";
@@ -1480,10 +1584,10 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TEST_TARGET_NAME = "Fptn-tvOS";
-				TVOS_DEPLOYMENT_TARGET = 26.4;
+				TVOS_DEPLOYMENT_TARGET = 15.6;
 			};
 			name = Debug;
 		};
@@ -1494,7 +1598,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOSUITests";
@@ -1504,10 +1608,10 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TEST_TARGET_NAME = "Fptn-tvOS";
-				TVOS_DEPLOYMENT_TARGET = 26.4;
+				TVOS_DEPLOYMENT_TARGET = 15.6;
 			};
 			name = Release;
 		};
@@ -1519,17 +1623,26 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-tvOS-Tunnel/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos-simulator/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos/fptn_native_lib.framework/Headers",
+				);
 				INFOPLIST_FILE = "Fptn-tvOS-Tunnel/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-tvOS-Tunnel";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS.Fptn-tvOS-Tunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -1537,8 +1650,9 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-tvOS-Tunnel/Cpp/Fptn_tvOS_Tunnel-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TVOS_DEPLOYMENT_TARGET = 26.4;
 			};
@@ -1552,17 +1666,26 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F6YA6B56LR;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Fptn-tvOS-Tunnel/Cpp";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos-simulator/fptn_native_lib.framework/Headers",
+					"$(SRCROOT)/FptnLib/build-tvos/fptn_native_lib.framework/Headers",
+				);
 				INFOPLIST_FILE = "Fptn-tvOS-Tunnel/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Fptn-tvOS-Tunnel";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					fptn_native_lib,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "net.mrmidi.Fptn-macOS.Fptn-tvOS.Fptn-tvOS-Tunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -1570,8 +1693,9 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Fptn-tvOS-Tunnel/Cpp/Fptn_tvOS_Tunnel-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TVOS_DEPLOYMENT_TARGET = 26.4;
 			};
@@ -1716,10 +1840,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
-				"LD_RUNPATH_SEARCH_PATHS[arch=*]" = (
-					"@executable_path/Frameworks",
-					"$(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework",
-				);
+				"LD_RUNPATH_SEARCH_PATHS[arch=*]" = "@executable_path/Frameworks";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -1782,10 +1903,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
-				"LD_RUNPATH_SEARCH_PATHS[arch=*]" = (
-					"@executable_path/Frameworks",
-					"$(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework",
-				);
+				"LD_RUNPATH_SEARCH_PATHS[arch=*]" = "@executable_path/Frameworks";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -1827,8 +1945,6 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/Frameworks",
-					"$(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
@@ -2078,7 +2194,7 @@
 			repositoryURL = "https://github.com/mrmidi/FptnShared";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.1.1;
+				minimumVersion = 0.1.2;
 			};
 		};
 		3AEA9E092F4C62880020E4E3 /* XCRemoteSwiftPackageReference "swift-log" */ = {

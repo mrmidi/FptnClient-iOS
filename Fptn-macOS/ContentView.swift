@@ -140,13 +140,14 @@ struct ContentView: View {
         guard var cloudToken = CloudTokenSync.loadTokenPayload() else { return }
 
         // Restore password from iCloud Keychain.
-        if let password = CloudTokenSync.loadPassword(username: cloudToken.username),
-           !password.isEmpty {
+        // Use `found` to accept empty passwords (token may genuinely have no password).
+        let keychainResult = CloudTokenSync.loadPassword(username: cloudToken.username)
+        if keychainResult.found {
             cloudToken = MacTokenPayload(
                 version: cloudToken.version,
                 service_name: cloudToken.service_name,
                 username: cloudToken.username,
-                password: password,
+                password: keychainResult.password ?? "",
                 servers: cloudToken.servers
             )
         }

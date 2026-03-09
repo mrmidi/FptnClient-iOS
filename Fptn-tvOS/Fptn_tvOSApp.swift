@@ -9,6 +9,8 @@ import SwiftUI
 
 @main
 struct Fptn_tvOSApp: App {
+    @State private var vpnService = TvVPNService()
+
     init() {
         // Begin observing iCloud KVS for cross-device token sync.
         TvCloudTokenSync.startObserving {
@@ -20,6 +22,7 @@ struct Fptn_tvOSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(vpnService)
         }
     }
 }

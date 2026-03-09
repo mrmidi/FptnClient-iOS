@@ -11,6 +11,7 @@ struct VPNConnection: Sendable {
     var isConnecting: Bool = false
     var isReconnecting: Bool = false
     var errorMessage: String? = nil
+    var warningMessage: String? = nil
     var selectedServer: VPNServer?
     var connectionTime: TimeInterval = 0
     var downloadSpeed: Double = 0
