@@ -244,7 +244,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 stateLock.lock()
                 localStopInitiator = .appDisconnect
                 stateLock.unlock()
-                logger.info("Marked local stop initiator via IPC: \(initiator)")
+                logger.info("Marked local stop initiator via IPC: \(initiator); reconnect will be suppressed")
             }
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "stop_initiator_recorded")))
         case .getStatus:
@@ -376,8 +376,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         wasConnected: Bool,
         reason: String
     ) {
+        var stopInitiator: LocalStopInitiator?
+
+        stateLock.lock()
+        stopInitiator = localStopInitiator
+        stateLock.unlock()
+
         logger.warning(
-            "Tunnel websocket disconnected was_connected=\(wasConnected) reason=\(reason) \(activityDiagnosticsDescription())"
+            "Tunnel websocket disconnected was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") \(activityDiagnosticsDescription())"
         )
         replaceWebSocketClient(with: nil, stopCurrent: false)
         cancelStartTimeout()
@@ -392,6 +398,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.unlock()
 
         guard currentState != .stopping else { return }
+
+        if stopInitiator == .appDisconnect || stopInitiator == .systemStop {
+            logger.info(
+                "Suppressing reconnect after transport disconnect because stop was already requested by \(stopInitiator?.rawValue ?? "unknown")"
+            )
+            updateRuntimeState(.stopping, reason: "transport disconnected after local stop request")
+            return
+        }
 
         if currentState == .starting || configuration == nil {
             updateRuntimeState(.failed, reason: "initial transport failure")
@@ -738,6 +752,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.info(
             "Tunnel telemetry state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) packetflow_read_packets=\(snapshot.packetFlowReadPackets) packetflow_read_bytes=\(snapshot.packetFlowReadBytes) packetflow_write_packets=\(snapshot.packetFlowWritePackets) packetflow_write_bytes=\(snapshot.packetFlowWriteBytes) transport_received_packets=\(snapshot.transportReceivedPackets) transport_received_bytes=\(snapshot.transportReceivedBytes) send_failures=\(snapshot.websocketSendFailures) last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
         )
+
+        let clientAttached = currentWebSocketClient() != nil
+        let readLoopActive = shouldContinueReadLoop()
+        if snapshot.runtimeState == .connected && !clientAttached {
+            logger.warning("Tunnel telemetry detected connected state without an attached websocket client")
+        }
+        if snapshot.runtimeState == .connected && !readLoopActive {
+            logger.warning("Tunnel telemetry detected connected state with an inactive packet read loop")
+        }
     }
 
     // MARK: - State helpers
