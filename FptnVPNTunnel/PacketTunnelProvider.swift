@@ -92,7 +92,7 @@ private struct TunnelConfiguration {
         let dnsIPv6 = providerConfiguration["dnsIPv6"] as? String ?? "fd00::1"
         let logLevel = providerConfiguration["logLevel"] as? String ?? "info"
         let bypassMethod = providerConfiguration["bypassMethod"] as? String ?? "SNI"
-        let websocketIdleTimeoutSeconds = providerConfiguration["websocketIdleTimeoutSeconds"] as? Int ?? 60
+        let websocketIdleTimeoutSeconds = providerConfiguration["websocketIdleTimeoutSeconds"] as? Int ?? 300
         let reconnectEnabled = providerConfiguration["reconnectEnabled"] as? Bool ?? true
         let maxReconnectAttempts = providerConfiguration["maxReconnectAttempts"] as? Int ?? 5
         let reconnectDelaySeconds = providerConfiguration["reconnectDelaySeconds"] as? Int ?? 2
@@ -147,6 +147,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var lastStopReason: String?
     private var lastStopReasonRawValue: Int?
     private var counters = PacketCounters()
+
+    private let runtimeReconnectDelayCapSeconds = 60
+    private let activityResumeLogThresholdSeconds = 60
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -250,12 +253,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {
-        logger.info("PacketTunnelProvider sleep state=\(currentSnapshot().runtimeState.rawValue)")
+        let snapshot = currentSnapshot()
+        logger.info(
+            "PacketTunnelProvider sleep state=\(snapshot.runtimeState.rawValue) reconnect_attempt=\(snapshot.reconnectAttempt) last_error=\(snapshot.lastTransportError ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
+        )
         completionHandler()
     }
 
     override func wake() {
-        logger.info("PacketTunnelProvider wake state=\(currentSnapshot().runtimeState.rawValue)")
+        let snapshot = currentSnapshot()
+        logger.info(
+            "PacketTunnelProvider wake state=\(snapshot.runtimeState.rawValue) reconnect_attempt=\(snapshot.reconnectAttempt) last_error=\(snapshot.lastTransportError ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
+        )
     }
 
     // MARK: - WebSocket lifecycle
@@ -319,6 +328,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             return
         }
 
+        logger.info("Tunnel transport connected \(activityDiagnosticsDescription())")
+
         if shouldApplySettings {
             logger.info("Tunnel websocket connected — applying network settings")
             applyNetworkSettings(configuration: configuration) { [weak self] error in
@@ -365,7 +376,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         wasConnected: Bool,
         reason: String
     ) {
-        logger.warning("Tunnel websocket disconnected was_connected=\(wasConnected) reason=\(reason)")
+        logger.warning(
+            "Tunnel websocket disconnected was_connected=\(wasConnected) reason=\(reason) \(activityDiagnosticsDescription())"
+        )
         replaceWebSocketClient(with: nil, stopCurrent: false)
         cancelStartTimeout()
 
@@ -399,6 +412,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         var nextAttempt = 0
         var delaySeconds = 0
         var maxAttempts = 0
+        var exceededConfiguredBudget = false
 
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -408,14 +422,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         nextAttempt = reconnectAttempt + 1
-        delaySeconds = configuration.reconnectDelaySeconds
+        delaySeconds = computedReconnectDelaySeconds(
+            attempt: nextAttempt,
+            baseDelaySeconds: configuration.reconnectDelaySeconds
+        )
         maxAttempts = configuration.maxReconnectAttempts
 
-        guard configuration.reconnectEnabled,
-              configuration.maxReconnectAttempts == 0 || nextAttempt <= configuration.maxReconnectAttempts else {
+        guard configuration.reconnectEnabled else {
             return false
         }
 
+        exceededConfiguredBudget = maxAttempts != 0 && nextAttempt > maxAttempts
         reconnectAttempt = nextAttempt
         reconnectWorkItem?.cancel()
 
@@ -424,9 +441,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
         reconnectWorkItem = workItem
 
-        logger.warning(
-            "Scheduling reconnect attempt \(nextAttempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") after \(delaySeconds)s"
-        )
+        if exceededConfiguredBudget {
+            logger.warning(
+                "Reconnect attempt \(nextAttempt) exceeded configured budget \(maxAttempts); continuing runtime recovery with backoff \(delaySeconds)s \(activityDiagnosticsDescription())"
+            )
+        } else {
+            logger.warning(
+                "Scheduling reconnect attempt \(nextAttempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") after \(delaySeconds)s \(activityDiagnosticsDescription())"
+            )
+        }
 
         if let workItem {
             eventQueue.asyncAfter(deadline: .now() + .seconds(delaySeconds), execute: workItem)
@@ -454,9 +477,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         logger.warning(
-            "Starting reconnect attempt \(attempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)")"
+            "Starting reconnect attempt \(attempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") \(activityDiagnosticsDescription())"
         )
         startWebSocket(using: configuration, context: "reconnect_attempt_\(attempt)")
+    }
+
+    private func computedReconnectDelaySeconds(
+        attempt: Int,
+        baseDelaySeconds: Int
+    ) -> Int {
+        let safeBaseDelay = max(1, baseDelaySeconds)
+        let backoffStep = min(max(0, attempt - 1), 5)
+        let multiplier = 1 << backoffStep
+        return min(runtimeReconnectDelayCapSeconds, safeBaseDelay * multiplier)
     }
 
     private func failRuntimeTunnel(reason: String) {
@@ -577,24 +610,56 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     ) {
         guard packetCount > 0 || sendFailures > 0 else { return }
 
+        let now = Date()
+        var previousOutboundActivityAt: Date?
+
         stateLock.lock()
+        previousOutboundActivityAt = counters.lastOutboundActivityAt
         counters.packetFlowReadPackets += packetCount
         counters.packetFlowReadBytes += byteCount
         counters.websocketSendFailures += sendFailures
         if packetCount > 0 {
-            counters.lastOutboundActivityAt = Date()
+            counters.lastOutboundActivityAt = now
         }
         stateLock.unlock()
+
+        if packetCount > 0 {
+            logActivityResumedIfNeeded(
+                direction: "outbound",
+                previousActivityAt: previousOutboundActivityAt,
+                now: now,
+                packetCount: packetCount,
+                byteCount: byteCount
+            )
+        }
+
+        if sendFailures > 0 {
+            logger.warning(
+                "Tunnel transport send failures count=\(sendFailures) outbound_packets=\(packetCount) outbound_bytes=\(byteCount) \(activityDiagnosticsDescription())"
+            )
+        }
     }
 
     private func recordPacketFlowWrite(byteCount: Int64) {
+        let now = Date()
+        var previousInboundActivityAt: Date?
+
         stateLock.lock()
+        previousInboundActivityAt = counters.lastInboundActivityAt
         counters.transportReceivedPackets += 1
         counters.transportReceivedBytes += byteCount
         counters.packetFlowWritePackets += 1
         counters.packetFlowWriteBytes += byteCount
-        counters.lastInboundActivityAt = Date()
+        counters.lastInboundActivityAt = now
         stateLock.unlock()
+
+        logActivityResumedIfNeeded(
+            direction: "inbound",
+            previousActivityAt: previousInboundActivityAt,
+            now: now,
+            packetCount: 1,
+            byteCount: byteCount
+        )
     }
 
     private func ipProtocolNumber(for packet: Data) -> NSNumber {
@@ -671,7 +736,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private func emitTelemetry() {
         let snapshot = currentSnapshot()
         logger.info(
-            "Tunnel telemetry state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) packetflow_read_packets=\(snapshot.packetFlowReadPackets) packetflow_read_bytes=\(snapshot.packetFlowReadBytes) packetflow_write_packets=\(snapshot.packetFlowWritePackets) packetflow_write_bytes=\(snapshot.packetFlowWriteBytes) transport_received_packets=\(snapshot.transportReceivedPackets) transport_received_bytes=\(snapshot.transportReceivedBytes) send_failures=\(snapshot.websocketSendFailures) last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-")"
+            "Tunnel telemetry state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) packetflow_read_packets=\(snapshot.packetFlowReadPackets) packetflow_read_bytes=\(snapshot.packetFlowReadBytes) packetflow_write_packets=\(snapshot.packetFlowWritePackets) packetflow_write_bytes=\(snapshot.packetFlowWriteBytes) transport_received_packets=\(snapshot.transportReceivedPackets) transport_received_bytes=\(snapshot.transportReceivedBytes) send_failures=\(snapshot.websocketSendFailures) last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
         )
     }
 
@@ -777,5 +842,42 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private func iso8601(_ date: Date?) -> String? {
         guard let date else { return nil }
         return ISO8601DateFormatter().string(from: date)
+    }
+
+    private func activityDiagnosticsDescription() -> String {
+        activityDiagnosticsDescription(for: currentSnapshot())
+    }
+
+    private func activityDiagnosticsDescription(for snapshot: TunnelRuntimeSnapshot) -> String {
+        let inboundIdle = idleDurationDescription(from: snapshot.lastInboundActivityAt)
+        let outboundIdle = idleDurationDescription(from: snapshot.lastOutboundActivityAt)
+        let clientAttached = currentWebSocketClient() != nil
+        let readLoopActive = shouldContinueReadLoop()
+        return "inbound_idle=\(inboundIdle) outbound_idle=\(outboundIdle) client_attached=\(clientAttached) read_loop_active=\(readLoopActive)"
+    }
+
+    private func idleDurationDescription(from iso8601DateString: String?) -> String {
+        guard let iso8601DateString,
+              let date = ISO8601DateFormatter().date(from: iso8601DateString) else {
+            return "never"
+        }
+        return "\(Int(max(0, Date().timeIntervalSince(date))))s"
+    }
+
+    private func logActivityResumedIfNeeded(
+        direction: String,
+        previousActivityAt: Date?,
+        now: Date,
+        packetCount: Int64,
+        byteCount: Int64
+    ) {
+        guard let previousActivityAt else { return }
+
+        let idleSeconds = Int(now.timeIntervalSince(previousActivityAt))
+        guard idleSeconds >= activityResumeLogThresholdSeconds else { return }
+
+        logger.info(
+            "Tunnel \(direction) activity resumed after \(idleSeconds)s idle packets=\(packetCount) bytes=\(byteCount)"
+        )
     }
 }

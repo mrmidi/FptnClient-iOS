@@ -511,7 +511,7 @@ final class VPNService: ObservableObject {
         }
 
         logger.info(
-            "Tunnel snapshot state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) last_error=\(snapshot.lastTransportError ?? "-") last_stop=\(snapshot.lastStopReason ?? "-")"
+            "Tunnel snapshot state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) last_error=\(snapshot.lastTransportError ?? "-") last_stop=\(snapshot.lastStopReason ?? "-") last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-")"
         )
     }
 

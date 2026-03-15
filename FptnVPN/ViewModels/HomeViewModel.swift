@@ -22,6 +22,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var isReconnecting = false
     @Published private(set) var errorMessage: String? = nil
     @Published private(set) var warningMessage: String? = nil
+    @Published private(set) var runtimeStatusMessage: String? = nil
 
     // MARK: - Dependencies (injected)
 
@@ -86,5 +87,12 @@ final class HomeViewModel: ObservableObject {
         isReconnecting = conn.isReconnecting
         errorMessage = conn.errorMessage
         warningMessage = conn.warningMessage
+        if conn.isReconnecting {
+            runtimeStatusMessage = conn.lastTransportError ?? "Waiting for tunnel transport to recover."
+        } else if !conn.isConnected {
+            runtimeStatusMessage = conn.lastStopReason ?? conn.lastTransportError
+        } else {
+            runtimeStatusMessage = nil
+        }
     }
 }

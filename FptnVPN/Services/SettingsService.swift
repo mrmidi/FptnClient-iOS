@@ -43,7 +43,7 @@ actor SettingsService {
     /// 0 = infinite
     nonisolated var maxReconnectAttempts: Int {
         let stored = UserDefaults.standard.object(forKey: Self.maxReconnectKey)
-        return stored == nil ? 5 : UserDefaults.standard.integer(forKey: Self.maxReconnectKey)
+        return stored == nil ? 0 : UserDefaults.standard.integer(forKey: Self.maxReconnectKey)
     }
 
     /// Seconds between reconnect attempts
@@ -55,7 +55,7 @@ actor SettingsService {
     /// Seconds before the native tunnel websocket is considered idle.
     nonisolated var websocketIdleTimeoutSeconds: Int {
         let stored = UserDefaults.standard.object(forKey: Self.websocketIdleTimeoutKey)
-        return stored == nil ? 60 : UserDefaults.standard.integer(forKey: Self.websocketIdleTimeoutKey)
+        return stored == nil ? 300 : UserDefaults.standard.integer(forKey: Self.websocketIdleTimeoutKey)
     }
 
     nonisolated var colorScheme: AppColorScheme {

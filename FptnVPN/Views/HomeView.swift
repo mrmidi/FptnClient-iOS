@@ -75,6 +75,14 @@ struct HomeView: View {
 #endif
             }
 
+            if let runtimeStatusMessage = viewModel.runtimeStatusMessage, viewModel.errorMessage == nil {
+                Text(runtimeStatusMessage)
+                    .foregroundStyle(viewModel.isReconnecting ? Color.appAccent : Color.appSecondaryText)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
             if let warningMessage = viewModel.warningMessage, !viewModel.isConnected {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")

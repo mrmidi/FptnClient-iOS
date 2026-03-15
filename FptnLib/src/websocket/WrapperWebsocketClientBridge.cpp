@@ -25,7 +25,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #define FPTN_CLIENT_DEFAULT_ADDRESS_IP6 "fd00::1"
 #endif
 
-constexpr const int kDefaultIdleTimeoutSeconds = 60;
+constexpr const int kDefaultIdleTimeoutSeconds = 300;
 
 struct WebsocketClientWrapper {
     IPPacketCallback packet_callback;
