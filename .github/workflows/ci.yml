@@ -22,16 +22,14 @@ jobs:
           echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
           echo "/usr/local/bin" >> "$GITHUB_PATH"
 
-          # Ensure CMake is available.
+          # Ensure CMake and Conan are available.
+          # Use Homebrew (runner Python is PEP-668 externally managed).
           if ! command -v cmake >/dev/null 2>&1; then
-            brew update
             brew install cmake
           fi
-
-          # Install Conan (used by build_fptn_lib.sh).
-          python3 -m pip install --upgrade --user pip
-          python3 -m pip install --upgrade --user conan
-          echo "$(python3 -m site --user-base)/bin" >> "$GITHUB_PATH"
+          if ! command -v conan >/dev/null 2>&1; then
+            brew install conan
+          fi
 
           cmake --version
           conan --version
