@@ -234,12 +234,25 @@ jobs:
       - name: Build macOS app zip
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           set -euo pipefail
+
+          if [[ -z "${ASC_KEY_PATH:-}" || -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ]]; then
+            echo "Missing App Store Connect API key env (ASC_KEY_PATH/ASC_KEY_ID/ASC_ISSUER_ID)." >&2
+            exit 1
+          fi
 
           BUILD_DIR="$RUNNER_TEMP/release-build"
           MAC_ARCHIVE="$BUILD_DIR/Fptn-macOS.xcarchive"
           mkdir -p "$BUILD_DIR"
+
+          AUTH_ARGS=(
+            -authenticationKeyPath "$ASC_KEY_PATH"
+            -authenticationKeyID "$ASC_KEY_ID"
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          )
 
           xcodebuild archive \
             -project FptnVPN.xcodeproj \
@@ -247,7 +260,10 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -archivePath "$MAC_ARCHIVE" \
-            DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}"
+            -allowProvisioningUpdates \
+            "${AUTH_ARGS[@]}" \
+            DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}" \
+            CODE_SIGN_STYLE=Automatic
 
           APP_PATH="$MAC_ARCHIVE/Products/Applications/Fptn-macOS.app"
           if [[ ! -d "$APP_PATH" ]]; then
