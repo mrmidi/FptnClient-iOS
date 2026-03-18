@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-26
 
     env:
-      KEYCHAIN_NAME: build.keychain
+      KEYCHAIN_NAME: build.keychain-db
       KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'temp-keychain-password' }}
 
     steps:
@@ -54,6 +54,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          KEYCHAIN_PATH="$RUNNER_TEMP/$KEYCHAIN_NAME"
+
           if [[ -z "${APPLE_CERTIFICATE_P12_B64:-}" || -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]]; then
             echo "Missing APPLE_CERTIFICATE_P12_B64 / APPLE_CERTIFICATE_PASSWORD secrets." >&2
             exit 1
@@ -62,22 +64,25 @@ jobs:
           CERT_P12="$RUNNER_TEMP/signing-cert.p12"
           echo "$APPLE_CERTIFICATE_P12_B64" | /usr/bin/base64 -D > "$CERT_P12"
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
-          security list-keychains -d user -s "$KEYCHAIN_NAME" $(security list-keychains -d user | tr -d '"')
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Prefer this keychain for codesigning operations.
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
 
           security import "$CERT_P12" \
-            -k "$KEYCHAIN_NAME" \
+            -k "$KEYCHAIN_PATH" \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
             -T /usr/bin/codesign \
             -T /usr/bin/security
 
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          security find-identity -v -p codesigning "$KEYCHAIN_NAME"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
       - name: Prepare App Store Connect API key
         env:
