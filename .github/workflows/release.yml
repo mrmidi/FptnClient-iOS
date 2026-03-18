@@ -136,22 +136,7 @@ jobs:
           mkdir -p "$BUILD_DIR" "$IOS_EXPORT_DIR"
 
           EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-iOS.plist"
-          cat > "$EXPORT_OPTIONS" <<EOF
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-<dict>
-  <key>method</key>
-  <string>app-store</string>
-  <key>signingStyle</key>
-  <string>automatic</string>
-  <key>teamID</key>
-  <string>${DEVELOPMENT_TEAM}</string>
-  <key>stripSwiftSymbols</key>
-  <true/>
-</dict>
-</plist>
-EOF
+            EXPORT_OPTIONS="$EXPORT_OPTIONS" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" python3 -c 'import os, plistlib; p=os.environ["EXPORT_OPTIONS"]; t=os.environ["DEVELOPMENT_TEAM"]; d={"method":"app-store","signingStyle":"automatic","teamID":t,"stripSwiftSymbols":True}; plistlib.dump(d, open(p,"wb"))'
 
           xcodebuild archive \
             -project FptnVPN.xcodeproj \
@@ -169,7 +154,11 @@ EOF
             -exportOptionsPlist "$EXPORT_OPTIONS" \
             -allowProvisioningUpdates
 
-          IPA_PATH="$(ls -1 "$IOS_EXPORT_DIR"/*.ipa | head -n 1)"
+          IPA_PATH="$(find "$IOS_EXPORT_DIR" -maxdepth 1 -name '*.ipa' -print -quit)"
+          if [[ -z "$IPA_PATH" ]]; then
+            echo "No .ipa found in $IOS_EXPORT_DIR" >&2
+            exit 1
+          fi
           cp "$IPA_PATH" "$GITHUB_WORKSPACE/FptnVPN-iOS.ipa"
 
       - name: Build & export tvOS IPA
@@ -189,22 +178,7 @@ EOF
           mkdir -p "$BUILD_DIR" "$TVOS_EXPORT_DIR"
 
           EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-tvOS.plist"
-          cat > "$EXPORT_OPTIONS" <<EOF
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-<dict>
-  <key>method</key>
-  <string>app-store</string>
-  <key>signingStyle</key>
-  <string>automatic</string>
-  <key>teamID</key>
-  <string>${DEVELOPMENT_TEAM}</string>
-  <key>stripSwiftSymbols</key>
-  <true/>
-</dict>
-</plist>
-EOF
+            EXPORT_OPTIONS="$EXPORT_OPTIONS" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" python3 -c 'import os, plistlib; p=os.environ["EXPORT_OPTIONS"]; t=os.environ["DEVELOPMENT_TEAM"]; d={"method":"app-store","signingStyle":"automatic","teamID":t,"stripSwiftSymbols":True}; plistlib.dump(d, open(p,"wb"))'
 
           xcodebuild archive \
             -project FptnVPN.xcodeproj \
@@ -222,7 +196,11 @@ EOF
             -exportOptionsPlist "$EXPORT_OPTIONS" \
             -allowProvisioningUpdates
 
-          IPA_PATH="$(ls -1 "$TVOS_EXPORT_DIR"/*.ipa | head -n 1)"
+          IPA_PATH="$(find "$TVOS_EXPORT_DIR" -maxdepth 1 -name '*.ipa' -print -quit)"
+          if [[ -z "$IPA_PATH" ]]; then
+            echo "No .ipa found in $TVOS_EXPORT_DIR" >&2
+            exit 1
+          fi
           cp "$IPA_PATH" "$GITHUB_WORKSPACE/FptnVPN-tvOS.ipa"
 
       - name: Build macOS app zip
