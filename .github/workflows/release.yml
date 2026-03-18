@@ -101,6 +101,11 @@ jobs:
           echo "$ASC_PRIVATE_KEY_B64" | /usr/bin/base64 -D > "$KEY_PATH"
           chmod 0600 "$KEY_PATH"
 
+          # iTMSTransporter expects API keys in ~/.private_keys/AuthKey_<KEY_ID>.p8
+          mkdir -p "$HOME/.private_keys"
+          cp "$KEY_PATH" "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 0600 "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
           echo "ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Build native frameworks
@@ -272,6 +277,36 @@ jobs:
           fi
 
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$GITHUB_WORKSPACE/Fptn-macOS.zip"
+
+      - name: Upload IPAs to App Store Connect (TestFlight)
+        if: ${{ secrets.UPLOAD_TO_APP_STORE_CONNECT == 'true' }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ]]; then
+            echo "Missing ASC_KEY_ID / ASC_ISSUER_ID." >&2
+            exit 1
+          fi
+
+          if [[ ! -f "$GITHUB_WORKSPACE/FptnVPN-iOS.ipa" || ! -f "$GITHUB_WORKSPACE/FptnVPN-tvOS.ipa" ]]; then
+            echo "Missing IPA artifacts in workspace (expected FptnVPN-iOS.ipa and FptnVPN-tvOS.ipa)." >&2
+            exit 1
+          fi
+
+          xcrun iTMSTransporter -m upload \
+            -assetFile "$GITHUB_WORKSPACE/FptnVPN-iOS.ipa" \
+            -apiKey "$ASC_KEY_ID" \
+            -apiIssuer "$ASC_ISSUER_ID" \
+            -v informational
+
+          xcrun iTMSTransporter -m upload \
+            -assetFile "$GITHUB_WORKSPACE/FptnVPN-tvOS.ipa" \
+            -apiKey "$ASC_KEY_ID" \
+            -apiIssuer "$ASC_ISSUER_ID" \
+            -v informational
 
       - name: Publish GitHub Release
         env:
