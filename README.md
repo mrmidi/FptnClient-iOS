@@ -22,6 +22,21 @@ We have added a script to build this automatically when you build the iOS app.
 ./build_fptn_lib.sh
 ```
 
+### Local Secrets Bootstrap
+Generate the local build/release credential handoff file once, then source it when you need it:
+```bash
+zsh ./scripts/bootstrap-ci-secrets.sh
+source .env.local
+```
+
+The script writes `.env.local` for terminal use. If a local code signing identity is available, it lists the valid identities, lets you pick one, and exports + base64-encodes a `.p12` for you.
+
+If you want to upload CI secrets to GitHub, run:
+```bash
+zsh ./scripts/bootstrap-ci-secrets.sh --gh --gh-repo OWNER/REPO
+```
+The GitHub upload uses a curated subset of values (it intentionally excludes local-only values like `KEYCHAIN_PASSWORD`).
+
 
 
 

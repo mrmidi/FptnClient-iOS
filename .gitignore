@@ -1,3 +1,4 @@
+
 # Android app is refernce only here
 FptnClient-Android/
 
@@ -110,3 +111,10 @@ fptn.icon/
 FptnLib/build*
 Fptn-macOS-Tunnel/Cpp/fptn_native_lib.framework/fptn_native_lib
 Fptn-macOS-Tunnel/Cpp/fptn_native_lib.framework/Versions/*/fptn_native_lib
+
+# local secrets handoff
+.env.local
+.gh_secrets
+.env.local.bak.*
+.gh_secrets.bak.*
+secrets/*

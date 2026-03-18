@@ -38,6 +38,21 @@ If you prefer running it manually (the Xcode script does exactly this):
 ./build_fptn_lib.sh
 ```
 
+**Local secret bootstrap**
+Generate local environment values once:
+```bash
+zsh ./scripts/bootstrap-ci-secrets.sh
+source .env.local
+```
+
+`.env.local` is for local terminal builds and keeps local-only values, including the login keychain password. If a valid signing identity exists locally, the script lists the identities, lets you choose one, exports + base64-encodes a `.p12`, and only falls back to a keychain unlock prompt if the export is still locked.
+
+Optional GitHub upload (no `.gh_secrets` file is generated):
+```bash
+zsh ./scripts/bootstrap-ci-secrets.sh --gh --gh-repo OWNER/REPO
+```
+The upload uses a curated subset of values (it intentionally excludes local-only values like `KEYCHAIN_PASSWORD`).
+
 **Re-sign after copying (if Xcode complains):**
 ```bash
 codesign --force --sign - --timestamp=none FptnVPN/Cpp/fptn_native_lib.framework/fptn_native_lib
