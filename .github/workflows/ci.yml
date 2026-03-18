@@ -45,6 +45,9 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Conan v2 requires a build profile; create/update the default one.
+          conan profile detect --force
+
           # Builds and copies frameworks into the Xcode-consumed locations:
           # - Fptn-macOS/Cpp + Fptn-macOS-Tunnel/Cpp
           # - FptnVPN/Cpp (iOS simulator slice)
