@@ -1,0 +1,261 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish
+    runs-on: macos-26
+
+    env:
+      KEYCHAIN_NAME: build.keychain
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'temp-keychain-password' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build prerequisites
+        run: |
+          set -euo pipefail
+
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+          if ! command -v cmake >/dev/null 2>&1; then
+            brew install cmake
+          fi
+          if ! command -v conan >/dev/null 2>&1; then
+            brew install conan
+          fi
+
+          cmake --version
+          conan --version
+
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.conan2
+          key: ${{ runner.os }}-conan-release-${{ hashFiles('FptnLib/conanfile.py', 'FptnLib/**/conan-*-profile') }}
+
+      - name: Set up Apple signing keychain
+        env:
+          APPLE_CERTIFICATE_P12_B64: ${{ secrets.APPLE_CERTIFICATE_P12_B64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${APPLE_CERTIFICATE_P12_B64:-}" || -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]]; then
+            echo "Missing APPLE_CERTIFICATE_P12_B64 / APPLE_CERTIFICATE_PASSWORD secrets." >&2
+            exit 1
+          fi
+
+          CERT_P12="$RUNNER_TEMP/signing-cert.p12"
+          echo "$APPLE_CERTIFICATE_P12_B64" | /usr/bin/base64 -D > "$CERT_P12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security list-keychains -d user -s "$KEYCHAIN_NAME" $(security list-keychains -d user | tr -d '"')
+
+          security import "$CERT_P12" \
+            -k "$KEYCHAIN_NAME" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+
+          security find-identity -v -p codesigning "$KEYCHAIN_NAME"
+
+      - name: Prepare App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY_B64: ${{ secrets.ASC_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" || -z "${ASC_PRIVATE_KEY_B64:-}" ]]; then
+            echo "Missing ASC_KEY_ID / ASC_ISSUER_ID / ASC_PRIVATE_KEY_B64 secrets." >&2
+            exit 1
+          fi
+
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_PRIVATE_KEY_B64" | /usr/bin/base64 -D > "$KEY_PATH"
+          chmod 0600 "$KEY_PATH"
+
+          echo "ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Build native frameworks
+        run: |
+          set -euo pipefail
+          conan profile detect --force
+
+          ./build_fptn_lib.sh macos
+          ./build_fptn_lib.sh ios-device
+          ./build_fptn_lib.sh tvos-device
+
+      - name: Xcode version
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Build & export iOS IPA
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DEVELOPMENT_TEAM:-}" ]]; then
+            echo "Missing DEVELOPMENT_TEAM secret." >&2
+            exit 1
+          fi
+
+          BUILD_DIR="$RUNNER_TEMP/release-build"
+          IOS_ARCHIVE="$BUILD_DIR/FptnVPN-iOS.xcarchive"
+          IOS_EXPORT_DIR="$BUILD_DIR/ios-export"
+          mkdir -p "$BUILD_DIR" "$IOS_EXPORT_DIR"
+
+          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-iOS.plist"
+          cat > "$EXPORT_OPTIONS" <<EOF
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+  <key>signingStyle</key>
+  <string>automatic</string>
+  <key>teamID</key>
+  <string>${DEVELOPMENT_TEAM}</string>
+  <key>stripSwiftSymbols</key>
+  <true/>
+</dict>
+</plist>
+EOF
+
+          xcodebuild archive \
+            -project FptnVPN.xcodeproj \
+            -scheme "FptnVPN" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$IOS_ARCHIVE" \
+            -allowProvisioningUpdates \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            CODE_SIGN_STYLE=Automatic
+
+          xcodebuild -exportArchive \
+            -archivePath "$IOS_ARCHIVE" \
+            -exportPath "$IOS_EXPORT_DIR" \
+            -exportOptionsPlist "$EXPORT_OPTIONS" \
+            -allowProvisioningUpdates
+
+          IPA_PATH="$(ls -1 "$IOS_EXPORT_DIR"/*.ipa | head -n 1)"
+          cp "$IPA_PATH" "$GITHUB_WORKSPACE/FptnVPN-iOS.ipa"
+
+      - name: Build & export tvOS IPA
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DEVELOPMENT_TEAM:-}" ]]; then
+            echo "Missing DEVELOPMENT_TEAM secret." >&2
+            exit 1
+          fi
+
+          BUILD_DIR="$RUNNER_TEMP/release-build"
+          TVOS_ARCHIVE="$BUILD_DIR/FptnVPN-tvOS.xcarchive"
+          TVOS_EXPORT_DIR="$BUILD_DIR/tvos-export"
+          mkdir -p "$BUILD_DIR" "$TVOS_EXPORT_DIR"
+
+          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-tvOS.plist"
+          cat > "$EXPORT_OPTIONS" <<EOF
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+  <key>signingStyle</key>
+  <string>automatic</string>
+  <key>teamID</key>
+  <string>${DEVELOPMENT_TEAM}</string>
+  <key>stripSwiftSymbols</key>
+  <true/>
+</dict>
+</plist>
+EOF
+
+          xcodebuild archive \
+            -project FptnVPN.xcodeproj \
+            -scheme "Fptn-tvOS" \
+            -configuration Release \
+            -destination "generic/platform=tvOS" \
+            -archivePath "$TVOS_ARCHIVE" \
+            -allowProvisioningUpdates \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            CODE_SIGN_STYLE=Automatic
+
+          xcodebuild -exportArchive \
+            -archivePath "$TVOS_ARCHIVE" \
+            -exportPath "$TVOS_EXPORT_DIR" \
+            -exportOptionsPlist "$EXPORT_OPTIONS" \
+            -allowProvisioningUpdates
+
+          IPA_PATH="$(ls -1 "$TVOS_EXPORT_DIR"/*.ipa | head -n 1)"
+          cp "$IPA_PATH" "$GITHUB_WORKSPACE/FptnVPN-tvOS.ipa"
+
+      - name: Build macOS app zip
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          set -euo pipefail
+
+          BUILD_DIR="$RUNNER_TEMP/release-build"
+          MAC_ARCHIVE="$BUILD_DIR/Fptn-macOS.xcarchive"
+          mkdir -p "$BUILD_DIR"
+
+          xcodebuild archive \
+            -project FptnVPN.xcodeproj \
+            -scheme "Fptn-macOS" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -archivePath "$MAC_ARCHIVE" \
+            DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}"
+
+          APP_PATH="$MAC_ARCHIVE/Products/Applications/Fptn-macOS.app"
+          if [[ ! -d "$APP_PATH" ]]; then
+            echo "Expected app not found at $APP_PATH" >&2
+            exit 1
+          fi
+
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$GITHUB_WORKSPACE/Fptn-macOS.zip"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes ""
+          gh release upload "$TAG" \
+            "$GITHUB_WORKSPACE/FptnVPN-iOS.ipa" \
+            "$GITHUB_WORKSPACE/FptnVPN-tvOS.ipa" \
+            "$GITHUB_WORKSPACE/Fptn-macOS.zip" \
+            --clobber
