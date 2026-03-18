@@ -14,6 +14,45 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install build prerequisites
+        run: |
+          set -euo pipefail
+
+          # Ensure Homebrew tools are visible (Xcode shells may have a minimal PATH).
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+          # Ensure CMake is available.
+          if ! command -v cmake >/dev/null 2>&1; then
+            brew update
+            brew install cmake
+          fi
+
+          # Install Conan (used by build_fptn_lib.sh).
+          python3 -m pip install --upgrade --user pip
+          python3 -m pip install --upgrade --user conan
+          echo "$(python3 -m site --user-base)/bin" >> "$GITHUB_PATH"
+
+          cmake --version
+          conan --version
+
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.conan2
+          key: ${{ runner.os }}-conan-${{ hashFiles('FptnLib/conanfile.py', 'FptnLib/**/conan-*-profile') }}
+
+      - name: Build native frameworks
+        run: |
+          set -euo pipefail
+
+          # Builds and copies frameworks into the Xcode-consumed locations:
+          # - Fptn-macOS/Cpp + Fptn-macOS-Tunnel/Cpp
+          # - FptnVPN/Cpp (iOS simulator slice)
+          ./build_fptn_lib.sh macos
+          ./build_fptn_lib.sh ios-simulator
+
       - name: Xcode version
         run: |
           xcodebuild -version

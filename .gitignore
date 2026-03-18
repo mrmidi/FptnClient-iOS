@@ -105,7 +105,7 @@ token_debug.py
 token_decoder.py
 
 # icons
-fptn.icon/
+
 
 # artifacts
 FptnLib/build*
