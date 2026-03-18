@@ -130,13 +130,24 @@ jobs:
             exit 1
           fi
 
+          if [[ -z "${ASC_KEY_PATH:-}" || -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ]]; then
+            echo "Missing App Store Connect API key env (ASC_KEY_PATH/ASC_KEY_ID/ASC_ISSUER_ID)." >&2
+            exit 1
+          fi
+
           BUILD_DIR="$RUNNER_TEMP/release-build"
           IOS_ARCHIVE="$BUILD_DIR/FptnVPN-iOS.xcarchive"
           IOS_EXPORT_DIR="$BUILD_DIR/ios-export"
           mkdir -p "$BUILD_DIR" "$IOS_EXPORT_DIR"
 
           EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-iOS.plist"
-            EXPORT_OPTIONS="$EXPORT_OPTIONS" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" python3 -c 'import os, plistlib; p=os.environ["EXPORT_OPTIONS"]; t=os.environ["DEVELOPMENT_TEAM"]; d={"method":"app-store","signingStyle":"automatic","teamID":t,"stripSwiftSymbols":True}; plistlib.dump(d, open(p,"wb"))'
+          EXPORT_OPTIONS="$EXPORT_OPTIONS" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" python3 -c 'import os, plistlib; p=os.environ["EXPORT_OPTIONS"]; t=os.environ["DEVELOPMENT_TEAM"]; d={"method":"app-store","signingStyle":"automatic","teamID":t,"stripSwiftSymbols":True}; plistlib.dump(d, open(p,"wb"))'
+
+          AUTH_ARGS=(
+            -authenticationKeyPath "$ASC_KEY_PATH"
+            -authenticationKeyID "$ASC_KEY_ID"
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          )
 
           xcodebuild archive \
             -project FptnVPN.xcodeproj \
@@ -145,6 +156,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath "$IOS_ARCHIVE" \
             -allowProvisioningUpdates \
+            "${AUTH_ARGS[@]}" \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             CODE_SIGN_STYLE=Automatic
 
@@ -152,7 +164,8 @@ jobs:
             -archivePath "$IOS_ARCHIVE" \
             -exportPath "$IOS_EXPORT_DIR" \
             -exportOptionsPlist "$EXPORT_OPTIONS" \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            "${AUTH_ARGS[@]}"
 
           IPA_PATH="$(find "$IOS_EXPORT_DIR" -maxdepth 1 -name '*.ipa' -print -quit)"
           if [[ -z "$IPA_PATH" ]]; then
@@ -164,11 +177,18 @@ jobs:
       - name: Build & export tvOS IPA
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           set -euo pipefail
 
           if [[ -z "${DEVELOPMENT_TEAM:-}" ]]; then
             echo "Missing DEVELOPMENT_TEAM secret." >&2
+            exit 1
+          fi
+
+          if [[ -z "${ASC_KEY_PATH:-}" || -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ]]; then
+            echo "Missing App Store Connect API key env (ASC_KEY_PATH/ASC_KEY_ID/ASC_ISSUER_ID)." >&2
             exit 1
           fi
 
@@ -178,7 +198,13 @@ jobs:
           mkdir -p "$BUILD_DIR" "$TVOS_EXPORT_DIR"
 
           EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-tvOS.plist"
-            EXPORT_OPTIONS="$EXPORT_OPTIONS" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" python3 -c 'import os, plistlib; p=os.environ["EXPORT_OPTIONS"]; t=os.environ["DEVELOPMENT_TEAM"]; d={"method":"app-store","signingStyle":"automatic","teamID":t,"stripSwiftSymbols":True}; plistlib.dump(d, open(p,"wb"))'
+          EXPORT_OPTIONS="$EXPORT_OPTIONS" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" python3 -c 'import os, plistlib; p=os.environ["EXPORT_OPTIONS"]; t=os.environ["DEVELOPMENT_TEAM"]; d={"method":"app-store","signingStyle":"automatic","teamID":t,"stripSwiftSymbols":True}; plistlib.dump(d, open(p,"wb"))'
+
+          AUTH_ARGS=(
+            -authenticationKeyPath "$ASC_KEY_PATH"
+            -authenticationKeyID "$ASC_KEY_ID"
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          )
 
           xcodebuild archive \
             -project FptnVPN.xcodeproj \
@@ -187,6 +213,7 @@ jobs:
             -destination "generic/platform=tvOS" \
             -archivePath "$TVOS_ARCHIVE" \
             -allowProvisioningUpdates \
+            "${AUTH_ARGS[@]}" \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             CODE_SIGN_STYLE=Automatic
 
@@ -194,7 +221,8 @@ jobs:
             -archivePath "$TVOS_ARCHIVE" \
             -exportPath "$TVOS_EXPORT_DIR" \
             -exportOptionsPlist "$EXPORT_OPTIONS" \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            "${AUTH_ARGS[@]}"
 
           IPA_PATH="$(find "$TVOS_EXPORT_DIR" -maxdepth 1 -name '*.ipa' -print -quit)"
           if [[ -z "$IPA_PATH" ]]; then
