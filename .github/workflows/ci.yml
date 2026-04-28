@@ -8,6 +8,10 @@ jobs:
   xcode:
     name: Xcode (FptnVPN)
     runs-on: macos-26
+
+    env:
+      DERIVED_DATA: ${{ github.workspace }}/.build/DerivedData
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,6 +83,15 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Restore DerivedData cache
+        id: cache-deriveddata
+        uses: actions/cache/restore@v5
+        with:
+          path: .build/DerivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', 'project.yml', '**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-
+
       - name: macOS unit tests
         run: |
           set -o pipefail
@@ -87,6 +100,7 @@ jobs:
             -scheme "Fptn-macOS" \
             -configuration Debug \
             -destination "platform=macOS" \
+            -derivedDataPath "$DERIVED_DATA" \
             -skip-testing:"Fptn-macOSUITests" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
           | xcbeautify
@@ -99,6 +113,14 @@ jobs:
             -scheme "FptnVPN" \
             -configuration Debug \
             -destination "platform=iOS Simulator,name=iPhone 17" \
+            -derivedDataPath "$DERIVED_DATA" \
             -skip-testing:"FptnVPNUITests" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
           | xcbeautify
+
+      - name: Save DerivedData cache
+        if: always() && steps.cache-deriveddata.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: .build/DerivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', 'project.yml', '**/Package.resolved') }}
