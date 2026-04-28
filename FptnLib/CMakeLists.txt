@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(fptn_native_lib VERSION 1.0.0 LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Platform-specific deployment target defaults
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -51,8 +52,15 @@ include_directories(fptn/src/fptn-protocol-lib)
 
 # Create library target
 add_library(fptn_native_lib SHARED
-    src/https/WrapperHttpsClientBridge.cpp src/https/WrapperHttpsClientBridge.h
+    src/https/WrapperApiClientBridge.cpp src/https/WrapperApiClientBridge.h
     src/websocket/WrapperWebsocketClientBridge.cpp src/websocket/WrapperWebsocketClientBridge.h
+)
+
+target_compile_features(fptn_native_lib PRIVATE cxx_std_20)
+target_compile_definitions(fptn_native_lib PRIVATE
+    BOOST_ASIO_HAS_CO_AWAIT
+    BOOST_ASIO_HAS_CO_SPAWN
+    BOOST_ASIO_HAS_COROUTINES
 )
 
 # Link required frameworks
@@ -95,10 +103,10 @@ set_target_properties(fptn_native_lib PROPERTIES
 foreach(header_file ${ALL_HEADERS})
     file(RELATIVE_PATH relative_path "${CMAKE_CURRENT_SOURCE_DIR}" "${header_file}")
     set(target_file "${CMAKE_CURRENT_BINARY_DIR}/fptn_native_lib.framework/Headers/${relative_path}")
+    get_filename_component(target_dir "${target_file}" DIRECTORY)
     add_custom_command(TARGET fptn_native_lib POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/fptn_native_lib.framework/Headers/${relative_path}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${target_dir}"
         COMMAND ${CMAKE_COMMAND} -E copy "${header_file}" "${target_file}"
         COMMENT "Copying ${relative_path}"
     )
 endforeach()
-

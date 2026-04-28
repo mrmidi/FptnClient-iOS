@@ -18,11 +18,25 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: NO
-    DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+    ENABLE_BITCODE: NO
+    STRIP_BITCODE_FROM_COPIED_FILES: NO
+  configs:
+    Debug:
+      DEBUG_INFORMATION_FORMAT: dwarf
+    Release:
+      DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
 
 configs:
   Debug: debug
   Release: release
+
+packages:
+  FptnShared:
+    url: https://github.com/mrmidi/FptnShared.git
+    from: "0.1.2"
+  swift-log:
+    url: https://github.com/apple/swift-log.git
+    from: "1.6.0"
 
 # ── Target templates ───────────────────────────────────────────────────────────
 
@@ -56,6 +70,10 @@ targets:
       - path: FptnVPN
         excludes:
           - FptnVPNTunnel/**
+          - Cpp/*.framework
+          - Cpp/*.framework/**
+          - Cpp/*.framework.dSYM
+          - Cpp/*.framework.dSYM/**
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN
@@ -89,12 +107,29 @@ targets:
     dependencies:
       - target: FptnVPNTunnel
         embed: true
+      - package: FptnShared
+        product: FptnSharedCore
+      - package: swift-log
+        product: Logging
       - framework: FptnVPN/Cpp/fptn_native_lib.framework
         embed: true
-        codeSign: true
+        codeSign: false
     preBuildScripts:
       - name: Build FptnLib (Conan+CMake)
-        script: '"${SRCROOT}/build_fptn_lib.sh"'
+        script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
+        basedOnDependencyAnalysis: false
+    postBuildScripts:
+      - name: Sign FptnLib Framework
+        script: |
+          FRAMEWORK="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/fptn_native_lib.framework"
+          if [ -d "${FRAMEWORK}" ] && [ "${CODE_SIGNING_ALLOWED:-YES}" != "NO" ]; then
+            /usr/bin/codesign --remove-signature "${FRAMEWORK}" >/dev/null 2>&1 || true
+            SIGN_IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:-}}"
+            if [ -z "${SIGN_IDENTITY}" ] || [ "${SIGN_IDENTITY}" = "Don't Code Sign" ]; then
+              SIGN_IDENTITY="-"
+            fi
+            /usr/bin/codesign --force --sign "${SIGN_IDENTITY}" --timestamp=none --generate-entitlement-der "${FRAMEWORK}"
+          fi
         basedOnDependencyAnalysis: false
 
   # ── iOS Network Extension ─────────────────────────────────────────────────────
@@ -106,6 +141,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN.FptnVPNTunnel
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
+        SWIFT_OBJC_BRIDGING_HEADER: FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h
     info:
       path: FptnVPNTunnel/Info.plist
     entitlements:
@@ -115,6 +152,14 @@ targets:
           - packet-tunnel-provider
         com.apple.security.application-groups:
           - group.net.mrmidi.FptnVPN
+    dependencies:
+      - package: swift-log
+        product: Logging
+      - framework: FptnVPN/Cpp/fptn_native_lib.framework
+    preBuildScripts:
+      - name: Build FptnLib (Conan+CMake)
+        script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
+        basedOnDependencyAnalysis: false
 
   # ── macOS App ─────────────────────────────────────────────────────────────────
   Fptn-macOS:
@@ -125,6 +170,10 @@ targets:
       - path: Fptn-macOS
         excludes:
           - Fptn-macOS-Tunnel/**
+          - Cpp/*.framework
+          - Cpp/*.framework/**
+          - Cpp/*.framework.dSYM
+          - Cpp/*.framework.dSYM/**
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS
@@ -152,9 +201,15 @@ targets:
     dependencies:
       - target: Fptn-macOS-Tunnel
         embed: true
+      - package: FptnShared
+        product: FptnSharedCore
       - framework: Fptn-macOS/Cpp/fptn_native_lib.framework
         embed: true
         codeSign: true
+    preBuildScripts:
+      - name: Build FptnLib (Conan+CMake)
+        script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
+        basedOnDependencyAnalysis: false
 
   # ── macOS Network Extension ───────────────────────────────────────────────────
   Fptn-macOS-Tunnel:
@@ -165,6 +220,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS-Tunnel/Cpp
+        SWIFT_OBJC_BRIDGING_HEADER: Fptn-macOS-Tunnel/Cpp/Fptn_macOS_Tunnel-Bridging-Header.h
         ENABLE_HARDENED_RUNTIME: YES
     info:
       path: Fptn-macOS-Tunnel/Info.plist
@@ -175,6 +232,12 @@ targets:
           - packet-tunnel-provider
         com.apple.security.application-groups:
           - group.net.mrmidi.FptnVPN
+    dependencies:
+      - framework: Fptn-macOS-Tunnel/Cpp/fptn_native_lib.framework
+    preBuildScripts:
+      - name: Build FptnLib (Conan+CMake)
+        script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
+        basedOnDependencyAnalysis: false
 
   # ── tvOS App ──────────────────────────────────────────────────────────────────
   Fptn-tvOS:
@@ -185,6 +248,10 @@ targets:
       - path: Fptn-tvOS
         excludes:
           - Fptn-tvOS-Tunnel/**
+          - Cpp/*.framework
+          - Cpp/*.framework/**
+          - Cpp/*.framework.dSYM
+          - Cpp/*.framework.dSYM/**
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-tvOS
@@ -211,9 +278,15 @@ targets:
     dependencies:
       - target: Fptn-tvOS-Tunnel
         embed: true
+      - package: FptnShared
+        product: FptnSharedCore
       - framework: Fptn-tvOS/Cpp/fptn_native_lib.framework
         embed: true
         codeSign: true
+    preBuildScripts:
+      - name: Build FptnLib (Conan+CMake)
+        script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
+        basedOnDependencyAnalysis: false
 
   # ── tvOS Network Extension ────────────────────────────────────────────────────
   Fptn-tvOS-Tunnel:
@@ -224,6 +297,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-tvOS.Fptn-tvOS-Tunnel
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-tvOS-Tunnel/Cpp
+        SWIFT_OBJC_BRIDGING_HEADER: Fptn-tvOS-Tunnel/Cpp/Fptn_tvOS_Tunnel-Bridging-Header.h
     info:
       path: Fptn-tvOS-Tunnel/Info.plist
     entitlements:
@@ -233,6 +308,14 @@ targets:
           - packet-tunnel-provider
         com.apple.security.application-groups:
           - group.net.mrmidi.FptnVPN
+    dependencies:
+      - package: FptnShared
+        product: FptnSharedCore
+      - framework: Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework
+    preBuildScripts:
+      - name: Build FptnLib (Conan+CMake)
+        script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
+        basedOnDependencyAnalysis: false
 
   # ── Tests ─────────────────────────────────────────────────────────────────────
   FptnVPNTests:

@@ -16,6 +16,7 @@ jobs:
     env:
       KEYCHAIN_NAME: build.keychain-db
       KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'temp-keychain-password' }}
+      UPLOAD_TO_APP_STORE_CONNECT: ${{ secrets.UPLOAD_TO_APP_STORE_CONNECT }}
 
     steps:
       - name: Checkout
@@ -36,9 +37,13 @@ jobs:
           if ! command -v conan >/dev/null 2>&1; then
             brew install conan
           fi
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
 
           cmake --version
           conan --version
+          xcodegen --version
 
       - name: Cache Conan
         uses: actions/cache@v4
@@ -121,6 +126,9 @@ jobs:
         run: |
           xcodebuild -version
           xcodebuild -showsdks
+
+      - name: Generate Xcode project
+        run: xcodegen generate
 
       - name: Build & export iOS IPA
         env:
@@ -279,7 +287,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$GITHUB_WORKSPACE/Fptn-macOS.zip"
 
       - name: Upload IPAs to App Store Connect (TestFlight)
-        if: ${{ secrets.UPLOAD_TO_APP_STORE_CONNECT == 'true' }}
+        if: ${{ env.UPLOAD_TO_APP_STORE_CONNECT == 'true' }}
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

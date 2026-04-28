@@ -30,9 +30,17 @@ jobs:
           if ! command -v conan >/dev/null 2>&1; then
             brew install conan
           fi
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          if ! command -v xcbeautify >/dev/null 2>&1; then
+            brew install xcbeautify
+          fi
 
           cmake --version
           conan --version
+          xcodegen --version
+          xcbeautify --version
 
       - name: Cache Conan
         uses: actions/cache@v4
@@ -58,6 +66,9 @@ jobs:
         run: |
           xcodebuild -version
           xcodebuild -showsdks
+
+      - name: Generate Xcode project
+        run: xcodegen generate
 
       - name: macOS unit tests
         run: |

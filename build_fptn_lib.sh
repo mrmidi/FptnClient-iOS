@@ -14,7 +14,35 @@ SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
 ROOT_DIR="${SRCROOT:-${SCRIPT_DIR}}"
 LIB_DIR="${ROOT_DIR}/FptnLib"
 
-TARGET="${1:-ios-device}"
+resolve_default_target() {
+    if [ -n "${FPTN_NATIVE_TARGET:-}" ]; then
+        echo "$FPTN_NATIVE_TARGET"
+        return
+    fi
+
+    case "${PLATFORM_NAME:-}" in
+        iphonesimulator)
+            echo "ios-simulator"
+            ;;
+        iphoneos)
+            echo "ios-device"
+            ;;
+        appletvsimulator)
+            echo "tvos-simulator"
+            ;;
+        appletvos)
+            echo "tvos-device"
+            ;;
+        macosx)
+            echo "macos"
+            ;;
+        *)
+            echo "ios-device"
+            ;;
+    esac
+}
+
+TARGET="${1:-$(resolve_default_target)}"
 
 resolve_framework_binary() {
     local framework_path="$1"
@@ -22,6 +50,27 @@ resolve_framework_binary() {
         echo "${framework_path}/Versions/1.0.0/fptn_native_lib"
     else
         echo "${framework_path}/fptn_native_lib"
+    fi
+}
+
+framework_is_built() {
+    local framework_path="$1"
+    local binary_path
+
+    binary_path="$(resolve_framework_binary "${framework_path}")"
+    [ -d "${framework_path}" ] && [ -s "${binary_path}" ]
+}
+
+framework_matches_target() {
+    local framework_path="$1"
+    local expected_platform="$2"
+    local binary_path
+
+    framework_is_built "$framework_path" || return 1
+
+    if command -v vtool >/dev/null && [ -n "$expected_platform" ]; then
+        binary_path="$(resolve_framework_binary "${framework_path}")"
+        vtool -show-build "$binary_path" 2>/dev/null | awk -v platform="$expected_platform" '$1 == "platform" && $2 == platform { found = 1 } END { exit found ? 0 : 1 }'
     fi
 }
 
@@ -138,6 +187,23 @@ case "$TARGET" in
         ;;
 esac
 
+if [ "${FPTN_NATIVE_BUILD_IF_MISSING:-0}" = "1" ]; then
+    EXPECTED_PLATFORM=""
+    case "$TARGET" in
+        ios|ios-device) EXPECTED_PLATFORM="IOS" ;;
+        ios-simulator) EXPECTED_PLATFORM="IOSSIMULATOR" ;;
+        tvos|tvos-device) EXPECTED_PLATFORM="TVOS" ;;
+        tvos-simulator) EXPECTED_PLATFORM="TVOSSIMULATOR" ;;
+        macos) EXPECTED_PLATFORM="MACOS" ;;
+    esac
+
+    if framework_matches_target "${DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM" &&
+       { [ -z "$SECONDARY_DEST_DIR" ] || framework_matches_target "${SECONDARY_DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM"; }; then
+        echo "fptn_native_lib already built for ${TARGET}; skipping native build."
+        exit 0
+    fi
+fi
+
 cd "$LIB_DIR"
 
 if [ "$TARGET" = "macos" ]; then
@@ -149,6 +215,7 @@ if [ "$TARGET" = "macos" ]; then
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE=Debug \
              -DCMAKE_OSX_ARCHITECTURES=arm64
+    rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
     cmake --build . --config Debug
     cd "$LIB_DIR"
 
@@ -160,6 +227,7 @@ if [ "$TARGET" = "macos" ]; then
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE=Debug \
              -DCMAKE_OSX_ARCHITECTURES=x86_64
+    rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
     cmake --build . --config Debug
     cd "$LIB_DIR"
 
@@ -192,9 +260,13 @@ if [ "$TARGET" = "macos" ]; then
         cp -R "$UNIVERSAL_FW" "$DEST/"
         rm -rf "${DEST}/fptn_native_lib.framework.dSYM"
 
-        SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
-        echo "Signing ${DEST}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
-        codesign --force --sign "${SIGN_IDENTITY}" "${DEST}/fptn_native_lib.framework"
+        if [ "${FPTN_SKIP_NATIVE_CODESIGN:-0}" != "1" ]; then
+            SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
+            echo "Signing ${DEST}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
+            codesign --force --sign "${SIGN_IDENTITY}" "${DEST}/fptn_native_lib.framework"
+        else
+            echo "Skipping native framework signing for ${DEST}; Xcode will sign the embedded copy."
+        fi
     done
 
     copy_dsym_to_archive_products "${UNIVERSAL_FW}.dSYM"
@@ -211,6 +283,7 @@ conan install . --profile:host="$HOST_PROFILE" --profile:build=default --build=m
 
 cd "$OUTPUT_DIR"
 cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
+rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
 cmake --build . --config Debug
 generate_framework_dsym "fptn_native_lib.framework"
 
@@ -234,9 +307,13 @@ copy_framework_to_dest() {
 
     rm -rf "${destination}/fptn_native_lib.framework.dSYM"
 
-    SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
-    echo "Signing ${destination}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
-    codesign --force --sign "${SIGN_IDENTITY}" "${destination}/fptn_native_lib.framework"
+    if [ "${FPTN_SKIP_NATIVE_CODESIGN:-0}" != "1" ]; then
+        SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
+        echo "Signing ${destination}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
+        codesign --force --sign "${SIGN_IDENTITY}" "${destination}/fptn_native_lib.framework"
+    else
+        echo "Skipping native framework signing for ${destination}; Xcode will sign the embedded copy."
+    fi
 }
 
 copy_framework_to_dest "$DEST_DIR"

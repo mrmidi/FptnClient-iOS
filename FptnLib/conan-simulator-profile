@@ -2,9 +2,9 @@
 arch=armv8
 build_type=Debug
 compiler=apple-clang
-compiler.cppstd=gnu17
+compiler.cppstd=23
 compiler.libcxx=libc++
-compiler.version=15
+compiler.version=21
 os=iOS
 os.version=17.0
 os.sdk=iphonesimulator
