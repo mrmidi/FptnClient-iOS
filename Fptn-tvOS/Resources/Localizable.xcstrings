@@ -1,0 +1,202 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "FPTN VPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "FPTN VPN" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "FPTN VPN" } }
+      }
+    },
+    "Credentials synced from iCloud" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Credentials synced from iCloud" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Данные синхронизированы из iCloud" } }
+      }
+    },
+    "Looking for iCloud credentials..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Looking for iCloud credentials..." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск данных в iCloud..." } }
+      }
+    },
+    "Ready to connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to connect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово к подключению" } }
+      }
+    },
+    "No Credentials Found" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Credentials Found" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Учётные данные не найдены" } }
+      }
+    },
+    "Select server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select server" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите сервер" } }
+      }
+    },
+    "Smart Connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smart Connect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Умное подключение" } }
+      }
+    },
+    "Measuring..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Measuring..." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Измерение..." } }
+      }
+    },
+    "Server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Server" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сервер" } }
+      }
+    },
+    "SNI:" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SNI:" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "SNI:" } }
+      }
+    },
+    "Disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключиться" } }
+      }
+    },
+    "Connecting..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting..." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение..." } }
+      }
+    },
+    "Connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключиться" } }
+      }
+    },
+    "Ping" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ping" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверить" } }
+      }
+    },
+    "Log level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Log level" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уровень логов" } }
+      }
+    },
+    "Warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Warning" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предупреждения" } }
+      }
+    },
+    "Info" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Info" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Информация" } }
+      }
+    },
+    "Debug" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Debug" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отладка" } }
+      }
+    },
+    "Apply" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Применить" } }
+      }
+    },
+    "Check Again" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Check Again" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверить ещё раз" } }
+      }
+    },
+    "Open FPTN VPN on your iPhone, iPad, or Mac and log in with your token." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open FPTN VPN on your iPhone, iPad, or Mac and log in with your token." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Откройте FPTN VPN на iPhone, iPad или Mac и войдите с вашим токеном." } }
+      }
+    },
+    "Make sure you are signed in with the same Apple\u{00A0}ID on all devices." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Make sure you are signed in with the same Apple\u{00A0}ID on all devices." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Убедитесь, что вы вошли с одним Apple\u{00A0}ID на всех устройствах." } }
+      }
+    },
+    "Your credentials will sync here automatically via iCloud." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your credentials will sync here automatically via iCloud." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Учётные данные синхронизируются сюда автоматически через iCloud." } }
+      }
+    },
+    "No credentials found in iCloud." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No credentials found in iCloud." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Данные в iCloud не найдены." } }
+      }
+    },
+    "Token synced. Waiting for iCloud Keychain password..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Token synced. Waiting for iCloud Keychain password..." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Токен синхронизирован. Ожидание пароля из Связки ключей iCloud..." } }
+      }
+    },
+    "Token synced, but password not available yet. Open iOS app once to refresh keychain sync." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Token synced, but password not available yet. Open iOS app once to refresh keychain sync." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Токен синхронизирован, но пароль ещё недоступен. Откройте iOS приложение для обновления синхронизации ключей." } }
+      }
+    },
+    "Select a server first" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select a server first" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сначала выберите сервер" } }
+      }
+    },
+    "rutube.ru" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "rutube.ru" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "rutube.ru" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

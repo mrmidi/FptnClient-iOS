@@ -83,6 +83,8 @@ targets:
     info:
       path: FptnVPN/Info.plist
       properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, ru]
         UILaunchScreen: {}
         UIRequiredDeviceCapabilities:
           - arm64
@@ -185,6 +187,8 @@ targets:
       path: Fptn-macOS/Info.plist
       properties:
         NSPrincipalClass: NSApplication
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, ru]
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
     entitlements:
@@ -261,6 +265,8 @@ targets:
       path: Fptn-tvOS/Info.plist
       properties:
         UILaunchScreen: {}
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, ru]
         UIRequiredDeviceCapabilities:
           - arm64
         UIUserInterfaceStyle: Automatic
@@ -328,3 +334,15 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnVPNTests
     dependencies:
       - target: FptnVPN
+
+  Fptn-macOSTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Fptn-macOSTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOSTests
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp
+    dependencies:
+      - target: Fptn-macOS
