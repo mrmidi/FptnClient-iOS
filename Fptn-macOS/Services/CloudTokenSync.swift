@@ -3,14 +3,15 @@ import FptnSharedCore
 
 /// Reads and writes FPTN token metadata from iCloud Key-Value Store.
 /// Uses the same keys as the iOS TokenService so data syncs cross-platform.
+@MainActor
 enum CloudTokenSync {
     private static let cloud = NSUbiquitousKeyValueStore.default
 
     // Must match the keys in TokenService (iOS).
-    private nonisolated static let tokenKey = "fptn.cloud.tokenData"
-    private nonisolated static let serversKey = "fptn.cloud.servers"
-    private nonisolated static let usernameKey = "fptn.cloud.username"
-    private nonisolated static let serviceNameKey = "fptn.cloud.serviceName"
+    private static let tokenKey = "fptn.cloud.tokenData"
+    private static let serversKey = "fptn.cloud.servers"
+    private static let usernameKey = "fptn.cloud.username"
+    private static let serviceNameKey = "fptn.cloud.serviceName"
 
     /// Kick off iCloud KVS sync and register for remote change notifications.
     static func startObserving(onChange: @Sendable @escaping () -> Void) {

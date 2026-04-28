@@ -46,11 +46,12 @@ jobs:
           xcodegen --version
 
       - name: Cache Conan
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.conan2
           key: ${{ runner.os }}-conan-release-${{ hashFiles('FptnLib/conanfile.py', 'FptnLib/**/conan-*-profile') }}
+          save-always: true
 
       - name: Set up Apple signing keychain
         env:

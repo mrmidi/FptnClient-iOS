@@ -332,6 +332,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnVPNTests
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
     dependencies:
       - target: FptnVPN
 
