@@ -43,12 +43,12 @@ jobs:
           xcbeautify --version
 
       - name: Cache Conan
-        uses: actions/cache@v5
+        id: cache-conan
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.conan2
           key: ${{ runner.os }}-conan-${{ hashFiles('FptnLib/conanfile.py', 'FptnLib/**/conan-*-profile') }}
-          save-always: true
 
       - name: Build native frameworks
         run: |
@@ -62,6 +62,14 @@ jobs:
           # - FptnVPN/Cpp (iOS simulator slice)
           ./build_fptn_lib.sh macos
           ./build_fptn_lib.sh ios-simulator
+
+      - name: Save Conan cache
+        if: always() && steps.cache-conan.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ~/.conan2
+          key: ${{ runner.os }}-conan-${{ hashFiles('FptnLib/conanfile.py', 'FptnLib/**/conan-*-profile') }}
 
       - name: Xcode version
         run: |

@@ -17,6 +17,7 @@ enum CloudTokenSync {
     static func startObserving(onChange: @Sendable @escaping () -> Void) {
         cloud.synchronize()
 
+        let relevant: Set<String> = [tokenKey, serversKey, usernameKey, serviceNameKey]
         NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
             object: cloud,
@@ -26,8 +27,7 @@ enum CloudTokenSync {
                   let keys = userInfo[NSUbiquitousKeyValueStoreChangedKeysKey] as? [String] else {
                 return
             }
-            let relevant: Set<String> = [tokenKey, serversKey, usernameKey, serviceNameKey]
-            if !keys.filter({ relevant.contains($0) }).isEmpty {
+            if keys.contains(where: { relevant.contains($0) }) {
                 onChange()
             }
         }
