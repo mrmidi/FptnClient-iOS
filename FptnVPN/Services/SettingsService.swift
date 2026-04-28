@@ -29,10 +29,12 @@ actor SettingsService {
         UserDefaults.standard.bool(forKey: Self.autoConnectKey)
     }
 
+    nonisolated var censorshipStrategy: CensorshipStrategy {
+        CensorshipStrategy(storedValue: UserDefaults.standard.string(forKey: Self.bypassMethodKey))
+    }
+
     nonisolated var bypassMethod: BypassMethod {
-        guard let raw = UserDefaults.standard.string(forKey: Self.bypassMethodKey),
-              let method = BypassMethod(rawValue: raw) else { return .sniSpoofing }
-        return method
+        censorshipStrategy
     }
 
     nonisolated var reconnectEnabled: Bool {
@@ -55,7 +57,7 @@ actor SettingsService {
     /// Seconds before the native tunnel websocket is considered idle.
     nonisolated var websocketIdleTimeoutSeconds: Int {
         let stored = UserDefaults.standard.object(forKey: Self.websocketIdleTimeoutKey)
-        return stored == nil ? 300 : UserDefaults.standard.integer(forKey: Self.websocketIdleTimeoutKey)
+        return stored == nil ? 60 : UserDefaults.standard.integer(forKey: Self.websocketIdleTimeoutKey)
     }
 
     nonisolated var colorScheme: AppColorScheme {
@@ -80,8 +82,12 @@ actor SettingsService {
         UserDefaults.standard.set(value, forKey: Self.autoConnectKey)
     }
 
+    func setCensorshipStrategy(_ strategy: CensorshipStrategy) {
+        UserDefaults.standard.set(strategy.rawValue, forKey: Self.bypassMethodKey)
+    }
+
     func setBypassMethod(_ method: BypassMethod) {
-        UserDefaults.standard.set(method.rawValue, forKey: Self.bypassMethodKey)
+        setCensorshipStrategy(method)
     }
 
     func setReconnectEnabled(_ value: Bool) {

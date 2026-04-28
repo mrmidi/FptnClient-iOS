@@ -74,7 +74,14 @@ private struct ProbeDetailSheet: View {
         NavigationStack {
             List {
                 field("SNI", value: result.sni)
+                field("Strategy", value: CensorshipStrategy(storedValue: result.strategyRawValue).displayName)
                 field("Status", value: result.status.rawValue)
+                if let handshakeLatencyMs = result.handshakeLatencyMs {
+                    field("Handshake", value: "\(handshakeLatencyMs) ms")
+                }
+                if let httpCode = result.httpCode {
+                    field("HTTP", value: "\(httpCode)")
+                }
                 if result.latencyMs >= 0 {
                     field("Latency", value: "\(result.latencyMs) ms")
                 }
@@ -215,11 +222,21 @@ struct SNICheckerView: View {
                             .foregroundStyle(Color.appSecondaryText)
                             .frame(width: 60, alignment: .leading)
                         Picker("Method", selection: $viewModel.bypassMethod) {
-                            ForEach(BypassMethod.allCases, id: \.self) { method in
+                            ForEach(CensorshipStrategy.simpleCases, id: \.self) { method in
                                 Text(method.displayName).tag(method)
                             }
                         }
                         .pickerStyle(.segmented)
+                    }
+
+                    if viewModel.bypassMethod == .sniReality || viewModel.bypassMethod.isAdvanced {
+                        Picker("Profile", selection: $viewModel.bypassMethod) {
+                            Text("Default Reality").tag(CensorshipStrategy.sniReality)
+                            ForEach(CensorshipStrategy.advancedCases, id: \.self) { method in
+                                Text(method.displayName).tag(method)
+                            }
+                        }
+                        .pickerStyle(.menu)
                     }
                 }
 

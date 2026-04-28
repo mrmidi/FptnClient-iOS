@@ -11,6 +11,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showLogoutConfirmation = false
     @State private var showClearKeychainConfirmation = false
+    @State private var showAdvancedBypass = false
 
     var body: some View {
         NavigationStack {
@@ -41,12 +42,25 @@ struct SettingsView: View {
                         get: { viewModel.bypassMethod },
                         set: { viewModel.saveBypassMethod($0) }
                     )) {
-                        ForEach(BypassMethod.allCases, id: \.self) { method in
+                        ForEach(primaryBypassMethods, id: \.self) { method in
                             Text(method.displayName).tag(method)
                         }
                     }
                     .pickerStyle(.menu)
                     .tint(Color.appAccent)
+
+                    DisclosureGroup("Advanced Profiles", isExpanded: $showAdvancedBypass) {
+                        Picker("Profile", selection: Binding(
+                            get: { viewModel.bypassMethod.isAdvanced ? viewModel.bypassMethod : .sniRealityChrome147 },
+                            set: { viewModel.saveBypassMethod($0) }
+                        )) {
+                            ForEach(CensorshipStrategy.advancedCases, id: \.self) { method in
+                                Text(method.displayName).tag(method)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Color.appAccent)
+                    }
 
                     if viewModel.bypassMethod.requiresSNI {
                         TextField("e.g. rutube.ru", text: $viewModel.sni)
@@ -62,16 +76,7 @@ struct SettingsView: View {
                     Text("DPI Bypass")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
-                    Group {
-                        switch viewModel.bypassMethod {
-                        case .sniSpoofing:
-                            Text("SNI Spoofing: disguises VPN traffic by sending a fake SNI hostname during the TLS handshake.")
-                        case .obfuscation:
-                            Text("TLS Obfuscation: wraps traffic to resist deep-packet inspection. No SNI hostname needed.")
-                        case .sniReality:
-                            Text("SNI + REALITY: combines SNI spoofing with the REALITY protocol for stronger censorship resistance.")
-                        }
-                    }
+                    Text(viewModel.bypassMethod.helpText)
                     .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)
@@ -263,6 +268,13 @@ struct SettingsView: View {
         } message: {
             Text("This removes the stored password from iCloud Keychain on all devices. The app will re-sync it on next launch.")
         }
+    }
+
+    private var primaryBypassMethods: [CensorshipStrategy] {
+        if viewModel.bypassMethod.isAdvanced {
+            return CensorshipStrategy.simpleCases + [viewModel.bypassMethod]
+        }
+        return CensorshipStrategy.simpleCases
     }
 }
 

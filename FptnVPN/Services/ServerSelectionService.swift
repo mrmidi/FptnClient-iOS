@@ -57,10 +57,17 @@ actor ServerSelectionService {
         let servers = await tokenService.getServers()
         let results = await probeService.collectAll(servers: servers, config: config)
         await latencyCache.save(results)
-        let rows = composeRows(
+        var records = Dictionary(uniqueKeysWithValues: results.map { ($0.server.id, $0.cacheRecord) })
+        let tcpRows = composeRows(
             servers: servers,
-            cache: Dictionary(uniqueKeysWithValues: results.map { ($0.server.id, $0.cacheRecord) })
+            cache: records
         )
+        if let bestTcpServer = tcpRows.first(where: { $0.isReachable })?.server {
+            let verified = verifyServerForCurrentStrategy(bestTcpServer)
+            records[bestTcpServer.id] = verified.cacheRecord
+            await latencyCache.save(verified.cacheRecord)
+        }
+        let rows = composeRows(servers: servers, cache: records)
         let best = rows.first(where: { $0.isReachable })?.server
         return AutoServerSelection(selectedServer: best, rows: rows)
     }
@@ -81,6 +88,49 @@ actor ServerSelectionService {
             servers.map { server in
                 ServerListRow(server: server, latency: cache[server.id])
             }
+        )
+    }
+
+    private nonisolated func verifyServerForCurrentStrategy(_ server: VPNServer) -> ServerLatencyProbeResult {
+        let settings = SettingsService.shared
+        let strategy = settings.censorshipStrategy
+        let timeoutSeconds = 5
+        let client = ApiClientBridge(
+            host: server.host,
+            port: server.port,
+            sni: settings.sni,
+            md5Fingerprint: server.md5_fingerprint,
+            censorshipStrategy: strategy.rawValue
+        )
+
+        let handshake = client.testHandshake(timeout: timeoutSeconds)
+        guard handshake.reachable else {
+            return ServerLatencyProbeResult(
+                server: server,
+                state: .unreachable,
+                latencyMs: handshake.latencyMs,
+                detail: "verify_handshake_failed:\(handshake.error ?? "unknown")",
+                checkedAt: Date().timeIntervalSince1970
+            )
+        }
+
+        let dns = client.get(path: "/api/v1/dns", timeout: timeoutSeconds)
+        if let error = dns.error, !error.isEmpty {
+            return ServerLatencyProbeResult(
+                server: server,
+                state: .unreachable,
+                latencyMs: handshake.latencyMs,
+                detail: "verify_dns_failed:\(error)",
+                checkedAt: Date().timeIntervalSince1970
+            )
+        }
+
+        return ServerLatencyProbeResult(
+            server: server,
+            state: .reachable,
+            latencyMs: handshake.latencyMs,
+            detail: "verified_http_\(dns.code)",
+            checkedAt: Date().timeIntervalSince1970
         )
     }
 

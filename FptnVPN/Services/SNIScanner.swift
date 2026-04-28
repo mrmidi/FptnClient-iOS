@@ -55,45 +55,61 @@ actor WorkQueue {
 
 final class Prober: Sendable {
     func probe(sni: String, cfg: ProbeConfig) async -> ProbeResult {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let clock = ContinuousClock()
-                let start = clock.now
-                let client = HttpsClientSwift(
-                    host: cfg.server.host,
-                    port: cfg.server.port,
-                    sni: sni,
-                    md5Fingerprint: cfg.server.md5_fingerprint,
-                    censorshipStrategy: cfg.bypassMethod.rawValue
-                )
-                let resp = client.get(path: "/api/v1/dns", timeout: cfg.timeoutMs)
-                let duration = clock.now - start
-                let elapsed = Int(
-                    Double(duration.components.seconds) * 1000
-                    + Double(duration.components.attoseconds) / 1e15
-                )
+        let clock = ContinuousClock()
+        let start = clock.now
+        let timeoutSeconds = max(1, Int(ceil(Double(cfg.timeoutMs) / 1000.0)))
+        let client = ApiClientBridge(
+            host: cfg.server.host,
+            port: cfg.server.port,
+            sni: sni,
+            md5Fingerprint: cfg.server.md5_fingerprint,
+            censorshipStrategy: cfg.bypassMethod.rawValue
+        )
 
-                let errorMsg = resp["error"] as? String ?? ""
-                if errorMsg.isEmpty {
-                    let code = resp["code"] as? Int32 ?? 0
-                    continuation.resume(returning: ProbeResult(
-                        sni: sni,
-                        status: .reachable,
-                        latencyMs: elapsed,
-                        detail: "HTTP \(code)",
-                        ts: Date().timeIntervalSince1970
-                    ))
-                } else {
-                    continuation.resume(returning: ProbeResult(
-                        sni: sni,
-                        status: .unreachable,
-                        latencyMs: -1,
-                        detail: errorMsg,
-                        ts: Date().timeIntervalSince1970
-                    ))
-                }
-            }
+        let handshake = client.testHandshake(timeout: timeoutSeconds)
+        guard handshake.reachable else {
+            return ProbeResult(
+                sni: sni,
+                strategyRawValue: cfg.bypassMethod.rawValue,
+                status: .unreachable,
+                latencyMs: -1,
+                handshakeLatencyMs: handshake.latencyMs,
+                httpCode: nil,
+                detail: handshake.error ?? "Handshake failed",
+                ts: Date().timeIntervalSince1970
+            )
         }
+
+        let response = client.get(path: "/api/v1/dns", timeout: timeoutSeconds)
+        let duration = clock.now - start
+        let elapsed = Int(
+            Double(duration.components.seconds) * 1000
+            + Double(duration.components.attoseconds) / 1e15
+        )
+
+        if let error = response.error, !error.isEmpty {
+            return ProbeResult(
+                sni: sni,
+                strategyRawValue: cfg.bypassMethod.rawValue,
+                status: .unreachable,
+                latencyMs: elapsed,
+                handshakeLatencyMs: handshake.latencyMs,
+                httpCode: response.code,
+                detail: error,
+                ts: Date().timeIntervalSince1970
+            )
+        }
+
+        return ProbeResult(
+            sni: sni,
+            strategyRawValue: cfg.bypassMethod.rawValue,
+            status: .reachable,
+            latencyMs: elapsed,
+            handshakeLatencyMs: handshake.latencyMs,
+            httpCode: response.code,
+            detail: "Handshake \(handshake.latencyMs.map { "\($0)ms" } ?? "ok"), HTTP \(response.code)",
+            ts: Date().timeIntervalSince1970
+        )
     }
 }
 

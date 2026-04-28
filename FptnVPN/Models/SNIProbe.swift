@@ -12,11 +12,14 @@ enum ProbeStatus: String, Codable, Sendable {
 }
 
 struct ProbeResult: Codable, Identifiable, Sendable {
-    var id: String { sni }
+    var id: String { "\(sni)-\(strategyRawValue)" }
     let sni: String
+    let strategyRawValue: String
     let status: ProbeStatus
-    let latencyMs: Int    // actual RTT; -1 means timeout/error
-    let detail: String    // "HTTP 200", "HTTP 401", or error string
+    let latencyMs: Int
+    let handshakeLatencyMs: Int?
+    let httpCode: Int?
+    let detail: String
     let ts: Double
 }
 
