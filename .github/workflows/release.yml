@@ -263,11 +263,10 @@ jobs:
             exit 1
           fi
 
-          xcrun iTMSTransporter -m upload \
-            -assetFile "$GITHUB_WORKSPACE/FptnVPN-iOS.ipa" \
-            -apiKey "$ASC_KEY_ID" \
-            -apiIssuer "$ASC_ISSUER_ID" \
-            -v informational
+          xcrun altool --upload-package "$GITHUB_WORKSPACE/FptnVPN-iOS.ipa" \
+            --api-key "$ASC_KEY_ID" \
+            --api-issuer "$ASC_ISSUER_ID" \
+            --show-progress
 
       - name: Publish GitHub Release
         env:
