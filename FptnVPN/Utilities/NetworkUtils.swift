@@ -7,8 +7,8 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 import Foundation
 
 class NetworkUtils {
-    static func parseJSONResponse(_ response: [String: Any]) -> [String: Any]? {
-        guard let body = response["body"] as? String,
+    static func parseJSONResponse(_ response: ApiClientResponse) -> [String: Any]? {
+        guard let body = response.body,
               let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
@@ -20,15 +20,15 @@ class NetworkUtils {
         return json["access_token"] as? String
     }
     
-    static func extractDNSInfo(from json: [String: Any]) -> (ipv4: String, ipv6: String)? {
+    static func extractDNSInfo(from json: [String: Any]) -> (ipv4: String, ipv6: String?)? {
         guard let dnsIPv4 = json["dns"] as? String else {
             return nil
         }
-        let dnsIPv6 = json["dns_ipv6"] as? String ?? "fd00::1"
+        let dnsIPv6 = json["dns_ipv6"] as? String
         return (dnsIPv4, dnsIPv6)
     }
     
-    static func validateServerResponse(_ response: [String: Any]) -> Bool {
-        return response["code"] as? Int == 200 && response["body"] != nil
+    static func validateServerResponse(_ response: ApiClientResponse) -> Bool {
+        return response.code == 200 && response.body != nil
     }
 }

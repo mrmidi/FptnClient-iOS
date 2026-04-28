@@ -6,6 +6,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 import Combine
+import Darwin
 @preconcurrency import NetworkExtension
 
 private enum TunnelControlAction: String, Codable, Sendable {
@@ -170,7 +171,7 @@ final class VPNService: ObservableObject {
 
         let settings = SettingsService.shared
         let sni = settings.sni
-        let strategy = settings.bypassMethod.rawValue
+        let strategy = settings.censorshipStrategy.rawValue
 
         let accessTokenResult = await loginToServer(
             server: server,
@@ -233,7 +234,7 @@ final class VPNService: ObservableObject {
     ) async -> Result<String, Error> {
         logger.info("Login request start host=\(server.host) port=\(server.port) sni=\(sni) strategy=\(censorshipStrategy)")
 
-        let httpsClient = HttpsClientSwift(
+        let apiClient = ApiClientBridge(
             host: server.host,
             port: server.port,
             sni: sni,
@@ -248,11 +249,11 @@ final class VPNService: ObservableObject {
         }
         """
 
-        let response = httpsClient.post(path: "/api/v1/login", body: requestBody, timeout: 10)
-        let responseCode = response["code"] as? Int32 ?? -1
+        let response = apiClient.post(path: "/api/v1/login", body: requestBody, timeout: 10)
+        let responseCode = response.code
 
         guard responseCode == 200 else {
-            let errorMessage = response["error"] as? String ?? "Unknown error"
+            let errorMessage = response.error ?? "Unknown error"
             logger.error("Login request failed host=\(server.host) port=\(server.port) sni=\(sni) code=\(responseCode) error=\(errorMessage)")
             return .failure(NSError(
                 domain: "VPNService",
@@ -261,7 +262,7 @@ final class VPNService: ObservableObject {
             ))
         }
 
-        guard let body = response["body"] as? String,
+        guard let body = response.body,
               let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let accessToken = json["access_token"] as? String else {
@@ -284,11 +285,11 @@ final class VPNService: ObservableObject {
         accessToken: String,
         sni: String,
         censorshipStrategy: String
-    ) async -> Result<(String, String), Error> {
+    ) async -> Result<(String, String?), Error> {
         logger.info("DNS request start host=\(server.host) port=\(server.port) sni=\(sni) strategy=\(censorshipStrategy)")
         _ = accessToken
 
-        let httpsClient = HttpsClientSwift(
+        let apiClient = ApiClientBridge(
             host: server.host,
             port: server.port,
             sni: sni,
@@ -296,11 +297,11 @@ final class VPNService: ObservableObject {
             censorshipStrategy: censorshipStrategy
         )
 
-        let response = httpsClient.get(path: "/api/v1/dns", timeout: 10)
-        let responseCode = response["code"] as? Int32 ?? -1
+        let response = apiClient.get(path: "/api/v1/dns", timeout: 10)
+        let responseCode = response.code
 
         guard responseCode == 200 else {
-            let errorMessage = response["error"] as? String ?? "Unknown error"
+            let errorMessage = response.error ?? "Unknown error"
             logger.error("DNS request failed host=\(server.host) port=\(server.port) sni=\(sni) code=\(responseCode) error=\(errorMessage)")
             return .failure(NSError(
                 domain: "VPNService",
@@ -309,7 +310,7 @@ final class VPNService: ObservableObject {
             ))
         }
 
-        guard let body = response["body"] as? String,
+        guard let body = response.body,
               let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let dnsIPv4 = json["dns"] as? String else {
@@ -321,8 +322,8 @@ final class VPNService: ObservableObject {
             ))
         }
 
-        let dnsIPv6 = json["dns_ipv6"] as? String ?? "fd00::1"
-        logger.debug("DNS IPv4: \(dnsIPv4)  IPv6: \(dnsIPv6)")
+        let dnsIPv6 = Self.validIPv6(json["dns_ipv6"] as? String)
+        logger.debug("DNS IPv4: \(dnsIPv4)  IPv6: \(dnsIPv6 ?? "none")")
         return .success((dnsIPv4, dnsIPv6))
     }
 
@@ -332,7 +333,7 @@ final class VPNService: ObservableObject {
         server: VPNServer,
         accessToken: String,
         dnsIPv4: String,
-        dnsIPv6: String,
+        dnsIPv6: String?,
         sni: String,
         bypassMethod: String
     ) async -> Result<NETunnelProviderManager, Error> {
@@ -356,12 +357,11 @@ final class VPNService: ObservableObject {
                 config.providerBundleIdentifier = "net.mrmidi.FptnVPN.FptnVPNTunnel"
 
                 let appFilter = AppFilterService.shared
-                config.providerConfiguration = [
+                var providerConfiguration: [String: Any] = [
                     "server": server.host,
                     "port": server.port,
                     "accessToken": accessToken,
                     "dnsIPv4": dnsIPv4,
-                    "dnsIPv6": dnsIPv6,
                     "sni": sni,
                     "logLevel": SettingsService.shared.logLevel.rawValue,
                     "md5Fingerprint": server.md5_fingerprint,
@@ -373,6 +373,10 @@ final class VPNService: ObservableObject {
                     "perAppMode": appFilter.mode.rawValue,
                     "allowedApps": appFilter.selectedBundleIDs.joined(separator: ",")
                 ]
+                if let dnsIPv6 {
+                    providerConfiguration["dnsIPv6"] = dnsIPv6
+                }
+                config.providerConfiguration = providerConfiguration
 
                 manager.protocolConfiguration = config
                 manager.localizedDescription = "FPTN"
@@ -511,7 +515,7 @@ final class VPNService: ObservableObject {
         }
 
         logger.info(
-            "Tunnel snapshot state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) last_error=\(snapshot.lastTransportError ?? "-") last_stop=\(snapshot.lastStopReason ?? "-") last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-")"
+            "Tunnel snapshot state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) ipv6=\(snapshot.ipv6Enabled) ws_started=\(snapshot.websocketStarted) ws_idle=\(snapshot.websocketIdleTimeoutSeconds)s last_error=\(snapshot.lastTransportError ?? snapshot.websocketLastError ?? "-") last_stop=\(snapshot.lastStopReason ?? "-") last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-")"
         )
     }
 
@@ -682,6 +686,14 @@ private extension NEVPNStatus {
 }
 
 private extension VPNService {
+    nonisolated static func validIPv6(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        var addr = in6_addr()
+        return value.withCString { inet_pton(AF_INET6, $0, &addr) == 1 ? value : nil }
+    }
+
     nonisolated static func describeDisconnectError(_ error: NSError) -> String {
         guard error.domain == NEVPNConnectionErrorDomain else {
             return "provider_or_system_error"

@@ -1,6 +1,6 @@
 #ifndef FPTN_TVOS_BRIDGING_HEADER
 #define FPTN_TVOS_BRIDGING_HEADER
 
-#import "WrapperHttpsClientBridge.h"
+#import "WrapperApiClientBridge.h"
 
 #endif // FPTN_TVOS_BRIDGING_HEADER

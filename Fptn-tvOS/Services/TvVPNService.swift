@@ -134,7 +134,7 @@ final class TvVPNService {
     }
 
     private func loginToServer(server: TvVPNServer, sni: String, username: String, password: String) async throws -> String {
-        let client = TvHttpsClientSwift(
+        let client = TvApiClientBridge(
             host: server.host,
             port: server.port,
             sni: sni,
@@ -148,14 +148,14 @@ final class TvVPNService {
         }
 
         let response = client.post(path: "/api/v1/login", body: bodyString, timeout: timeoutSeconds)
-        let responseCode = httpCode(from: response)
+        let responseCode = response.code
         guard responseCode == 200 else {
-            let codeDescription = responseCode.map(String.init) ?? "unknown"
-            let serverError = (response["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let codeDescription = String(responseCode)
+            let serverError = response.error?.trimmingCharacters(in: .whitespacesAndNewlines)
             throw NSError(domain: "TvVPNService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Login failed (HTTP \(codeDescription))\(serverError.map { ": \($0)" } ?? "")"])
         }
 
-        guard let responseBody = response["body"] as? String,
+        guard let responseBody = response.body,
               let responseData = responseBody.data(using: .utf8) else {
             throw NSError(domain: "TvVPNService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing login response body"])
         }
@@ -171,7 +171,7 @@ final class TvVPNService {
     }
 
     private func fetchDNSInfo(server: TvVPNServer, sni: String, accessToken: String) async throws -> TvDNSResolved {
-        let client = TvHttpsClientSwift(
+        let client = TvApiClientBridge(
             host: server.host,
             port: server.port,
             sni: sni,
@@ -180,14 +180,14 @@ final class TvVPNService {
         _ = accessToken
 
         let response = client.get(path: "/api/v1/dns", timeout: timeoutSeconds)
-        let responseCode = httpCode(from: response)
+        let responseCode = response.code
         guard responseCode == 200 else {
-            let codeDescription = responseCode.map(String.init) ?? "unknown"
-            let serverError = (response["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let codeDescription = String(responseCode)
+            let serverError = response.error?.trimmingCharacters(in: .whitespacesAndNewlines)
             throw NSError(domain: "TvVPNService", code: -1, userInfo: [NSLocalizedDescriptionKey: "DNS fetch failed (HTTP \(codeDescription))\(serverError.map { ": \($0)" } ?? "")"])
         }
 
-        guard let responseBody = response["body"] as? String,
+        guard let responseBody = response.body,
               let bodyData = responseBody.data(using: .utf8) else {
             throw NSError(domain: "TvVPNService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing DNS response body"])
         }
@@ -296,12 +296,6 @@ final class TvVPNService {
         }
     }
 
-    private func httpCode(from response: [String: Any]) -> Int? {
-        if let intCode = response["code"] as? Int { return intCode }
-        if let int32Code = response["code"] as? Int32 { return Int(int32Code) }
-        if let doubleCode = response["code"] as? Double { return Int(doubleCode) }
-        return nil
-    }
 }
 
 private struct TvDNSResolved {

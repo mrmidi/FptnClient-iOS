@@ -118,7 +118,7 @@ final class MacVPNService: ObservableObject {
         username: String,
         password: String
     ) throws -> String {
-        let client = MacHttpsClientSwift(
+        let client = MacApiClientBridge(
             host: server.host,
             port: server.port,
             sni: sni,
@@ -138,16 +138,16 @@ final class MacVPNService: ObservableObject {
         }
 
         let response = client.post(path: "/api/v1/login", body: bodyString, timeout: timeoutSeconds)
-        let responseCode = httpCode(from: response)
+        let responseCode = response.code
         guard responseCode == 200 else {
-            let codeDescription = responseCode.map(String.init) ?? "unknown"
-            let serverError = (response["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let codeDescription = String(responseCode)
+            let serverError = response.error?.trimmingCharacters(in: .whitespacesAndNewlines)
             throw NSError(domain: "MacVPNService", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "Login failed (HTTP \(codeDescription))\(serverError.map { ": \($0)" } ?? "")"
             ])
         }
 
-        guard let responseBody = response["body"] as? String,
+        guard let responseBody = response.body,
               let bodyData = responseBody.data(using: .utf8) else {
             throw NSError(domain: "MacVPNService", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "Missing login response body"
@@ -166,7 +166,7 @@ final class MacVPNService: ObservableObject {
     }
 
     private func fetchDNSInfo(server: MacVPNServer, sni: String, accessToken: String) throws -> MacDNSResolved {
-        let client = MacHttpsClientSwift(
+        let client = MacApiClientBridge(
             host: server.host,
             port: server.port,
             sni: sni,
@@ -175,16 +175,16 @@ final class MacVPNService: ObservableObject {
         _ = accessToken
 
         let response = client.get(path: "/api/v1/dns", timeout: timeoutSeconds)
-        let responseCode = httpCode(from: response)
+        let responseCode = response.code
         guard responseCode == 200 else {
-            let codeDescription = responseCode.map(String.init) ?? "unknown"
-            let serverError = (response["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let codeDescription = String(responseCode)
+            let serverError = response.error?.trimmingCharacters(in: .whitespacesAndNewlines)
             throw NSError(domain: "MacVPNService", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "DNS fetch failed (HTTP \(codeDescription))\(serverError.map { ": \($0)" } ?? "")"
             ])
         }
 
-        guard let responseBody = response["body"] as? String,
+        guard let responseBody = response.body,
               let bodyData = responseBody.data(using: .utf8) else {
             throw NSError(domain: "MacVPNService", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "Missing DNS response body"
@@ -320,18 +320,6 @@ final class MacVPNService: ObservableObject {
         }
     }
 
-    private func httpCode(from response: [String: Any]) -> Int? {
-        if let code = response["code"] as? Int {
-            return code
-        }
-        if let code = response["code"] as? Int32 {
-            return Int(code)
-        }
-        if let number = response["code"] as? NSNumber {
-            return number.intValue
-        }
-        return nil
-    }
 }
 
 private struct MacDNSResolved {
