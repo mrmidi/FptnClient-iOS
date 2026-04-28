@@ -99,3 +99,5 @@ final class WebsocketClientBridge {
         return websocket_client_bridge_is_started(handle)
     }
 }
+
+extension WebsocketClientBridge: TunnelWebSocketTransport {}

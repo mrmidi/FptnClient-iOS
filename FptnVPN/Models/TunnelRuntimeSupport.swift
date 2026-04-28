@@ -11,6 +11,7 @@ enum TunnelProviderRuntimeState: String, Codable, Sendable {
     case starting
     case connected
     case reasserting
+    case waitingForNetwork
     case stopping
     case failed
 }

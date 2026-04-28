@@ -70,4 +70,93 @@ struct FptnVPNTests {
 
         #expect(nextState == .connected)
     }
+
+    @Test func lifecycleStopWhileConnectedCancelsReconnectAndStopsTransport() {
+        let transition = TunnelLifecycleRuntime.nextTransition(
+            intent: .running,
+            state: .connected,
+            activeGeneration: 1,
+            event: .stopRequested(initiator: "app_disconnect")
+        )
+
+        #expect(transition.intent == .stopped)
+        #expect(transition.state == .stopping)
+        #expect(transition.effects.contains(.cancelReconnect))
+        #expect(transition.effects.contains(.stopWebSocket))
+    }
+
+    @Test func lifecycleDisconnectWhileStoppedNeverSchedulesReconnect() {
+        let transition = TunnelLifecycleRuntime.nextTransition(
+            intent: .stopped,
+            state: .stopping,
+            activeGeneration: 1,
+            event: .transportDisconnected(
+                generation: 1,
+                reason: "connection_closed",
+                wasConnected: true,
+                pathSatisfied: true
+            )
+        )
+
+        #expect(!transition.effects.contains(.scheduleReconnect(attempt: 1)))
+        #expect(!transition.effects.contains(.startWebSocket))
+    }
+
+    @Test func lifecycleRuntimeDisconnectSchedulesReconnectWhenPathIsAvailable() {
+        let transition = TunnelLifecycleRuntime.nextTransition(
+            intent: .running,
+            state: .connected,
+            activeGeneration: 2,
+            event: .transportDisconnected(
+                generation: 2,
+                reason: "server_disconnected",
+                wasConnected: true,
+                pathSatisfied: true
+            )
+        )
+
+        #expect(transition.state == .reasserting(attempt: 1))
+        #expect(transition.effects == [.scheduleReconnect(attempt: 1)])
+    }
+
+    @Test func lifecycleRuntimeDisconnectWaitsForNetworkWithoutStartingTransport() {
+        let transition = TunnelLifecycleRuntime.nextTransition(
+            intent: .running,
+            state: .connected,
+            activeGeneration: 3,
+            event: .transportDisconnected(
+                generation: 3,
+                reason: "network_lost",
+                wasConnected: true,
+                pathSatisfied: false
+            )
+        )
+
+        #expect(transition.state == .waitingForNetwork(attempt: 1))
+        #expect(transition.effects == [.waitForNetwork(attempt: 1)])
+    }
+
+    @Test func lifecyclePathRestoredSchedulesPendingReconnect() {
+        let transition = TunnelLifecycleRuntime.nextTransition(
+            intent: .running,
+            state: .waitingForNetwork(attempt: 2),
+            activeGeneration: 4,
+            event: .networkPathChanged(isSatisfied: true)
+        )
+
+        #expect(transition.state == .reasserting(attempt: 2))
+        #expect(transition.effects == [.scheduleReconnect(attempt: 2)])
+    }
+
+    @Test func lifecycleStaleWebSocketCallbackIsIgnored() {
+        let transition = TunnelLifecycleRuntime.nextTransition(
+            intent: .running,
+            state: .reasserting(attempt: 1),
+            activeGeneration: 8,
+            event: .transportConnected(generation: 7)
+        )
+
+        #expect(transition.state == .reasserting(attempt: 1))
+        #expect(transition.effects == [.ignoreStaleCallback])
+    }
 }

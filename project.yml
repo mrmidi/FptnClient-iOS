@@ -74,6 +74,7 @@ targets:
           - Cpp/*.framework/**
           - Cpp/*.framework.dSYM
           - Cpp/*.framework.dSYM/**
+      - SharedTunnelRuntime
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN
@@ -140,6 +141,7 @@ targets:
     platform: iOS
     sources:
       - FptnVPNTunnel
+      - SharedTunnelRuntime
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN.FptnVPNTunnel
@@ -176,6 +178,7 @@ targets:
           - Cpp/*.framework/**
           - Cpp/*.framework.dSYM
           - Cpp/*.framework.dSYM/**
+      - SharedTunnelRuntime
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS
@@ -221,6 +224,7 @@ targets:
     platform: macOS
     sources:
       - Fptn-macOS-Tunnel
+      - SharedTunnelRuntime
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel
@@ -333,6 +337,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnVPNTests
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FptnVPN
 
@@ -345,5 +350,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOSTests
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Fptn-macOS

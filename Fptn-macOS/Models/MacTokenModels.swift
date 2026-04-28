@@ -34,15 +34,18 @@ enum MacTunnelMessageAction: String, Codable {
     case setLogLevel = "set_log_level"
     case ping
     case getStatus = "get_status"
+    case prepareStop = "prepare_stop"
 }
 
 struct MacTunnelControlMessage: Codable {
     let action: MacTunnelMessageAction
     let logLevel: String?
+    let initiator: String?
 
-    init(action: MacTunnelMessageAction, logLevel: String? = nil) {
+    init(action: MacTunnelMessageAction, logLevel: String? = nil, initiator: String? = nil) {
         self.action = action
         self.logLevel = logLevel
+        self.initiator = initiator
     }
 }
 

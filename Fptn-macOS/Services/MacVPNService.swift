@@ -216,8 +216,37 @@ final class MacVPNService: ObservableObject {
     func disconnect() {
         errorText = nil
         statusText = "Disconnecting..."
-        manager?.connection.stopVPNTunnel()
-        syncStatus()
+        guard let session = manager?.connection as? NETunnelProviderSession else {
+            manager?.connection.stopVPNTunnel()
+            syncStatus()
+            return
+        }
+
+        let message = MacTunnelControlMessage(
+            action: .prepareStop,
+            initiator: "app_disconnect"
+        )
+        guard let payload = try? JSONEncoder().encode(message) else {
+            manager?.connection.stopVPNTunnel()
+            syncStatus()
+            return
+        }
+
+        do {
+            try session.sendProviderMessage(payload) { [weak self] responseData in
+                Task { @MainActor in
+                    if responseData == nil {
+                        self?.errorText = "Tunnel did not acknowledge disconnect request"
+                    }
+                    self?.manager?.connection.stopVPNTunnel()
+                    self?.syncStatus()
+                }
+            }
+        } catch {
+            errorText = "Tunnel disconnect message failed: \(error.localizedDescription)"
+            manager?.connection.stopVPNTunnel()
+            syncStatus()
+        }
     }
 
     func pingTunnel() {

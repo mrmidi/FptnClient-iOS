@@ -5,13 +5,16 @@
 //  Created by Aleksandr Shabelnikov on 02.03.2026.
 //
 
+import Darwin
 import Foundation
+import Network
 import NetworkExtension
 import OSLog
 
 private struct MacTunnelControlMessage: Codable {
     let action: MacTunnelMessageAction
     let logLevel: String?
+    let initiator: String?
 }
 
 private struct MacTunnelControlResponse: Codable {
@@ -23,6 +26,7 @@ private enum MacTunnelMessageAction: String, Codable {
     case setLogLevel = "set_log_level"
     case ping
     case getStatus = "get_status"
+    case prepareStop = "prepare_stop"
 }
 
 private enum MacTunnelProviderConfig {
@@ -34,118 +38,149 @@ private enum MacTunnelProviderConfig {
     static let sni = "sni"
     static let md5Fingerprint = "md5Fingerprint"
     static let logLevel = "logLevel"
+    static let reconnectEnabled = "reconnectEnabled"
+    static let maxReconnectAttempts = "maxReconnectAttempts"
+    static let reconnectDelaySeconds = "reconnectDelaySeconds"
 }
 
-final class PacketTunnelProvider: NEPacketTunnelProvider {
-    private let log = Logger(subsystem: "net.mrmidi.Fptn-macOS", category: "PacketTunnel")
+private enum MacTunnelRuntimeState: String {
+    case idle
+    case starting
+    case connected
+    case reasserting
+    case waitingForNetwork
+    case stopping
+    case failed
+}
 
-    private let stateQueue = DispatchQueue(label: "net.mrmidi.Fptn-macOS.tunnel.state")
-    private var wsClient: WebsocketClientBridge?
-    private var startCompletion: ((Error?) -> Void)?
-    private var startTimeoutWorkItem: DispatchWorkItem?
-    private var didCompleteStart = false
+private struct MacTunnelConfiguration {
+    let server: String
+    let port: Int
+    let accessToken: String
+    let dnsIPv4: String
+    let dnsIPv6: String
+    let sni: String
+    let md5Fingerprint: String
+    let logLevel: String
+    let reconnectEnabled: Bool
+    let maxReconnectAttempts: Int
+    let reconnectDelaySeconds: Int
+    let tunIPv4 = "10.8.0.2"
+    let tunIPv4Gateway = "10.8.0.1"
 
-    private var isRunning = false
-    private var runtimeLogLevel = "warning"
-
-    override func startTunnel(
-        options: [String : NSObject]?,
-        completionHandler: @escaping (Error?) -> Void
-    ) {
-        guard let config = protocolConfiguration as? NETunnelProviderProtocol,
-              let providerConfig = config.providerConfiguration else {
-            completionHandler(makeError("Missing providerConfiguration"))
-            return
-        }
-
+    init?(providerConfig: [String: Any]) {
         guard let server = providerConfig[MacTunnelProviderConfig.server] as? String,
               let port = providerConfig[MacTunnelProviderConfig.port] as? Int,
               let accessToken = providerConfig[MacTunnelProviderConfig.accessToken] as? String,
               let dnsIPv4 = providerConfig[MacTunnelProviderConfig.dnsIPv4] as? String,
               let sni = providerConfig[MacTunnelProviderConfig.sni] as? String,
               let md5 = providerConfig[MacTunnelProviderConfig.md5Fingerprint] as? String else {
-            completionHandler(makeError("Incomplete providerConfiguration"))
+            return nil
+        }
+
+        self.server = server
+        self.port = port
+        self.accessToken = accessToken
+        self.dnsIPv4 = dnsIPv4
+        self.dnsIPv6 = providerConfig[MacTunnelProviderConfig.dnsIPv6] as? String ?? "2606:4700:4700::1111"
+        self.sni = sni
+        self.md5Fingerprint = md5
+        self.logLevel = providerConfig[MacTunnelProviderConfig.logLevel] as? String ?? "warning"
+        self.reconnectEnabled = providerConfig[MacTunnelProviderConfig.reconnectEnabled] as? Bool ?? true
+        self.maxReconnectAttempts = providerConfig[MacTunnelProviderConfig.maxReconnectAttempts] as? Int ?? 0
+        self.reconnectDelaySeconds = providerConfig[MacTunnelProviderConfig.reconnectDelaySeconds] as? Int ?? 2
+    }
+}
+
+final class PacketTunnelProvider: NEPacketTunnelProvider {
+    private let log = Logger(subsystem: "net.mrmidi.Fptn-macOS", category: "PacketTunnel")
+    private let eventQueue = DispatchQueue(label: "net.mrmidi.Fptn-macOS.tunnel.events")
+
+    private var wsClient: WebsocketClientBridge?
+    private var configuration: MacTunnelConfiguration?
+    private var startCompletion: ((Error?) -> Void)?
+    private var startTimeoutWorkItem: DispatchWorkItem?
+    private var reconnectWorkItem: DispatchWorkItem?
+    private var pathMonitor: NWPathMonitor?
+    private var runtimeState: MacTunnelRuntimeState = .idle
+    private var websocketGeneration = 0
+    private var reconnectAttempt = 0
+    private var shutdownRequested = false
+    private var isNetworkPathSatisfied = true
+    private var didApplyNetworkSettings = false
+    private var isReadLoopActive = false
+
+    private let runtimeReconnectDelayCapSeconds = 60
+
+    override func startTunnel(
+        options: [String: NSObject]?,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
+        guard let config = protocolConfiguration as? NETunnelProviderProtocol,
+              let providerConfig = config.providerConfiguration,
+              let runtimeConfig = MacTunnelConfiguration(providerConfig: providerConfig) else {
+            completionHandler(makeError("Missing or incomplete providerConfiguration"))
             return
         }
 
-        let dnsIPv6 = providerConfig[MacTunnelProviderConfig.dnsIPv6] as? String ?? "2606:4700:4700::1111"
-        self.runtimeLogLevel = providerConfig[MacTunnelProviderConfig.logLevel] as? String ?? "warning"
-        self.isRunning = false
-
-        stateQueue.sync {
+        eventQueue.async {
+            self.configuration = runtimeConfig
             self.startCompletion = completionHandler
-            self.didCompleteStart = false
-        }
+            self.runtimeState = .starting
+            self.websocketGeneration = 0
+            self.reconnectAttempt = 0
+            self.shutdownRequested = false
+            self.isNetworkPathSatisfied = true
+            self.didApplyNetworkSettings = false
+            self.isReadLoopActive = false
 
-        log.log("startTunnel server=\(server, privacy: .public):\(port, privacy: .public) sni=\(sni, privacy: .public) logLevel=\(self.runtimeLogLevel, privacy: .public)")
-        log.debug("tokenLength=\(accessToken.count, privacy: .public) md5=\(md5, privacy: .private(mask: .hash))")
+            self.log.log("startTunnel server=\(runtimeConfig.server, privacy: .public):\(runtimeConfig.port, privacy: .public) sni=\(runtimeConfig.sni, privacy: .public) logLevel=\(runtimeConfig.logLevel, privacy: .public)")
+            self.log.debug("tokenLength=\(runtimeConfig.accessToken.count, privacy: .public) md5=\(runtimeConfig.md5Fingerprint, privacy: .private(mask: .hash))")
 
-        let tunIPv4 = "10.8.0.2"
-        let tunIPv4Gateway = "10.8.0.1"
-
-        scheduleStartTimeout(seconds: 15)
-
-        wsClient = WebsocketClientBridge(
-            serverIP: server,
-            serverPort: port,
-            tunInterfaceIPv4: tunIPv4,
-            sni: sni,
-            accessToken: accessToken,
-            md5Fingerprint: md5,
-            packetCallback: { [weak self] packet in
-                self?.handleIncomingPacketFromServer(packet)
-            },
-            connectedCallback: { [weak self] in
-                self?.log.log("WebSocket connected; applying packet tunnel settings")
-                self?.applyNetworkSettings(
-                    tunIPv4: tunIPv4,
-                    tunIPv4Gateway: tunIPv4Gateway,
-                    dnsIPv4: dnsIPv4,
-                    dnsIPv6: dnsIPv6
-                ) { error in
-                    if let error {
-                        self?.log.error("setTunnelNetworkSettings failed: \(error.localizedDescription, privacy: .public)")
-                        self?.finishStart(with: error)
-                        return
-                    }
-                    self?.isRunning = true
-                    self?.startReadLoop()
-                    self?.finishStart(with: nil)
-                }
-            }
-        )
-
-        guard wsClient?.start() == true else {
-            finishStart(with: makeError("WebSocket start failed"))
-            return
+            self.startPathMonitor()
+            self.scheduleStartTimeout(seconds: 15)
+            self.startWebSocket(using: runtimeConfig, context: "initial_start")
         }
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        isRunning = false
-        invalidateStartTimeout()
-        finishStart(with: makeError("Tunnel stopped before startup completed"))
-        _ = wsClient?.stop()
-        wsClient = nil
-        log.log("stopTunnel reason=\(reason.rawValue, privacy: .public)")
-        completionHandler()
+        eventQueue.async {
+            self.shutdownRequested = true
+            self.runtimeState = .stopping
+            self.isReadLoopActive = false
+            self.cancelStartTimeout()
+            self.cancelPendingReconnect()
+            self.stopPathMonitor()
+            self.finishStart(with: self.makeError("Tunnel stopped before startup completed"))
+            self.replaceWebSocketClient(with: nil, stopCurrent: true)
+            self.log.log("stopTunnel reason=\(reason.rawValue, privacy: .public)")
+            completionHandler()
+        }
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
-        guard let message = try? JSONDecoder().decode(MacTunnelControlMessage.self, from: messageData) else {
-            completionHandler?(encodeResponse(.init(ok: false, message: "invalid_payload")))
-            return
-        }
+        eventQueue.async {
+            guard let message = try? JSONDecoder().decode(MacTunnelControlMessage.self, from: messageData) else {
+                completionHandler?(self.encodeResponse(.init(ok: false, message: "invalid_payload")))
+                return
+            }
 
-        switch message.action {
-        case .ping:
-            completionHandler?(encodeResponse(.init(ok: true, message: "pong")))
-        case .getStatus:
-            let status = isRunning ? (wsClient?.isStarted == true ? "running" : "starting") : "stopped"
-            completionHandler?(encodeResponse(.init(ok: true, message: status)))
-        case .setLogLevel:
-            runtimeLogLevel = message.logLevel ?? "warning"
-            completionHandler?(encodeResponse(.init(ok: true, message: "log_level_updated")))
+            switch message.action {
+            case .ping:
+                completionHandler?(self.encodeResponse(.init(ok: true, message: "pong")))
+            case .getStatus:
+                completionHandler?(self.encodeResponse(.init(ok: true, message: self.runtimeState.rawValue)))
+            case .setLogLevel:
+                completionHandler?(self.encodeResponse(.init(ok: true, message: "log_level_updated")))
+            case .prepareStop:
+                if message.initiator == "app_disconnect" {
+                    self.shutdownRequested = true
+                    self.isReadLoopActive = false
+                    self.cancelPendingReconnect()
+                    self.log.info("Marked local stop initiator via IPC: app_disconnect; reconnect will be suppressed")
+                }
+                completionHandler?(self.encodeResponse(.init(ok: true, message: "stop_initiator_recorded")))
+            }
         }
     }
 
@@ -158,56 +193,228 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         log.debug("wake")
     }
 
+    private func startWebSocket(using configuration: MacTunnelConfiguration, context: String) {
+        guard !shutdownRequested else {
+            log.info("Skipping WebSocket start context=\(context, privacy: .public) because shutdown was requested")
+            return
+        }
+
+        websocketGeneration += 1
+        let generation = websocketGeneration
+        let client = WebsocketClientBridge(
+            serverIP: configuration.server,
+            serverPort: configuration.port,
+            tunInterfaceIPv4: configuration.tunIPv4,
+            sni: configuration.sni,
+            accessToken: configuration.accessToken,
+            md5Fingerprint: configuration.md5Fingerprint,
+            packetCallback: { [weak self] packet in
+                self?.eventQueue.async {
+                    self?.handleIncomingPacketFromServer(packet, generation: generation)
+                }
+            },
+            connectedCallback: { [weak self] in
+                self?.eventQueue.async {
+                    self?.handleTransportConnected(generation: generation)
+                }
+            },
+            disconnectedCallback: { [weak self] wasConnected, reason in
+                self?.eventQueue.async {
+                    self?.handleTransportDisconnected(
+                        generation: generation,
+                        wasConnected: wasConnected,
+                        reason: reason
+                    )
+                }
+            }
+        )
+
+        replaceWebSocketClient(with: client, stopCurrent: false)
+        guard client.start() else {
+            replaceWebSocketClient(with: nil, stopCurrent: false)
+            handleTransportDisconnected(generation: generation, wasConnected: false, reason: "WebSocket start failed")
+            return
+        }
+
+        log.debug("WebSocket start issued context=\(context, privacy: .public) generation=\(generation, privacy: .public)")
+    }
+
+    private func handleTransportConnected(generation: Int) {
+        guard generation == websocketGeneration else {
+            log.info("Ignoring stale websocket connected callback generation=\(generation, privacy: .public)")
+            return
+        }
+        guard !shutdownRequested else {
+            replaceWebSocketClient(with: nil, stopCurrent: true)
+            return
+        }
+        guard let configuration else {
+            finishStart(with: makeError("Transport connected without runtime configuration"))
+            return
+        }
+
+        log.log("WebSocket connected generation=\(generation, privacy: .public)")
+        if !didApplyNetworkSettings && runtimeState == .starting {
+            applyNetworkSettings(configuration: configuration) { [weak self] error in
+                self?.eventQueue.async {
+                    guard let self else { return }
+                    if let error {
+                        self.runtimeState = .failed
+                        self.finishStart(with: error)
+                        self.replaceWebSocketClient(with: nil, stopCurrent: true)
+                        return
+                    }
+                    self.didApplyNetworkSettings = true
+                    self.runtimeState = .connected
+                    self.reconnectAttempt = 0
+                    self.isReadLoopActive = true
+                    self.startReadLoop()
+                    self.finishStart(with: nil)
+                }
+            }
+            return
+        }
+
+        runtimeState = .connected
+        reconnectAttempt = 0
+        isReadLoopActive = true
+        startReadLoop()
+    }
+
+    private func handleTransportDisconnected(generation: Int, wasConnected: Bool, reason: String) {
+        guard generation == websocketGeneration else {
+            log.info("Ignoring stale websocket disconnected callback generation=\(generation, privacy: .public) reason=\(reason, privacy: .public)")
+            return
+        }
+
+        log.warning("WebSocket disconnected generation=\(generation, privacy: .public) wasConnected=\(wasConnected, privacy: .public) reason=\(reason, privacy: .public)")
+        replaceWebSocketClient(with: nil, stopCurrent: false)
+        cancelStartTimeout()
+
+        guard !shutdownRequested else {
+            runtimeState = .stopping
+            log.info("Suppressing reconnect because shutdown was requested")
+            return
+        }
+
+        guard runtimeState != .starting else {
+            runtimeState = .failed
+            finishStart(with: makeError(reason))
+            return
+        }
+
+        scheduleReconnect()
+    }
+
+    private func scheduleReconnect() {
+        guard let configuration else {
+            log.info("Skipping reconnect schedule because runtime configuration is missing")
+            return
+        }
+        guard configuration.reconnectEnabled else {
+            log.info("Skipping reconnect schedule because reconnect is disabled")
+            return
+        }
+        guard !shutdownRequested else {
+            log.info("Skipping reconnect schedule because shutdown was requested")
+            return
+        }
+
+        reconnectAttempt += 1
+        let attempt = reconnectAttempt
+        if !isNetworkPathSatisfied {
+            runtimeState = .waitingForNetwork
+            log.warning("Waiting for network path before reconnect attempt \(attempt, privacy: .public)")
+            return
+        }
+
+        runtimeState = .reasserting
+        let generation = websocketGeneration
+        let delaySeconds = computedReconnectDelaySeconds(
+            attempt: attempt,
+            baseDelaySeconds: configuration.reconnectDelaySeconds
+        )
+        reconnectWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.eventQueue.async {
+                self?.performReconnectAttempt(expectedGeneration: generation)
+            }
+        }
+        reconnectWorkItem = workItem
+
+        if configuration.maxReconnectAttempts != 0 && attempt > configuration.maxReconnectAttempts {
+            log.warning("Reconnect attempt \(attempt, privacy: .public) exceeded configured budget \(configuration.maxReconnectAttempts, privacy: .public); continuing runtime recovery with backoff \(delaySeconds, privacy: .public)s")
+        } else {
+            log.warning("Scheduling reconnect attempt \(attempt, privacy: .public) after \(delaySeconds, privacy: .public)s")
+        }
+        eventQueue.asyncAfter(deadline: .now() + .seconds(delaySeconds), execute: workItem)
+    }
+
+    private func performReconnectAttempt(expectedGeneration: Int) {
+        guard let configuration, !shutdownRequested, expectedGeneration == websocketGeneration else {
+            log.info("Skipping reconnect attempt because it is stale or shutdown was requested")
+            return
+        }
+        guard isNetworkPathSatisfied else {
+            runtimeState = .waitingForNetwork
+            log.warning("Reconnect delayed because network path is unsatisfied")
+            return
+        }
+
+        reconnectWorkItem = nil
+        log.warning("Starting reconnect attempt \(reconnectAttempt, privacy: .public)")
+        startWebSocket(using: configuration, context: "reconnect_attempt_\(reconnectAttempt)")
+    }
+
     private func applyNetworkSettings(
-        tunIPv4: String,
-        tunIPv4Gateway: String,
-        dnsIPv4: String,
-        dnsIPv6: String,
+        configuration: MacTunnelConfiguration,
         completion: @escaping (Error?) -> Void
     ) {
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: tunIPv4Gateway)
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: configuration.tunIPv4Gateway)
 
-        let ipv4 = NEIPv4Settings(addresses: [tunIPv4], subnetMasks: ["255.255.255.0"])
+        let ipv4 = NEIPv4Settings(addresses: [configuration.tunIPv4], subnetMasks: ["255.255.255.0"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
-        var servers = [dnsIPv4]
-        if !dnsIPv6.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           dnsIPv6.contains(":") {
-            servers.append(dnsIPv6)
+        var servers = [configuration.dnsIPv4]
+        if !configuration.dnsIPv6.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           configuration.dnsIPv6.contains(":") {
+            servers.append(configuration.dnsIPv6)
         }
 
         let dns = NEDNSSettings(servers: servers)
         dns.matchDomains = [""]
         settings.dnsSettings = dns
-
         settings.mtu = 1500
 
         setTunnelNetworkSettings(settings, completionHandler: completion)
     }
 
     private func startReadLoop() {
-        guard isRunning else { return }
+        guard isReadLoopActive else { return }
         packetFlow.readPackets { [weak self] packets, _ in
-            guard let self, self.isRunning else { return }
+            self?.eventQueue.async {
+                guard let self, self.isReadLoopActive else { return }
 
-            var failedPackets = 0
-            for packet in packets {
-                if self.wsClient?.sendPacket(packet) != true {
-                    failedPackets += 1
+                var failedPackets = 0
+                let client = self.wsClient
+                for packet in packets {
+                    if client?.sendPacket(packet) != true {
+                        failedPackets += 1
+                    }
                 }
-            }
 
-            if failedPackets > 0 {
-                self.log.error("Failed to send \(failedPackets, privacy: .public) packets to websocket")
-            }
+                if failedPackets > 0 {
+                    self.log.error("Failed to send \(failedPackets, privacy: .public) packets to websocket")
+                }
 
-            self.startReadLoop()
+                self.startReadLoop()
+            }
         }
     }
 
-    private func handleIncomingPacketFromServer(_ packet: Data) {
-        guard isRunning else { return }
+    private func handleIncomingPacketFromServer(_ packet: Data, generation: Int) {
+        guard generation == websocketGeneration, isReadLoopActive else { return }
         let protocolNumber = ipProtocolNumber(for: packet)
         packetFlow.writePackets([packet], withProtocols: [protocolNumber])
     }
@@ -221,36 +428,80 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func scheduleStartTimeout(seconds: Int) {
-        invalidateStartTimeout()
+        cancelStartTimeout()
+        let generation = websocketGeneration
         let workItem = DispatchWorkItem { [weak self] in
-            self?.finishStart(with: self?.makeError("WebSocket connection timeout"))
+            self?.eventQueue.async {
+                guard let self, generation == self.websocketGeneration, !self.shutdownRequested else { return }
+                self.runtimeState = .failed
+                self.finishStart(with: self.makeError("WebSocket connection timeout"))
+                self.replaceWebSocketClient(with: nil, stopCurrent: true)
+            }
         }
         startTimeoutWorkItem = workItem
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .seconds(seconds), execute: workItem)
+        eventQueue.asyncAfter(deadline: .now() + .seconds(seconds), execute: workItem)
     }
 
-    private func invalidateStartTimeout() {
-        stateQueue.sync {
-            self.startTimeoutWorkItem?.cancel()
-            self.startTimeoutWorkItem = nil
+    private func cancelStartTimeout() {
+        startTimeoutWorkItem?.cancel()
+        startTimeoutWorkItem = nil
+    }
+
+    private func cancelPendingReconnect() {
+        reconnectWorkItem?.cancel()
+        reconnectWorkItem = nil
+    }
+
+    private func startPathMonitor() {
+        stopPathMonitor()
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            self?.eventQueue.async {
+                self?.handleNetworkPathChanged(isSatisfied: path.status == .satisfied)
+            }
         }
+        pathMonitor = monitor
+        monitor.start(queue: eventQueue)
+    }
+
+    private func stopPathMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
+    }
+
+    private func handleNetworkPathChanged(isSatisfied: Bool) {
+        let previous = isNetworkPathSatisfied
+        isNetworkPathSatisfied = isSatisfied
+        guard previous != isSatisfied else { return }
+
+        log.info("Network path satisfied=\(isSatisfied, privacy: .public)")
+        if isSatisfied && runtimeState == .waitingForNetwork {
+            scheduleReconnect()
+        }
+    }
+
+    private func replaceWebSocketClient(with newClient: WebsocketClientBridge?, stopCurrent: Bool) {
+        let previous = wsClient
+        wsClient = newClient
+        if stopCurrent {
+            _ = previous?.stop()
+        }
+    }
+
+    private func computedReconnectDelaySeconds(attempt: Int, baseDelaySeconds: Int) -> Int {
+        let safeBaseDelay = max(1, baseDelaySeconds)
+        let backoffStep = min(max(0, attempt - 1), 5)
+        let multiplier = 1 << backoffStep
+        return min(runtimeReconnectDelayCapSeconds, safeBaseDelay * multiplier)
     }
 
     private func finishStart(with error: Error?) {
-        let completion: ((Error?) -> Void)? = stateQueue.sync {
-            guard !self.didCompleteStart else { return nil }
-            self.didCompleteStart = true
-            self.startTimeoutWorkItem?.cancel()
-            self.startTimeoutWorkItem = nil
-            let pending = self.startCompletion
-            self.startCompletion = nil
-            return pending
-        }
+        let completion = startCompletion
+        startCompletion = nil
+        cancelStartTimeout()
 
         if error != nil {
-            isRunning = false
-            _ = wsClient?.stop()
-            wsClient = nil
+            isReadLoopActive = false
         }
 
         completion?(error)

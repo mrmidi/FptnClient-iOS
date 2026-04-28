@@ -79,25 +79,28 @@ final class VPNService: ObservableObject {
 
     func disconnect() {
         let manager = packetTunnelProvider
-        packetTunnelProvider = nil
-
-        if let observer = tunnelStatusObserver {
-            NotificationCenter.default.removeObserver(observer)
-            tunnelStatusObserver = nil
-        }
-
-        clearConnectionState(resetErrors: true)
+        connection.isConnected = false
+        connection.isConnecting = false
+        connection.isReconnecting = false
+        connection.runtimeState = .stopping
+        stopTimer()
+        stopSpeedMonitoring()
 
         Task {
             if let session = manager?.connection as? NETunnelProviderSession {
-                _ = try? await Self.sendProviderMessage(
-                    TunnelControlMessage(
-                        action: .prepareStop,
-                        initiator: "app_disconnect"
-                    ),
-                    via: session,
-                    expecting: TunnelControlResponse.self
-                )
+                do {
+                    _ = try await Self.sendProviderMessage(
+                        TunnelControlMessage(
+                            action: .prepareStop,
+                            initiator: "app_disconnect"
+                        ),
+                        via: session,
+                        expecting: TunnelControlResponse.self
+                    )
+                    logger.info("Tunnel acknowledged app disconnect request")
+                } catch {
+                    logger.warning("Tunnel prepare_stop before disconnect failed: \(error.localizedDescription)")
+                }
             }
             manager?.connection.stopVPNTunnel()
         }

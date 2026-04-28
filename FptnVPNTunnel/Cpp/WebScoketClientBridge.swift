@@ -151,3 +151,5 @@ final class WebsocketClientBridge {
         )
     }
 }
+
+extension WebsocketClientBridge: TunnelWebSocketTransport {}
