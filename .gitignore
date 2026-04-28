@@ -2,6 +2,9 @@
 # Android app is refernce only here
 FptnClient-Android/
 
+# Interntal tools. E.g. token decoder in python
+tools/
+
 # Xcode
 .DS_Store
 *.DS_Store
@@ -16,6 +19,21 @@ testflight/
 FptnVPN/Cpp/fptn_native_lib.framework/
 build/
 DerivedData/
+
+# XcodeGen — generated artifacts, source of truth is project.yml
+FptnVPN.xcodeproj/
+FptnVPN/Info.plist
+FptnVPN/FptnVPN.entitlements
+FptnVPNTunnel/Info.plist
+FptnVPNTunnel/FptnVPNTunnel.entitlements
+Fptn-macOS/Info.plist
+Fptn-macOS/Fptn_macOS.entitlements
+Fptn-macOS-Tunnel/Info.plist
+Fptn-macOS-Tunnel/Fptn_macOS_Tunnel.entitlements
+Fptn-tvOS/Info.plist
+Fptn-tvOS/Fptn_tvOS.entitlements
+Fptn-tvOS-Tunnel/Info.plist
+Fptn-tvOS-Tunnel/Fptn_tvOS_Tunnel.entitlements
 
 ## Various settings
 ExportOptions.plist

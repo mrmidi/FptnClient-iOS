@@ -1,0 +1,247 @@
+name: FptnVPN
+
+options:
+  bundleIdPrefix: net.mrmidi
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "13.0"
+    tvOS: "17.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: F6YA6B56LR
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+
+configs:
+  Debug: debug
+  Release: release
+
+# ── Target templates ───────────────────────────────────────────────────────────
+
+targetTemplates:
+
+  # Shared app settings
+  AppBase:
+    settings:
+      base:
+        ENABLE_PREVIEWS: YES
+
+  # Shared network-extension settings
+  TunnelBase:
+    type: app-extension
+    info:
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+
+# ── Targets ────────────────────────────────────────────────────────────────────
+
+targets:
+
+  # ── iOS App ──────────────────────────────────────────────────────────────────
+  FptnVPN:
+    templates: [AppBase]
+    type: application
+    platform: iOS
+    sources:
+      - path: FptnVPN
+        excludes:
+          - FptnVPNTunnel/**
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
+        OTHER_LDFLAGS: [-ObjC]
+        SWIFT_OBJC_BRIDGING_HEADER: FptnVPN/Cpp/FptnVPN-Bridging-Header.h
+    info:
+      path: FptnVPN/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIRequiredDeviceCapabilities:
+          - arm64
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations: {}
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: FptnVPN/FptnVPN.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+          - dns-settings
+          - content-filter-provider
+          - dns-proxy
+          - app-proxy-provider
+        com.apple.security.application-groups:
+          - group.net.mrmidi.FptnVPN
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)group.net.mrmidi.FptnVPN
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+    dependencies:
+      - target: FptnVPNTunnel
+        embed: true
+      - framework: FptnVPN/Cpp/fptn_native_lib.framework
+        embed: true
+        codeSign: true
+    preBuildScripts:
+      - name: Build FptnLib (Conan+CMake)
+        script: '"${SRCROOT}/build_fptn_lib.sh"'
+        basedOnDependencyAnalysis: false
+
+  # ── iOS Network Extension ─────────────────────────────────────────────────────
+  FptnVPNTunnel:
+    templates: [TunnelBase]
+    platform: iOS
+    sources:
+      - FptnVPNTunnel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN.FptnVPNTunnel
+    info:
+      path: FptnVPNTunnel/Info.plist
+    entitlements:
+      path: FptnVPNTunnel/FptnVPNTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.net.mrmidi.FptnVPN
+
+  # ── macOS App ─────────────────────────────────────────────────────────────────
+  Fptn-macOS:
+    templates: [AppBase]
+    type: application
+    platform: macOS
+    sources:
+      - path: Fptn-macOS
+        excludes:
+          - Fptn-macOS-Tunnel/**
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp
+        SWIFT_OBJC_BRIDGING_HEADER: Fptn-macOS/Cpp/Fptn_macOS-Bridging-Header.h
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+    info:
+      path: Fptn-macOS/Info.plist
+      properties:
+        NSPrincipalClass: NSApplication
+        LSApplicationCategoryType: public.app-category.utilities
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+    entitlements:
+      path: Fptn-macOS/Fptn_macOS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.net.mrmidi.FptnVPN
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)group.net.mrmidi.FptnVPN
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)net.mrmidi.FptnVPN
+        com.apple.security.network.client: true
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+    dependencies:
+      - target: Fptn-macOS-Tunnel
+        embed: true
+      - framework: Fptn-macOS/Cpp/fptn_native_lib.framework
+        embed: true
+        codeSign: true
+
+  # ── macOS Network Extension ───────────────────────────────────────────────────
+  Fptn-macOS-Tunnel:
+    templates: [TunnelBase]
+    platform: macOS
+    sources:
+      - Fptn-macOS-Tunnel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel
+        ENABLE_HARDENED_RUNTIME: YES
+    info:
+      path: Fptn-macOS-Tunnel/Info.plist
+    entitlements:
+      path: Fptn-macOS-Tunnel/Fptn_macOS_Tunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.net.mrmidi.FptnVPN
+
+  # ── tvOS App ──────────────────────────────────────────────────────────────────
+  Fptn-tvOS:
+    templates: [AppBase]
+    type: application
+    platform: tvOS
+    sources:
+      - path: Fptn-tvOS
+        excludes:
+          - Fptn-tvOS-Tunnel/**
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-tvOS
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-tvOS/Cpp
+        SWIFT_OBJC_BRIDGING_HEADER: Fptn-tvOS/Cpp/Fptn_tvOS-Bridging-Header.h
+    info:
+      path: Fptn-tvOS/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIRequiredDeviceCapabilities:
+          - arm64
+        UIUserInterfaceStyle: Automatic
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Fptn-tvOS/Fptn_tvOS.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.net.mrmidi.FptnVPN
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)group.net.mrmidi.FptnVPN
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)net.mrmidi.FptnVPN
+    dependencies:
+      - target: Fptn-tvOS-Tunnel
+        embed: true
+      - framework: Fptn-tvOS/Cpp/fptn_native_lib.framework
+        embed: true
+        codeSign: true
+
+  # ── tvOS Network Extension ────────────────────────────────────────────────────
+  Fptn-tvOS-Tunnel:
+    templates: [TunnelBase]
+    platform: tvOS
+    sources:
+      - Fptn-tvOS-Tunnel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-tvOS.Fptn-tvOS-Tunnel
+    info:
+      path: Fptn-tvOS-Tunnel/Info.plist
+    entitlements:
+      path: Fptn-tvOS-Tunnel/Fptn_tvOS_Tunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.net.mrmidi.FptnVPN
+
+  # ── Tests ─────────────────────────────────────────────────────────────────────
+  FptnVPNTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - FptnVPNTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnVPNTests
+    dependencies:
+      - target: FptnVPN
