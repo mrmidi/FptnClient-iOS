@@ -1,823 +1,2041 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "FPTN VPN" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "FPTN VPN" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "FPTN VPN" } }
-      }
-    },
-    "Secure your connection" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Secure your connection" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Защитите своё соединение" } }
-      }
-    },
-    "Get your free token from" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Get your free token from" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Получите бесплатный токен в" } }
-      }
+    "—" : {
+
     },
     "@fptn_bot" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "@fptn_bot" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "@fptn_bot" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "@fptn_bot"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "@fptn_bot"
+          }
+        }
       }
     },
-    "Token" : {
-      "extractionState" : "manual",
+    "%@" : {
+
+    },
+    "%@ / %@" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Token" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Токен" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ / %2$@"
+          }
+        }
       }
     },
-    "Paste your token here" : {
-      "extractionState" : "manual",
+    "%@ domain%@ parsed" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paste your token here" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вставьте токен сюда" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ domain%2$@ parsed"
+          }
+        }
       }
     },
-    "Login" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Login" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Войти" } }
-      }
+    "%@ms" : {
+
     },
-    "Error" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Error" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка" } }
-      }
+    "%@s" : {
+
     },
-    "OK" : {
+    "Access token not found" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "ОК" } }
-      }
-    },
-    "Unknown error" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unknown error" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Неизвестная ошибка" } }
-      }
-    },
-    "Connection Time" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Time" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время подключения" } }
-      }
-    },
-    "Connecting…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting…" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение…" } }
-      }
-    },
-    "Reconnecting…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reconnecting…" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переподключение…" } }
-      }
-    },
-    "Connected" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключено" } }
-      }
-    },
-    "Disconnected" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnected" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключено" } }
-      }
-    },
-    "Auto" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Авто" } }
-      }
-    },
-    "Connecting..." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting..." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение..." } }
-      }
-    },
-    "Reconnecting..." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reconnecting..." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переподключение..." } }
-      }
-    },
-    "Token synced from iCloud" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Token synced from iCloud" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Токен синхронизирован из iCloud" } }
-      }
-    },
-    "Home" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Home" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Главная" } }
-      }
-    },
-    "Tools" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tools" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инструменты" } }
-      }
-    },
-    "Logs" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Logs" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Журнал" } }
-      }
-    },
-    "Settings" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройки" } }
-      }
-    },
-    "Appearance" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Appearance" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Оформление" } }
-      }
-    },
-    "Color Scheme" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color Scheme" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цветовая схема" } }
-      }
-    },
-    "System" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "System" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Как в системе" } }
-      }
-    },
-    "Dark" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dark" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Тёмная" } }
-      }
-    },
-    "Light" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Light" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Светлая" } }
-      }
-    },
-    "DPI Bypass" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "DPI Bypass" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обход DPI" } }
-      }
-    },
-    "Method" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Method" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Метод" } }
-      }
-    },
-    "Advanced Profiles" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Advanced Profiles" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расширенные профили" } }
-      }
-    },
-    "Profile" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Profile" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Профиль" } }
-      }
-    },
-    "e.g. rutube.ru" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "e.g. rutube.ru" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "например rutube.ru" } }
-      }
-    },
-    "Connection" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение" } }
-      }
-    },
-    "Auto-Connect on Launch" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-Connect on Launch" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Автоподключение при запуске" } }
-      }
-    },
-    "Auto-Reconnect on Drop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-Reconnect on Drop" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Автопереподключение при обрыве" } }
-      }
-    },
-    "Max attempts" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Max attempts" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Макс. попыток" } }
-      }
-    },
-    "Retry delay" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry delay" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Задержка повтора" } }
-      }
-    },
-    "Tunnel idle timeout" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tunnel idle timeout" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Таймаут бездействия туннеля" } }
-      }
-    },
-    "Runtime reconnect now happens inside the packet tunnel provider. Auto-Reconnect controls the retry budget and delay, while Tunnel idle timeout controls how quickly the websocket is treated as dead." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Runtime reconnect now happens inside the packet tunnel provider. Auto-Reconnect controls the retry budget and delay, while Tunnel idle timeout controls how quickly the websocket is treated as dead." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переподключение происходит внутри расширения туннеля. Автопереподключение управляет бюджетом попыток и задержкой, а таймаут бездействия — как быстро WebSocket считается мёртвым." } }
-      }
-    },
-    "Logging" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Logging" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Логирование" } }
-      }
-    },
-    "Log Level" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Log Level" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уровень логов" } }
-      }
-    },
-    "Warning" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Warning" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предупреждения" } }
-      }
-    },
-    "Info" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Info" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Информация" } }
-      }
-    },
-    "Debug" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Debug" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отладка" } }
-      }
-    },
-    "Default is Warning. Use Debug only for troubleshooting because it can produce high-volume logs." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default is Warning. Use Debug only for troubleshooting because it can produce high-volume logs." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По умолчанию — Предупреждения. Используйте Отладку только для диагностики — она создаёт много записей." } }
-      }
-    },
-    "Routing" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Routing" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Маршрутизация" } }
-      }
-    },
-    "Per-App VPN" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Per-App VPN" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "VPN по приложениям" } }
-      }
-    },
-    "Restrict VPN to specific apps or exclude selected apps from the tunnel." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Restrict VPN to specific apps or exclude selected apps from the tunnel." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ограничить VPN выбранными приложениями или исключить их из туннеля." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access token not found"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен доступа не найден"
+          }
+        }
       }
     },
     "Account" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Account" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Аккаунт" } }
-      }
-    },
-    "Clear Keychain Credentials" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Keychain Credentials" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очистить учётные данные" } }
-      }
-    },
-    "Log Out" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Log Out" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выйти" } }
-      }
-    },
-    "Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очистка удаляет сохранённый пароль из Связки ключей iCloud на всех устройствах. При следующем запуске приложение синхронизирует его заново." } }
-      }
-    },
-    "Are you sure you want to log out?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Are you sure you want to log out?" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вы уверены, что хотите выйти?" } }
-      }
-    },
-    "Clear Keychain Credentials?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Keychain Credentials?" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очистить учётные данные?" } }
-      }
-    },
-    "This removes the stored password from iCloud Keychain on all devices. The app will re-sync it on next launch." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "This removes the stored password from iCloud Keychain on all devices. The app will re-sync it on next launch." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пароль будет удалён из Связки ключей iCloud на всех устройствах. При следующем запуске он синхронизируется заново." } }
-      }
-    },
-    "Cancel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отмена" } }
-      }
-    },
-    "Clear" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очистить" } }
-      }
-    },
-    "Done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово" } }
-      }
-    },
-    "Connection Mode" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Mode" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Режим подключения" } }
-      }
-    },
-    "Servers" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Servers" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Серверы" } }
-      }
-    },
-    "Select Server" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select Server" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбор сервера" } }
-      }
-    },
-    "Server" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Server" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сервер" } }
-      }
-    },
-    "No servers" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No servers" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет серверов" } }
-      }
-    },
-    "SNI List" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "SNI List" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Список SNI" } }
-      }
-    },
-    "Concurrency" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Concurrency" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Параллельно" } }
-      }
-    },
-    "Timeout" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Timeout" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Таймаут" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аккаунт"
+          }
+        }
       }
     },
     "Advanced" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Advanced" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дополнительно" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Advanced"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дополнительно"
+          }
+        }
       }
     },
-    "No domains" : {
+    "Advanced Profiles" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No domains" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет доменов" } }
-      }
-    },
-    "Paste SNI hostnames, one per line…\n# lines starting with # are ignored" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paste SNI hostnames, one per line…\n# lines starting with # are ignored" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вставьте SNI-хосты, по одному на строку…\n# строки начинающиеся с # игнорируются" } }
-      }
-    },
-    "Start Scan" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Scan" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Начать сканирование" } }
-      }
-    },
-    "Stop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Стоп" } }
-      }
-    },
-    "Best" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Best" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Лучший" } }
-      }
-    },
-    "Apply" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Применить" } }
-      }
-    },
-    "Apply as SNI" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply as SNI" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Применить как SNI" } }
-      }
-    },
-    "Copy SNI" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy SNI" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Копировать SNI" } }
-      }
-    },
-    "Show reachable only" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show reachable only" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Только доступные" } }
-      }
-    },
-    "Default Reality" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default Reality" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Reality по умолчанию" } }
-      }
-    },
-    "SNI Checker" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "SNI Checker" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверка SNI" } }
-      }
-    },
-    "Pause" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pause" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пауза" } }
-      }
-    },
-    "Follow" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Follow" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Следить" } }
-      }
-    },
-    "Copy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Копировать" } }
-      }
-    },
-    "Level" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Level" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уровень" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Advanced Profiles"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Расширенные профили"
+          }
+        }
       }
     },
     "All" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "All" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Все" } }
-      }
-    },
-    "App" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "App" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Приложение" } }
-      }
-    },
-    "Tunnel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tunnel" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Туннель" } }
-      }
-    },
-    "Recent only (24h)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recent only (24h)" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Только за 24ч" } }
-      }
-    },
-    "Default: Warning" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default: Warning" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По умолчанию: Предупреждения" } }
-      }
-    },
-    "No logs for selected filters" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No logs for selected filters" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет записей по выбранным фильтрам" } }
-      }
-    },
-    "Debug Log" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Debug Log" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отладочный журнал" } }
-      }
-    },
-    "Per-App VPN Mode" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Per-App VPN Mode" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Режим VPN по приложениям" } }
-      }
-    },
-    "Off" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Off" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выкл." } }
-      }
-    },
-    "Only these apps" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Only these apps" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Только эти приложения" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Все"
+          }
+        }
       }
     },
     "All except" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "All except" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Все кроме" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All except"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Все кроме"
+          }
+        }
       }
     },
-    "VPN applies to all apps." : {
+    "App" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN applies to all apps." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "VPN применяется ко всем приложениям." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложение"
+          }
+        }
       }
     },
-    "VPN applies only to the selected apps." : {
+    "Appearance" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN applies only to the selected apps." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "VPN применяется только к выбранным приложениям." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appearance"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Оформление"
+          }
+        }
       }
     },
-    "VPN applies to all apps except the selected ones." : {
+    "Apply" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN applies to all apps except the selected ones." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "VPN применяется ко всем приложениям, кроме выбранных." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apply"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Применить"
+          }
+        }
+      }
+    },
+    "Apply as SNI" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apply as SNI"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Применить как SNI"
+          }
+        }
       }
     },
     "Apps" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apps" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Приложения" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложения"
+          }
+        }
       }
     },
-    "SNI disguises the TLS hostname used by the connection." : {
+    "Are you sure you want to log out?" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "SNI disguises the TLS hostname used by the connection." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "SNI маскирует имя хоста TLS, используемое соединением." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Are you sure you want to log out?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы уверены, что хотите выйти?"
+          }
+        }
       }
     },
-    "TLS Obfuscation wraps tunnel traffic without an SNI hostname." : {
+    "Auto" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "TLS Obfuscation wraps tunnel traffic without an SNI hostname." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обфускация TLS оборачивает трафик туннеля без использования SNI." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Авто"
+          }
+        }
       }
     },
-    "Reality combines an SNI decoy with the native obfuscation protocol." : {
+    "Auto-Connect on Launch" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reality combines an SNI decoy with the native obfuscation protocol." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Reality объединяет SNI-приманку с нативным протоколом обфускации." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Connect on Launch"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Автоподключение при запуске"
+          }
+        }
       }
     },
-    "Reality browser profiles imitate a specific browser handshake for stricter networks." : {
+    "Auto-Reconnect on Drop" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reality browser profiles imitate a specific browser handshake for stricter networks." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Профили браузеров Reality имитируют рукопожатие конкретного браузера для более строгих сетей." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Reconnect on Drop"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Автопереподключение при обрыве"
+          }
+        }
       }
     },
-    "Mode" : {
+    "Best" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mode" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Режим" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Best"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лучший"
+          }
+        }
       }
     },
-    "Token is empty after removing prefix" : {
+    "Cancel" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Token is empty after removing prefix" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Токен пуст после удаления префикса" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отмена"
+          }
+        }
       }
     },
-    "Invalid base64 encoding — check that you copied the full token from @fptn_bot" : {
-      "extractionState" : "manual",
+    "Checking %@/%@ servers" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invalid base64 encoding — check that you copied the full token from @fptn_bot" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Неверная кодировка base64 — проверьте, что вы скопировали токен из @fptn_bot полностью" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Checking %1$@/%2$@ servers"
+          }
+        }
       }
     },
-    "Failed to decompress token — make sure you have the latest token from @fptn_bot" : {
+    "Clear" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed to decompress token — make sure you have the latest token from @fptn_bot" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось распаковать токен — убедитесь, что у вас свежий токен из @fptn_bot" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Очистить"
+          }
+        }
       }
     },
-    "No servers available" : {
+    "Clear Keychain Credentials" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No servers available" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет доступных серверов" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Keychain Credentials"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Очистить учётные данные"
+          }
+        }
       }
     },
-    "No reachable servers available right now" : {
+    "Clear Keychain Credentials?" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No reachable servers available right now" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сейчас нет доступных серверов" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Keychain Credentials?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Очистить учётные данные?"
+          }
+        }
       }
     },
-    "No token data available" : {
+    "Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No token data available" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет данных токена" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Очистка удаляет сохранённый пароль из Связки ключей iCloud на всех устройствах. При следующем запуске приложение синхронизирует его заново."
+          }
+        }
       }
     },
-    "Access token not found" : {
+    "Color Scheme" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Access token not found" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Токен доступа не найден" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color Scheme"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Цветовая схема"
+          }
+        }
+      }
+    },
+    "Concurrency" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Concurrency"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Параллельно"
+          }
+        }
+      }
+    },
+    "Connected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connected"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключено"
+          }
+        }
+      }
+    },
+    "Connecting..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecting..."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключение..."
+          }
+        }
+      }
+    },
+    "Connecting…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecting…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключение…"
+          }
+        }
+      }
+    },
+    "Connection" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключение"
+          }
+        }
+      }
+    },
+    "Connection Mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection Mode"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Режим подключения"
+          }
+        }
+      }
+    },
+    "Connection Time" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection Time"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Время подключения"
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Копировать"
+          }
+        }
+      }
+    },
+    "Copy SNI" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy SNI"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Копировать SNI"
+          }
+        }
+      }
+    },
+    "Dark" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dark"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тёмная"
+          }
+        }
+      }
+    },
+    "Debug" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Debug"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отладка"
+          }
+        }
+      }
+    },
+    "Debug Log" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Debug Log"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отладочный журнал"
+          }
+        }
+      }
+    },
+    "Default is Warning. Use Debug only for troubleshooting because it can produce high-volume logs." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default is Warning. Use Debug only for troubleshooting because it can produce high-volume logs."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "По умолчанию — Предупреждения. Используйте Отладку только для диагностики — она создаёт много записей."
+          }
+        }
+      }
+    },
+    "Default Reality" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default Reality"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reality по умолчанию"
+          }
+        }
+      }
+    },
+    "Default: Warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default: Warning"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "По умолчанию: Предупреждения"
+          }
+        }
+      }
+    },
+    "Disconnected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disconnected"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отключено"
+          }
+        }
       }
     },
     "DNS info not found" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "DNS info not found" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Информация DNS не найдена" } }
-      }
-    },
-    "Waiting for tunnel transport to recover." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting for tunnel transport to recover." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ожидание восстановления транспорта туннеля." } }
-      }
-    },
-    "Only Russia-based servers appear reachable right now. This may indicate local network filtering." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Only Russia-based servers appear reachable right now. This may indicate local network filtering." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сейчас доступны только серверы в России. Возможно, это указывает на фильтрацию локальной сети." } }
-      }
-    },
-    "Login failed: " : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Login failed: " } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка входа: " } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS info not found"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Информация DNS не найдена"
+          }
+        }
       }
     },
     "DNS lookup failed: " : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "DNS lookup failed: " } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка DNS: " } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS lookup failed: "
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ошибка DNS: "
+          }
+        }
       }
     },
-    "VPN configuration failed: " : {
+    "Done" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN configuration failed: " } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка конфигурации VPN: " } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Готово"
+          }
+        }
+      }
+    },
+    "DPI Bypass" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DPI Bypass"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обход DPI"
+          }
+        }
+      }
+    },
+    "e.g. rutube.ru" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. rutube.ru"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "например rutube.ru"
+          }
+        }
+      }
+    },
+    "Error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ошибка"
+          }
+        }
+      }
+    },
+    "Failed to decompress token — make sure you have the latest token from @fptn_bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to decompress token — make sure you have the latest token from @fptn_bot"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось распаковать токен — убедитесь, что у вас свежий токен из @fptn_bot"
+          }
+        }
       }
     },
     "Failed to parse token: " : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed to parse token: " } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка разбора токена: " } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to parse token: "
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ошибка разбора токена: "
+          }
+        }
+      }
+    },
+    "Follow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Следить"
+          }
+        }
+      }
+    },
+    "FPTN VPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FPTN VPN"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FPTN VPN"
+          }
+        }
+      }
+    },
+    "Get your free token from" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get your free token from"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Получите бесплатный токен в"
+          }
+        }
+      }
+    },
+    "Home" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Главная"
+          }
+        }
+      }
+    },
+    "Info" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Info"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Информация"
+          }
+        }
+      }
+    },
+    "Invalid base64 encoding — check that you copied the full token from @fptn_bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid base64 encoding — check that you copied the full token from @fptn_bot"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Неверная кодировка base64 — проверьте, что вы скопировали токен из @fptn_bot полностью"
+          }
+        }
+      }
+    },
+    "Level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Level"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Уровень"
+          }
+        }
+      }
+    },
+    "Light" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Светлая"
+          }
+        }
+      }
+    },
+    "Log Level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log Level"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Уровень логов"
+          }
+        }
+      }
+    },
+    "Log Out" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log Out"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выйти"
+          }
+        }
+      }
+    },
+    "Logging" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logging"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Логирование"
+          }
+        }
+      }
+    },
+    "Login" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Login"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Войти"
+          }
+        }
+      }
+    },
+    "Login failed: " : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Login failed: "
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ошибка входа: "
+          }
+        }
+      }
+    },
+    "Logs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Журнал"
+          }
+        }
+      }
+    },
+    "Max attempts" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Max attempts"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Макс. попыток"
+          }
+        }
+      }
+    },
+    "Method" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Method"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Метод"
+          }
+        }
+      }
+    },
+    "Mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Режим"
+          }
+        }
+      }
+    },
+    "No domains" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No domains"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет доменов"
+          }
+        }
+      }
+    },
+    "No logs for selected filters" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No logs for selected filters"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет записей по выбранным фильтрам"
+          }
+        }
+      }
+    },
+    "No reachable servers available right now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No reachable servers available right now"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сейчас нет доступных серверов"
+          }
+        }
+      }
+    },
+    "No servers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No servers"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет серверов"
+          }
+        }
+      }
+    },
+    "No servers available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No servers available"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет доступных серверов"
+          }
+        }
+      }
+    },
+    "No token data available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No token data available"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет данных токена"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выкл."
+          }
+        }
+      }
+    },
+    "OK" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ОК"
+          }
+        }
+      }
+    },
+    "Only Russia-based servers appear reachable right now. This may indicate local network filtering." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only Russia-based servers appear reachable right now. This may indicate local network filtering."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сейчас доступны только серверы в России. Возможно, это указывает на фильтрацию локальной сети."
+          }
+        }
+      }
+    },
+    "Only these apps" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only these apps"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Только эти приложения"
+          }
+        }
+      }
+    },
+    "Paste SNI hostnames, one per line…\n# lines starting with # are ignored" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste SNI hostnames, one per line…\n# lines starting with # are ignored"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вставьте SNI-хосты, по одному на строку…\n# строки начинающиеся с # игнорируются"
+          }
+        }
+      }
+    },
+    "Paste your token here" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste your token here"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вставьте токен сюда"
+          }
+        }
+      }
+    },
+    "Pause" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пауза"
+          }
+        }
+      }
+    },
+    "Per-App VPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per-App VPN"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN по приложениям"
+          }
+        }
+      }
+    },
+    "Per-App VPN Mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per-App VPN Mode"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Режим VPN по приложениям"
+          }
+        }
+      }
+    },
+    "Profile" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профиль"
+          }
+        }
+      }
+    },
+    "Reality browser profiles imitate a specific browser handshake for stricter networks." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reality browser profiles imitate a specific browser handshake for stricter networks."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профили браузеров Reality имитируют рукопожатие конкретного браузера для более строгих сетей."
+          }
+        }
+      }
+    },
+    "Reality combines an SNI decoy with the native obfuscation protocol." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reality combines an SNI decoy with the native obfuscation protocol."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reality объединяет SNI-приманку с нативным протоколом обфускации."
+          }
+        }
+      }
+    },
+    "Recent only (24h)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent only (24h)"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Только за 24ч"
+          }
+        }
+      }
+    },
+    "Reconnecting..." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconnecting..."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переподключение..."
+          }
+        }
+      }
+    },
+    "Reconnecting…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconnecting…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переподключение…"
+          }
+        }
+      }
+    },
+    "Restrict VPN to specific apps or exclude selected apps from the tunnel." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restrict VPN to specific apps or exclude selected apps from the tunnel."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ограничить VPN выбранными приложениями или исключить их из туннеля."
+          }
+        }
+      }
+    },
+    "Retry delay" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry delay"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Задержка повтора"
+          }
+        }
+      }
+    },
+    "Routing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routing"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрутизация"
+          }
+        }
+      }
+    },
+    "Runtime reconnect now happens inside the packet tunnel provider. Auto-Reconnect controls the retry budget and delay, while Tunnel idle timeout controls how quickly the websocket is treated as dead." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runtime reconnect now happens inside the packet tunnel provider. Auto-Reconnect controls the retry budget and delay, while Tunnel idle timeout controls how quickly the websocket is treated as dead."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переподключение происходит внутри расширения туннеля. Автопереподключение управляет бюджетом попыток и задержкой, а таймаут бездействия — как быстро WebSocket считается мёртвым."
+          }
+        }
+      }
+    },
+    "Secure your connection" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secure your connection"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Защитите своё соединение"
+          }
+        }
+      }
+    },
+    "Select Server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select Server"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбор сервера"
+          }
+        }
+      }
+    },
+    "Server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сервер"
+          }
+        }
+      }
+    },
+    "Server: %@" : {
+
+    },
+    "Servers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servers"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Серверы"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Настройки"
+          }
+        }
+      }
+    },
+    "Show reachable only" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show reachable only"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Только доступные"
+          }
+        }
+      }
+    },
+    "Shown: %@" : {
+
+    },
+    "SNI Checker" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SNI Checker"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверка SNI"
+          }
+        }
+      }
+    },
+    "SNI disguises the TLS hostname used by the connection." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SNI disguises the TLS hostname used by the connection."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SNI маскирует имя хоста TLS, используемое соединением."
+          }
+        }
+      }
+    },
+    "SNI List" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SNI List"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Список SNI"
+          }
+        }
+      }
+    },
+    "Start Scan" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Scan"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Начать сканирование"
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Стоп"
+          }
+        }
+      }
+    },
+    "System" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Как в системе"
+          }
+        }
+      }
+    },
+    "This removes the stored password from iCloud Keychain on all devices. The app will re-sync it on next launch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This removes the stored password from iCloud Keychain on all devices. The app will re-sync it on next launch."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пароль будет удалён из Связки ключей iCloud на всех устройствах. При следующем запуске он синхронизируется заново."
+          }
+        }
+      }
+    },
+    "Timeout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timeout"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Таймаут"
+          }
+        }
+      }
+    },
+    "TLS Obfuscation wraps tunnel traffic without an SNI hostname." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TLS Obfuscation wraps tunnel traffic without an SNI hostname."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обфускация TLS оборачивает трафик туннеля без использования SNI."
+          }
+        }
+      }
+    },
+    "Token" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен"
+          }
+        }
+      }
+    },
+    "Token is empty after removing prefix" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token is empty after removing prefix"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен пуст после удаления префикса"
+          }
+        }
+      }
+    },
+    "Token synced from iCloud" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token synced from iCloud"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен синхронизирован из iCloud"
+          }
+        }
+      }
+    },
+    "Tools" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tools"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Инструменты"
+          }
+        }
+      }
+    },
+    "Tunnel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tunnel"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Туннель"
+          }
+        }
+      }
+    },
+    "Tunnel idle timeout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tunnel idle timeout"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Таймаут бездействия туннеля"
+          }
+        }
+      }
+    },
+    "Unknown error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown error"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Неизвестная ошибка"
+          }
+        }
+      }
+    },
+    "VPN applies only to the selected apps." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN applies only to the selected apps."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN применяется только к выбранным приложениям."
+          }
+        }
+      }
+    },
+    "VPN applies to all apps except the selected ones." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN applies to all apps except the selected ones."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN применяется ко всем приложениям, кроме выбранных."
+          }
+        }
+      }
+    },
+    "VPN applies to all apps." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN applies to all apps."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN применяется ко всем приложениям."
+          }
+        }
+      }
+    },
+    "VPN configuration failed: " : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN configuration failed: "
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ошибка конфигурации VPN: "
+          }
+        }
+      }
+    },
+    "Waiting for tunnel transport to recover." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for tunnel transport to recover."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ожидание восстановления транспорта туннеля."
+          }
+        }
+      }
+    },
+    "Warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warning"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Предупреждения"
+          }
+        }
       }
     }
   },

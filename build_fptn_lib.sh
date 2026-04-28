@@ -100,6 +100,27 @@ copy_dsym_to_archive_products() {
     fi
 }
 
+copy_existing_dsym_to_archive_products() {
+    local candidate
+    local candidates=(
+        "${DEST_DIR}/fptn_native_lib.framework.dSYM"
+        "${LIB_DIR}/${OUTPUT_DIR}/fptn_native_lib.framework.dSYM"
+    )
+
+    if [ "$TARGET" = "ios-device" ] || [ "$TARGET" = "ios" ]; then
+        candidates+=("${LIB_DIR}/build-ios-release/fptn_native_lib.framework.dSYM")
+    fi
+
+    for candidate in "${candidates[@]}"; do
+        if [ -d "$candidate" ]; then
+            copy_dsym_to_archive_products "$candidate"
+            return 0
+        fi
+    done
+
+    echo "warning: fptn_native_lib.framework.dSYM not found; App Store symbol upload may warn."
+}
+
 sync_ios_release_output() {
     local source_framework_dir="$1"
     local source_dsym_dir="$2"
@@ -200,6 +221,7 @@ if [ "${FPTN_NATIVE_BUILD_IF_MISSING:-0}" = "1" ]; then
     if framework_matches_target "${DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM" &&
        { [ -z "$SECONDARY_DEST_DIR" ] || framework_matches_target "${SECONDARY_DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM"; }; then
         echo "fptn_native_lib already built for ${TARGET}; skipping native build."
+        copy_existing_dsym_to_archive_products
         exit 0
     fi
 fi

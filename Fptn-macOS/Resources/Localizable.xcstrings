@@ -1,95 +1,238 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "FPTN macOS" : {
-      "extractionState" : "manual",
+    "%@ (%@:%@)" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "FPTN macOS" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "FPTN macOS" } }
-      }
-    },
-    "Token" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Token" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Токен" } }
-      }
-    },
-    "Parse Token" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Parse Token" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разобрать токен" } }
-      }
-    },
-    "Smart Connect" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smart Connect" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Умное подключение" } }
-      }
-    },
-    "Connection" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение" } }
-      }
-    },
-    "Server" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Server" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сервер" } }
-      }
-    },
-    "Select server" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select server" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите сервер" } }
-      }
-    },
-    "SNI" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "SNI" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "SNI" } }
-      }
-    },
-    "Disconnect" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключиться" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$@:%3$@)"
+          }
+        }
       }
     },
     "Connect" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключиться" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключиться"
+          }
+        }
+      }
+    },
+    "Connection" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключение"
+          }
+        }
+      }
+    },
+    "Disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disconnect"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отключиться"
+          }
+        }
+      }
+    },
+    "FPTN macOS" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FPTN macOS"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FPTN macOS"
+          }
+        }
+      }
+    },
+    "Parse Token" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parse Token"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разобрать токен"
+          }
+        }
       }
     },
     "Ping Tunnel" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ping Tunnel" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверить туннель" } }
-      }
-    },
-    "Status" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Status" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Статус" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ping Tunnel"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверить туннель"
+          }
+        }
       }
     },
     "rutube.ru" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "rutube.ru" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "rutube.ru" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rutube.ru"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rutube.ru"
+          }
+        }
+      }
+    },
+    "Select server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select server"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите сервер"
+          }
+        }
+      }
+    },
+    "Server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сервер"
+          }
+        }
+      }
+    },
+    "Service: %@" : {
+
+    },
+    "Smart Connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Smart Connect"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Умное подключение"
+          }
+        }
+      }
+    },
+    "SNI" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SNI"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SNI"
+          }
+        }
+      }
+    },
+    "Status" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Статус"
+          }
+        }
+      }
+    },
+    "Token" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен"
+          }
+        }
       }
     }
   },

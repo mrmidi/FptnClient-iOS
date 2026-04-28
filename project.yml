@@ -53,6 +53,7 @@ targetTemplates:
     type: app-extension
     info:
       properties:
+        CFBundleDisplayName: $(PRODUCT_NAME)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
@@ -75,8 +76,11 @@ targets:
           - Cpp/*.framework.dSYM
           - Cpp/*.framework.dSYM/**
       - SharedTunnelRuntime
+      - path: fptn.icon
+        buildPhase: resources
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: fptn
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
         OTHER_LDFLAGS: [-ObjC]
@@ -85,10 +89,21 @@ targets:
       path: FptnVPN/Info.plist
       properties:
         CFBundleDevelopmentRegion: en
+        CFBundleIconName: fptn
         CFBundleLocalizations: [en, ru]
         UILaunchScreen: {}
         UIRequiredDeviceCapabilities:
           - arm64
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
           UISceneConfigurations: {}
