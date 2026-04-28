@@ -33,6 +33,16 @@ struct TunnelRuntimeSnapshot: Codable, Sendable {
     let packetFlowWritePackets: Int64
     let packetFlowWriteBytes: Int64
     let websocketSendFailures: Int64
+    let dnsIPv4: String?
+    let dnsIPv6: String?
+    let tunnelIPv4: String?
+    let tunnelIPv6: String?
+    let ipv6Enabled: Bool
+    let websocketRunning: Bool
+    let websocketStarted: Bool
+    let websocketIdleTimeoutSeconds: Int
+    let websocketLastError: String?
+    let websocketLastDisconnectReason: String?
 }
 
 struct TunnelReconnectPolicy: Equatable, Sendable {

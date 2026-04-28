@@ -5,6 +5,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import Darwin
 import NetworkExtension
 
 private enum TunnelControlAction: String, Codable {
@@ -58,6 +59,16 @@ private struct TunnelRuntimeSnapshot: Codable {
     let packetFlowWritePackets: Int64
     let packetFlowWriteBytes: Int64
     let websocketSendFailures: Int64
+    let dnsIPv4: String?
+    let dnsIPv6: String?
+    let tunnelIPv4: String?
+    let tunnelIPv6: String?
+    let ipv6Enabled: Bool
+    let websocketRunning: Bool
+    let websocketStarted: Bool
+    let websocketIdleTimeoutSeconds: Int
+    let websocketLastError: String?
+    let websocketLastDisconnectReason: String?
 }
 
 private struct TunnelConfiguration {
@@ -65,7 +76,7 @@ private struct TunnelConfiguration {
     let serverPort: Int
     let accessToken: String
     let dnsIPv4: String
-    let dnsIPv6: String
+    let dnsIPv6: String?
     let sni: String
     let md5Fingerprint: String
     let logLevel: String
@@ -76,6 +87,7 @@ private struct TunnelConfiguration {
     let reconnectDelaySeconds: Int
     let tunIPv4: String
     let tunIPv4Gateway: String
+    let tunIPv6: String
 
     init?(providerConfiguration: [String: Any]) {
         guard
@@ -89,10 +101,10 @@ private struct TunnelConfiguration {
             return nil
         }
 
-        let dnsIPv6 = providerConfiguration["dnsIPv6"] as? String ?? "fd00::1"
+        let dnsIPv6 = Self.validIPv6(providerConfiguration["dnsIPv6"] as? String)
         let logLevel = providerConfiguration["logLevel"] as? String ?? "info"
         let bypassMethod = providerConfiguration["bypassMethod"] as? String ?? "SNI"
-        let websocketIdleTimeoutSeconds = providerConfiguration["websocketIdleTimeoutSeconds"] as? Int ?? 300
+        let websocketIdleTimeoutSeconds = providerConfiguration["websocketIdleTimeoutSeconds"] as? Int ?? 60
         let reconnectEnabled = providerConfiguration["reconnectEnabled"] as? Bool ?? true
         let maxReconnectAttempts = providerConfiguration["maxReconnectAttempts"] as? Int ?? 5
         let reconnectDelaySeconds = providerConfiguration["reconnectDelaySeconds"] as? Int ?? 2
@@ -109,9 +121,18 @@ private struct TunnelConfiguration {
         self.reconnectEnabled = reconnectEnabled
         self.maxReconnectAttempts = maxReconnectAttempts
         self.reconnectDelaySeconds = reconnectDelaySeconds
-        self.websocketStrategy = "\(bypassMethod);idle_timeout=\(websocketIdleTimeoutSeconds)"
         self.tunIPv4 = "10.8.0.2"
         self.tunIPv4Gateway = "10.8.0.1"
+        self.tunIPv6 = "fd00::1"
+        self.websocketStrategy = "\(bypassMethod);idle_timeout=\(websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
+    }
+
+    private static func validIPv6(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        var addr = in6_addr()
+        return value.withCString { inet_pton(AF_INET6, $0, &addr) == 1 ? value : nil }
     }
 }
 
@@ -123,8 +144,10 @@ private struct PacketCounters {
     var packetFlowWritePackets: Int64 = 0
     var packetFlowWriteBytes: Int64 = 0
     var websocketSendFailures: Int64 = 0
+    var pendingWebsocketSendFailures: Int64 = 0
     var lastInboundActivityAt: Date?
     var lastOutboundActivityAt: Date?
+    var lastSendFailureWarningAt: Date?
 }
 
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
@@ -150,6 +173,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     private let runtimeReconnectDelayCapSeconds = 60
     private let activityResumeLogThresholdSeconds = 60
+    private let sendFailureWarningIntervalSeconds: TimeInterval = 1
+    private let sendFailureWarningPacketThreshold: Int64 = 100
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -265,6 +290,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.info(
             "PacketTunnelProvider wake state=\(snapshot.runtimeState.rawValue) reconnect_attempt=\(snapshot.reconnectAttempt) last_error=\(snapshot.lastTransportError ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
         )
+
+        if snapshot.runtimeState == .connected && !snapshot.websocketStarted {
+            logger.warning("Tunnel wake detected connected state without a running websocket — connection likely lost during sleep")
+            eventQueue.async { [weak self] in
+                self?.handleTransportDisconnected(wasConnected: true, reason: "connection lost during sleep")
+            }
+        }
     }
 
     // MARK: - WebSocket lifecycle
@@ -532,17 +564,29 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
-        let dnsServers = [configuration.dnsIPv4, configuration.dnsIPv6]
+        let dnsServers = [configuration.dnsIPv4] + (configuration.dnsIPv6.map { [$0] } ?? [])
         let dns = NEDNSSettings(servers: dnsServers)
         dns.matchDomains = [""]
         settings.dnsSettings = dns
+
+        let ipv6Enabled = configuration.dnsIPv6 != nil
+        if ipv6Enabled {
+            let ipv6 = NEIPv6Settings(
+                addresses: [configuration.tunIPv6],
+                networkPrefixLengths: [64]
+            )
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            settings.ipv6Settings = ipv6
+        }
         settings.mtu = 1500
 
         let ipv4IncludedRoutes = ipv4.includedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
         let ipv4ExcludedRoutes = ipv4.excludedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
+        let ipv6IncludedRoutes = settings.ipv6Settings?.includedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
+        let ipv6ExcludedRoutes = settings.ipv6Settings?.excludedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
         let matchDomains = dns.matchDomains?.joined(separator: ",") ?? "-"
         logger.info(
-            "Applying tunnel settings ipv4=\(configuration.tunIPv4)/255.255.255.0 ipv4_included_routes=\(ipv4IncludedRoutes) ipv4_excluded_routes=\(ipv4ExcludedRoutes) ipv6=none ipv6_included_routes=- ipv6_excluded_routes=- dns=\(dnsServers.joined(separator: ",")) match_domains=\(matchDomains) mtu=1500"
+            "Applying tunnel settings ipv4=\(configuration.tunIPv4)/255.255.255.0 ipv4_included_routes=\(ipv4IncludedRoutes) ipv4_excluded_routes=\(ipv4ExcludedRoutes) ipv6=\(ipv6Enabled ? "\(configuration.tunIPv6)/64" : "none") ipv6_included_routes=\(ipv6IncludedRoutes) ipv6_excluded_routes=\(ipv6ExcludedRoutes) dns=\(dnsServers.joined(separator: ",")) match_domains=\(matchDomains) mtu=1500"
         )
 
         setTunnelNetworkSettings(settings, completionHandler: completionHandler)
@@ -626,14 +670,36 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         let now = Date()
         var previousOutboundActivityAt: Date?
+        var shouldLogSendFailures = false
+        var pendingSendFailures: Int64 = 0
+        var totalSendFailures: Int64 = 0
+        var suppressSendFailureLog = false
 
         stateLock.lock()
         previousOutboundActivityAt = counters.lastOutboundActivityAt
         counters.packetFlowReadPackets += packetCount
         counters.packetFlowReadBytes += byteCount
         counters.websocketSendFailures += sendFailures
+        totalSendFailures = counters.websocketSendFailures
         if packetCount > 0 {
             counters.lastOutboundActivityAt = now
+        }
+        if sendFailures > 0 {
+            suppressSendFailureLog = runtimeState == .stopping ||
+                runtimeState == .failed ||
+                wsClient == nil ||
+                !isReadLoopActive
+            if !suppressSendFailureLog {
+                counters.pendingWebsocketSendFailures += sendFailures
+                let elapsed = counters.lastSendFailureWarningAt.map { now.timeIntervalSince($0) } ?? .infinity
+                shouldLogSendFailures = counters.pendingWebsocketSendFailures >= sendFailureWarningPacketThreshold ||
+                    elapsed >= sendFailureWarningIntervalSeconds
+                if shouldLogSendFailures {
+                    pendingSendFailures = counters.pendingWebsocketSendFailures
+                    counters.pendingWebsocketSendFailures = 0
+                    counters.lastSendFailureWarningAt = now
+                }
+            }
         }
         stateLock.unlock()
 
@@ -647,9 +713,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             )
         }
 
-        if sendFailures > 0 {
+        if shouldLogSendFailures {
             logger.warning(
-                "Tunnel transport send failures count=\(sendFailures) outbound_packets=\(packetCount) outbound_bytes=\(byteCount) \(activityDiagnosticsDescription())"
+                "Tunnel transport send failures throttled pending=\(pendingSendFailures) total=\(totalSendFailures) latest_batch_failures=\(sendFailures) outbound_packets=\(packetCount) outbound_bytes=\(byteCount) \(activityDiagnosticsDescription())"
             )
         }
     }
@@ -767,17 +833,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     private func updateRuntimeState(_ state: TunnelRuntimeState, reason: String) {
         var previousState: TunnelRuntimeState = .idle
+        var previousReasserting = false
+        let newReasserting = state == .reasserting
 
         stateLock.lock()
         previousState = runtimeState
+        previousReasserting = reasserting
         runtimeState = state
         stateLock.unlock()
 
-        reasserting = state == .reasserting
+        reasserting = newReasserting
         if previousState != state {
             logger.info("Tunnel state \(previousState.rawValue) -> \(state.rawValue) reason=\(reason)")
         }
-        logger.info("Tunnel reasserting=\(reasserting)")
+        if previousReasserting != newReasserting {
+            logger.info("Tunnel reasserting=\(newReasserting)")
+        }
     }
 
     private func finishStart(with error: Error?) {
@@ -797,6 +868,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.lock()
         defer { stateLock.unlock() }
 
+        let status = wsClient?.status
         return TunnelRuntimeSnapshot(
             runtimeState: runtimeState,
             isReasserting: runtimeState == .reasserting,
@@ -814,7 +886,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             transportReceivedBytes: counters.transportReceivedBytes,
             packetFlowWritePackets: counters.packetFlowWritePackets,
             packetFlowWriteBytes: counters.packetFlowWriteBytes,
-            websocketSendFailures: counters.websocketSendFailures
+            websocketSendFailures: counters.websocketSendFailures,
+            dnsIPv4: configuration?.dnsIPv4,
+            dnsIPv6: configuration?.dnsIPv6,
+            tunnelIPv4: configuration?.tunIPv4,
+            tunnelIPv6: configuration?.tunIPv6,
+            ipv6Enabled: configuration?.dnsIPv6 != nil,
+            websocketRunning: status?.running ?? false,
+            websocketStarted: status?.started ?? false,
+            websocketIdleTimeoutSeconds: status?.idleTimeoutSeconds ?? configuration?.websocketIdleTimeoutSeconds ?? 0,
+            websocketLastError: status?.lastError,
+            websocketLastDisconnectReason: status?.lastDisconnectReason
         )
     }
 

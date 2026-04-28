@@ -22,6 +22,14 @@ typedef void (*IPPacketCallback)(const uint8_t* packet_data, uint32_t length, vo
 typedef void (*ConnectionCallback)(void* context);
 typedef void (*DisconnectedCallback)(bool was_connected, const char* reason, void* context);
 
+typedef struct {
+    bool running;
+    bool started;
+    int idle_timeout_seconds;
+    char* last_error;
+    char* last_disconnect_reason;
+} WebsocketClientBridgeStatus;
+
 // Creates new websocket client instance
 WebsocketClientBridgePtr websocket_client_bridge_create(
     const char* server_ip,
@@ -52,6 +60,8 @@ bool websocket_client_bridge_send_packet(WebsocketClientBridgePtr client,
 
 // Checks if websocket client is started
 bool websocket_client_bridge_is_started(WebsocketClientBridgePtr client);
+WebsocketClientBridgeStatus websocket_client_bridge_status(WebsocketClientBridgePtr client);
+void websocket_client_bridge_status_free(WebsocketClientBridgeStatus status);
 
 #ifdef __cplusplus
 }

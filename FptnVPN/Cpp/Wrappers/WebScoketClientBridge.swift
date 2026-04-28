@@ -9,6 +9,14 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 
+struct WebsocketClientStatus: Sendable {
+    let running: Bool
+    let started: Bool
+    let idleTimeoutSeconds: Int
+    let lastError: String?
+    let lastDisconnectReason: String?
+}
+
 final class WebsocketClientBridge {
 
     typealias PacketCallback     = (Data) -> Void
@@ -119,5 +127,27 @@ final class WebsocketClientBridge {
 
     var isStarted: Bool {
         handle.map { websocket_client_bridge_is_started($0) } ?? false
+    }
+
+    var status: WebsocketClientStatus {
+        guard let handle else {
+            return WebsocketClientStatus(
+                running: false,
+                started: false,
+                idleTimeoutSeconds: 0,
+                lastError: "Invalid handle",
+                lastDisconnectReason: nil
+            )
+        }
+
+        let raw = websocket_client_bridge_status(handle)
+        defer { websocket_client_bridge_status_free(raw) }
+        return WebsocketClientStatus(
+            running: raw.running,
+            started: raw.started,
+            idleTimeoutSeconds: Int(raw.idle_timeout_seconds),
+            lastError: raw.last_error.map { String(cString: $0) },
+            lastDisconnectReason: raw.last_disconnect_reason.map { String(cString: $0) }
+        )
     }
 }
