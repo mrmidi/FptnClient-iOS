@@ -188,12 +188,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let sendFailureWarningIntervalSeconds: TimeInterval = 1
     private let sendFailureWarningPacketThreshold: Int64 = 100
 
+    deinit {
+        recordProviderEvent(category: "lifecycle", message: "PacketTunnelProvider deinit")
+        updateDiagnosticsHeartbeat(lastEvent: "deinit")
+    }
+
     override func startTunnel(
         options: [String: NSObject]?,
         completionHandler: @escaping (Error?) -> Void
     ) {
         bootstrapLogging()
+        TunnelCrashSignalInstaller.installIfPossible()
         logger.info("PacketTunnelProvider startTunnel")
+        recordProviderEvent(category: "lifecycle", message: "startTunnel")
         _ = options
 
         guard let config = protocolConfiguration as? NETunnelProviderProtocol,
@@ -230,6 +237,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.unlock()
 
         updateRuntimeState(.starting, reason: "startTunnel")
+        updateDiagnosticsHeartbeat(lastEvent: "startTunnel")
         startPathMonitor()
         scheduleStartTimeout(seconds: 15)
         startWebSocket(using: runtimeConfig, context: "initial_start")
@@ -253,6 +261,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.warning(
             "PacketTunnelProvider stopTunnel reason=\(reason.rawValue) (\(description)) initiator=\(initiator.rawValue)"
         )
+        recordProviderEvent(
+            category: "lifecycle",
+            message: "stopTunnel reason=\(reason.rawValue) (\(description)) initiator=\(initiator.rawValue)",
+            runtimeState: "stopping"
+        )
+        updateDiagnosticsHeartbeat(lastEvent: "stopTunnel")
 
         cancelStartTimeout()
         cancelPendingReconnect()
@@ -291,6 +305,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 stateLock.unlock()
                 cancelPendingReconnect()
                 logger.info("Marked local stop initiator via IPC: \(initiator); reconnect will be suppressed")
+                recordProviderEvent(category: "ipc", message: "prepare_stop initiator=\(initiator)")
+                updateDiagnosticsHeartbeat(lastEvent: "prepare_stop")
             }
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "stop_initiator_recorded")))
         case .getStatus:
@@ -303,6 +319,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.info(
             "PacketTunnelProvider sleep state=\(snapshot.runtimeState.rawValue) reconnect_attempt=\(snapshot.reconnectAttempt) last_error=\(snapshot.lastTransportError ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
         )
+        recordProviderEvent(
+            category: "lifecycle",
+            message: "sleep state=\(snapshot.runtimeState.rawValue)",
+            runtimeState: snapshot.runtimeState.rawValue,
+            reconnectAttempt: snapshot.reconnectAttempt
+        )
+        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "sleep")
         completionHandler()
     }
 
@@ -311,6 +334,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.info(
             "PacketTunnelProvider wake state=\(snapshot.runtimeState.rawValue) reconnect_attempt=\(snapshot.reconnectAttempt) last_error=\(snapshot.lastTransportError ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
         )
+        recordProviderEvent(
+            category: "lifecycle",
+            message: "wake state=\(snapshot.runtimeState.rawValue)",
+            runtimeState: snapshot.runtimeState.rawValue,
+            reconnectAttempt: snapshot.reconnectAttempt
+        )
+        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "wake")
 
         if snapshot.runtimeState == .connected && !snapshot.websocketStarted {
             logger.warning("Tunnel wake detected connected state without a running websocket — connection likely lost during sleep")
@@ -334,6 +364,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         if shutdownRequested {
             stateLock.unlock()
             logger.info("Skipping WebSocket start context=\(context) because shutdown was requested")
+            recordProviderEvent(category: "websocket", message: "skip_start context=\(context) shutdown=true")
             return
         }
         websocketGeneration += 1
@@ -353,12 +384,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             },
             connectedCallback: { [weak self] in
                 guard let self else { return }
+                self.recordProviderEvent(category: "websocket_callback", message: "connected_callback_enter generation=\(generation)", generation: generation)
                 self.eventQueue.async { [weak self] in
                     self?.handleTransportConnected(generation: generation)
                 }
             },
             disconnectedCallback: { [weak self] wasConnected, reason in
                 guard let self else { return }
+                self.recordProviderEvent(category: "websocket_callback", message: "disconnected_callback_enter generation=\(generation) was_connected=\(wasConnected) reason=\(reason)", generation: generation)
                 self.eventQueue.async { [weak self] in
                     self?.handleTransportDisconnected(
                         generation: generation,
@@ -373,6 +406,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard client.start() else {
             replaceWebSocketClient(with: nil, stopCurrent: false)
             logger.error("WebSocket start failed context=\(context) generation=\(generation)")
+            recordProviderEvent(category: "websocket", message: "start_failed context=\(context) generation=\(generation)", generation: generation)
             eventQueue.async { [weak self] in
                 self?.handleTransportDisconnected(
                     generation: generation,
@@ -384,6 +418,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         logger.debug("WebSocket start issued context=\(context) generation=\(generation)")
+        recordProviderEvent(category: "websocket", message: "start_issued context=\(context) generation=\(generation)", generation: generation)
+        updateDiagnosticsHeartbeat(lastEvent: "websocket_start_issued")
     }
 
     private func handleTransportConnected(generation: Int) {
@@ -399,20 +435,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if isStaleCallback {
             logger.info("Ignoring stale websocket connected callback generation=\(generation)")
+            recordProviderEvent(category: "websocket", message: "ignore_stale_connected generation=\(generation)", generation: generation)
             return
         }
         if shouldIgnoreForShutdown {
             logger.info("Ignoring websocket connected callback generation=\(generation) because shutdown was requested")
+            recordProviderEvent(category: "websocket", message: "ignore_connected_shutdown generation=\(generation)", generation: generation)
             replaceWebSocketClient(with: nil, stopCurrent: true)
             return
         }
 
         guard let configuration else {
             logger.error("Transport connected without runtime configuration")
+            recordProviderEvent(category: "websocket", message: "connected_without_configuration generation=\(generation)", generation: generation)
             return
         }
 
         logger.info("Tunnel transport connected \(activityDiagnosticsDescription())")
+        recordProviderEvent(category: "websocket", message: "transport_connected generation=\(generation)", generation: generation)
 
         if shouldApplySettings {
             logger.info("Tunnel websocket connected — applying network settings")
@@ -422,6 +462,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     guard let self else { return }
                     if let error {
                         logger.error("setTunnelNetworkSettings error: \(error.localizedDescription)")
+                        self.recordProviderEvent(category: "settings", message: "apply_failed \(error.localizedDescription)", generation: generation)
                         self.updateRuntimeState(.failed, reason: "setTunnelNetworkSettings error")
                         self.finishStart(with: error)
                         self.replaceWebSocketClient(with: nil, stopCurrent: true)
@@ -438,6 +479,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     self.stateLock.unlock()
 
                     self.updateRuntimeState(.connected, reason: "initial websocket connected")
+                    self.recordProviderEvent(category: "settings", message: "apply_success generation=\(generation)", generation: generation)
                     if shouldStartReadLoop {
                         self.startReadLoop()
                     }
@@ -454,6 +496,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.unlock()
 
         updateRuntimeState(.connected, reason: "transport recovered")
+        recordProviderEvent(category: "websocket", message: "transport_recovered generation=\(generation)", generation: generation)
+        updateDiagnosticsHeartbeat(lastEvent: "transport_recovered")
     }
 
     private func handleTransportDisconnected(
@@ -473,12 +517,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if isStaleCallback {
             logger.info("Ignoring stale websocket disconnected callback generation=\(generation) reason=\(reason)")
+            recordProviderEvent(category: "websocket", message: "ignore_stale_disconnected generation=\(generation) reason=\(reason)", generation: generation)
             return
         }
 
         logger.warning(
             "Tunnel websocket disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") \(activityDiagnosticsDescription())"
         )
+        recordProviderEvent(
+            category: "websocket",
+            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-")",
+            generation: generation
+        )
+        updateDiagnosticsHeartbeat(lastEvent: "transport_disconnected")
         replaceWebSocketClient(with: nil, stopCurrent: false)
         cancelStartTimeout()
 
@@ -493,6 +544,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         guard currentState != .stopping else {
             logger.info("Ignoring transport disconnect because tunnel is already stopping")
+            recordProviderEvent(category: "reconnect", message: "skip_disconnect_already_stopping", runtimeState: currentState.rawValue, generation: generation)
             return
         }
 
@@ -500,11 +552,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             logger.info(
                 "Suppressing reconnect after transport disconnect because stop was already requested by \(stopInitiator?.rawValue ?? "shutdown")"
             )
+            recordProviderEvent(category: "reconnect", message: "suppress_after_stop initiator=\(stopInitiator?.rawValue ?? "shutdown")", runtimeState: currentState.rawValue, generation: generation)
             updateRuntimeState(.stopping, reason: "transport disconnected after local stop request")
             return
         }
 
         if currentState == .starting || configuration == nil {
+            recordProviderEvent(category: "reconnect", message: "initial_transport_failure reason=\(reason)", runtimeState: currentState.rawValue, generation: generation)
             updateRuntimeState(.failed, reason: "initial transport failure")
             finishStart(with: makeError(reason))
             return
@@ -533,12 +587,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard let currentConfiguration = configuration else {
             stateLock.unlock()
             logger.info("Skipping reconnect schedule because runtime configuration is missing")
+            recordProviderEvent(category: "reconnect", message: "skip_schedule_missing_configuration")
             return .unavailable
         }
 
         guard !shutdownRequested else {
             stateLock.unlock()
             logger.info("Skipping reconnect schedule because shutdown was requested")
+            recordProviderEvent(category: "reconnect", message: "skip_schedule_shutdown")
             return .unavailable
         }
 
@@ -552,6 +608,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard currentConfiguration.reconnectEnabled else {
             stateLock.unlock()
             logger.info("Skipping reconnect schedule because reconnect is disabled")
+            recordProviderEvent(category: "reconnect", message: "skip_schedule_disabled")
             return .unavailable
         }
 
@@ -565,6 +622,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             logger.warning(
                 "Waiting for network path before reconnect attempt \(nextAttempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") \(activityDiagnosticsDescription())"
             )
+            recordProviderEvent(
+                category: "reconnect",
+                message: "waiting_for_network attempt=\(nextAttempt)",
+                generation: generation,
+                reconnectAttempt: nextAttempt,
+                pathSatisfied: false
+            )
+            updateDiagnosticsHeartbeat(lastEvent: "waiting_for_network")
             return .waitingForNetwork
         }
 
@@ -585,6 +650,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 "Scheduling reconnect attempt \(nextAttempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") after \(delaySeconds)s \(activityDiagnosticsDescription())"
             )
         }
+        recordProviderEvent(
+            category: "reconnect",
+            message: "schedule attempt=\(nextAttempt) delay=\(delaySeconds)s budget_exceeded=\(exceededConfiguredBudget)",
+            generation: generation,
+            reconnectAttempt: nextAttempt,
+            pathSatisfied: true
+        )
+        updateDiagnosticsHeartbeat(lastEvent: "reconnect_scheduled")
 
         if let workItem {
             eventQueue.asyncAfter(deadline: .now() + .seconds(delaySeconds), execute: workItem)
@@ -613,15 +686,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if shouldSkip {
             logger.info("Skipping reconnect attempt \(attempt) because it is stale or shutdown was requested")
+            recordProviderEvent(category: "reconnect", message: "skip_attempt_stale_or_shutdown attempt=\(attempt)", reconnectAttempt: attempt)
             return
         }
 
         guard currentState == .reasserting, let configuration else {
+            recordProviderEvent(category: "reconnect", message: "skip_attempt_state=\(currentState.rawValue) attempt=\(attempt)", runtimeState: currentState.rawValue, reconnectAttempt: attempt)
             return
         }
 
         guard pathSatisfied else {
             logger.warning("Reconnect attempt \(attempt) delayed because network path is unsatisfied")
+            recordProviderEvent(category: "reconnect", message: "delay_attempt_path_unsatisfied attempt=\(attempt)", runtimeState: currentState.rawValue, reconnectAttempt: attempt, pathSatisfied: false)
             updateRuntimeState(.waitingForNetwork, reason: "network path unsatisfied before reconnect")
             return
         }
@@ -629,6 +705,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.warning(
             "Starting reconnect attempt \(attempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") \(activityDiagnosticsDescription())"
         )
+        recordProviderEvent(category: "reconnect", message: "start_attempt attempt=\(attempt)", reconnectAttempt: attempt, pathSatisfied: true)
+        updateDiagnosticsHeartbeat(lastEvent: "reconnect_attempt_start")
         startWebSocket(using: configuration, context: "reconnect_attempt_\(attempt)")
     }
 
@@ -649,6 +727,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         updateRuntimeState(.failed, reason: "runtime reconnect exhausted")
         logger.error("Tunnel runtime failure: \(reason)")
+        recordProviderEvent(category: "failure", message: "failRuntimeTunnel reason=\(reason)", runtimeState: "failed")
+        updateDiagnosticsHeartbeat(lastEvent: "failRuntimeTunnel")
         cancelPendingReconnect()
         cancelTunnelWithError(makeError(reason))
     }
@@ -692,6 +772,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.info(
             "Applying tunnel settings ipv4=\(configuration.tunIPv4)/255.255.255.0 ipv4_included_routes=\(ipv4IncludedRoutes) ipv4_excluded_routes=\(ipv4ExcludedRoutes) ipv6=\(ipv6Enabled ? "\(configuration.tunIPv6)/64" : "none") ipv6_included_routes=\(ipv6IncludedRoutes) ipv6_excluded_routes=\(ipv6ExcludedRoutes) dns=\(dnsServers.joined(separator: ",")) match_domains=\(matchDomains) mtu=1500"
         )
+        recordProviderEvent(category: "settings", message: "apply_start ipv6=\(ipv6Enabled)")
 
         setTunnelNetworkSettings(settings, completionHandler: completionHandler)
     }
@@ -939,6 +1020,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard previous != isSatisfied || shouldScheduleReconnect else { return }
 
         logger.info("Network path satisfied=\(isSatisfied)")
+        recordProviderEvent(category: "path", message: "path_satisfied=\(isSatisfied)", pathSatisfied: isSatisfied)
+        updateDiagnosticsHeartbeat(lastEvent: "path_satisfied=\(isSatisfied)")
         if shouldScheduleReconnect {
             scheduleReconnectAttempt(attempt: max(1, attempt), maxAttempts: maxAttempts)
         }
@@ -954,6 +1037,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard let configuration, !shutdownRequested, isNetworkPathSatisfied else {
             stateLock.unlock()
             logger.info("Skipping reconnect attempt \(attempt) after path change because state is no longer reconnectable")
+            recordProviderEvent(category: "reconnect", message: "skip_path_recovery_not_reconnectable attempt=\(attempt)", reconnectAttempt: attempt)
             return
         }
 
@@ -980,6 +1064,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 "Scheduling reconnect attempt \(attempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") after \(delaySeconds)s after network path recovery \(activityDiagnosticsDescription())"
             )
         }
+        recordProviderEvent(
+            category: "reconnect",
+            message: "schedule_after_path_recovery attempt=\(attempt) delay=\(delaySeconds)s budget_exceeded=\(exceededConfiguredBudget)",
+            generation: generation,
+            reconnectAttempt: attempt,
+            pathSatisfied: true
+        )
+        updateDiagnosticsHeartbeat(lastEvent: "reconnect_scheduled_after_path")
 
         if let workItem {
             eventQueue.asyncAfter(deadline: .now() + .seconds(delaySeconds), execute: workItem)
@@ -1020,6 +1112,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.info(
             "Tunnel telemetry state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) packetflow_read_packets=\(snapshot.packetFlowReadPackets) packetflow_read_bytes=\(snapshot.packetFlowReadBytes) packetflow_write_packets=\(snapshot.packetFlowWritePackets) packetflow_write_bytes=\(snapshot.packetFlowWriteBytes) transport_received_packets=\(snapshot.transportReceivedPackets) transport_received_bytes=\(snapshot.transportReceivedBytes) send_failures=\(snapshot.websocketSendFailures) last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
         )
+        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "telemetry")
 
         let clientAttached = currentWebSocketClient() != nil
         let readLoopActive = shouldContinueReadLoop()
@@ -1047,10 +1140,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         reasserting = newReasserting
         if previousState != state {
             logger.info("Tunnel state \(previousState.rawValue) -> \(state.rawValue) reason=\(reason)")
+            recordProviderEvent(category: "state", message: "\(previousState.rawValue)->\(state.rawValue) reason=\(reason)", runtimeState: state.rawValue)
         }
         if previousReasserting != newReasserting {
             logger.info("Tunnel reasserting=\(newReasserting)")
+            recordProviderEvent(category: "state", message: "reasserting=\(newReasserting)", runtimeState: state.rawValue)
         }
+        updateDiagnosticsHeartbeat(lastEvent: "state=\(state.rawValue)")
     }
 
     private func finishStart(with error: Error?) {
@@ -1063,6 +1159,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         startTimeoutWorkItem = nil
         stateLock.unlock()
 
+        recordProviderEvent(category: "startup", message: "finishStart error=\(error?.localizedDescription ?? "none")")
+        updateDiagnosticsHeartbeat(lastEvent: "finishStart")
         completion?(error)
     }
 
@@ -1100,6 +1198,73 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             websocketLastError: status?.lastError,
             websocketLastDisconnectReason: status?.lastDisconnectReason
         )
+    }
+
+    private func recordProviderEvent(
+        category: String,
+        message: String,
+        runtimeState: String? = nil,
+        generation: Int? = nil,
+        reconnectAttempt: Int? = nil,
+        pathSatisfied: Bool? = nil
+    ) {
+        TunnelDiagnosticsStore.shared.recordProviderEvent(
+            category: category,
+            message: message,
+            runtimeState: runtimeState,
+            generation: generation,
+            reconnectAttempt: reconnectAttempt,
+            pathSatisfied: pathSatisfied
+        )
+    }
+
+    private func updateDiagnosticsHeartbeat(lastEvent: String) {
+        updateDiagnosticsHeartbeat(snapshot: currentSnapshot(), lastEvent: lastEvent)
+    }
+
+    private func updateDiagnosticsHeartbeat(snapshot: TunnelRuntimeSnapshot, lastEvent: String) {
+        let generation: Int
+        let pathSatisfied: Bool
+        stateLock.lock()
+        generation = websocketGeneration
+        pathSatisfied = isNetworkPathSatisfied
+        stateLock.unlock()
+
+        TunnelDiagnosticsStore.shared.writeHeartbeat(
+            TunnelProviderHeartbeat(
+                timestamp: TunnelDiagnosticsStore.now(),
+                runtimeState: snapshot.runtimeState.rawValue,
+                isReasserting: snapshot.isReasserting,
+                generation: generation,
+                reconnectAttempt: snapshot.reconnectAttempt,
+                maxReconnectAttempts: snapshot.maxReconnectAttempts,
+                pathSatisfied: pathSatisfied,
+                websocketStarted: snapshot.websocketStarted,
+                websocketRunning: snapshot.websocketRunning,
+                lastTransportError: snapshot.lastTransportError ?? snapshot.websocketLastError,
+                lastStopReason: snapshot.lastStopReason,
+                lastEvent: lastEvent,
+                lastInboundActivityAt: snapshot.lastInboundActivityAt,
+                lastOutboundActivityAt: snapshot.lastOutboundActivityAt,
+                packetFlowReadPackets: snapshot.packetFlowReadPackets,
+                packetFlowWritePackets: snapshot.packetFlowWritePackets,
+                transportReceivedPackets: snapshot.transportReceivedPackets,
+                websocketSendFailures: snapshot.websocketSendFailures,
+                memoryResidentBytes: residentMemoryBytes()
+            )
+        )
+    }
+
+    private func residentMemoryBytes() -> UInt64? {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        return UInt64(info.resident_size)
     }
 
     private func currentOrDefaultStopInitiator() -> LocalStopInitiator {

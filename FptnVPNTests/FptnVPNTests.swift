@@ -159,4 +159,93 @@ struct FptnVPNTests {
         #expect(transition.state == .reasserting(attempt: 1))
         #expect(transition.effects == [.ignoreStaleCallback])
     }
+
+    @Test func diagnosticsStoreRetainsNewestProviderEvents() throws {
+        let store = TunnelDiagnosticsStore(rootURL: try temporaryDiagnosticsDirectory())
+        for index in 0..<305 {
+            store.recordProviderEvent(category: "test", message: "event_\(index)")
+        }
+
+        let events = store.readProviderEvents()
+        #expect(events.count == 300)
+        #expect(events.first?.message == "event_5")
+        #expect(events.last?.message == "event_304")
+    }
+
+    @Test func diagnosticsStoreHandlesMalformedHeartbeat() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        try "not-json".write(to: root.appendingPathComponent("provider-heartbeat.json"), atomically: true, encoding: .utf8)
+        let store = TunnelDiagnosticsStore(rootURL: root)
+
+        #expect(store.readHeartbeat() == nil)
+    }
+
+    @Test func diagnosticsRedactorRemovesSecrets() {
+        let redacted = TunnelDiagnosticsRedactor.redact(
+            #"access_token=abc123456789 password="secret123" authorization Bearer deadbeefcafebabe token: eyJh123456789"#
+        )
+
+        #expect(!redacted.contains("abc123456789"))
+        #expect(!redacted.contains("secret123"))
+        #expect(!redacted.contains("deadbeefcafebabe"))
+        #expect(redacted.contains("<redacted>"))
+    }
+
+    @Test func providerFailureReportIncludesHeartbeatCrashMarkerAndMetricKit() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        let store = TunnelDiagnosticsStore(rootURL: root)
+        store.writeHeartbeat(
+            TunnelProviderHeartbeat(
+                timestamp: TunnelDiagnosticsStore.now(),
+                runtimeState: "connected",
+                isReasserting: false,
+                generation: 4,
+                reconnectAttempt: 0,
+                maxReconnectAttempts: 0,
+                pathSatisfied: true,
+                websocketStarted: true,
+                websocketRunning: true,
+                lastTransportError: nil,
+                lastStopReason: nil,
+                lastEvent: "telemetry",
+                lastInboundActivityAt: "2026-04-28T17:39:00Z",
+                lastOutboundActivityAt: "2026-04-28T17:39:00Z",
+                packetFlowReadPackets: 10,
+                packetFlowWritePackets: 11,
+                transportReceivedPackets: 12,
+                websocketSendFailures: 0,
+                memoryResidentBytes: 123
+            )
+        )
+        try #"{"timestamp":"signal-time-unavailable","signal":11,"signalName":"SIGSEGV","process":"FptnVPNTunnel"}"#
+            .write(to: root.appendingPathComponent("provider-crash-marker.json"), atomically: true, encoding: .utf8)
+        store.recordMetricKitDiagnostic(
+            MetricKitDiagnosticRecord(
+                timestamp: TunnelDiagnosticsStore.now(),
+                category: "crash",
+                processName: "FptnVPNTunnel",
+                bundleIdentifier: "net.mrmidi.FptnVPN.FptnVPNTunnel",
+                exceptionType: "SIGSEGV",
+                exceptionCode: "11",
+                terminationReason: "signal",
+                appVersion: "1.0",
+                appBuild: "1",
+                callStack: "frame",
+                payload: "{}"
+            )
+        )
+
+        let report = store.makeProviderFailureReport(disconnectReason: "plugin_failed")
+        #expect(report.heartbeat?.runtimeState == "connected")
+        #expect(report.crashMarker?.signalName == "SIGSEGV")
+        #expect(report.nearestMetricKitDiagnostic?.category == "crash")
+        #expect(report.summaryLine.contains("plugin_failed"))
+    }
+
+    private func temporaryDiagnosticsDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FptnVPNTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
 }

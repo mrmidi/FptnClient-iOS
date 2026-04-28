@@ -544,9 +544,14 @@ final class VPNService: ObservableObject {
             }
 
             let nsError = error as NSError
+            let reason = Self.describeDisconnectError(nsError)
             logger.warning(
-                "Tunnel last disconnect error domain=\(nsError.domain) code=\(nsError.code) reason=\(Self.describeDisconnectError(nsError)) description=\(nsError.localizedDescription)"
+                "Tunnel last disconnect error domain=\(nsError.domain) code=\(nsError.code) reason=\(reason) description=\(nsError.localizedDescription)"
             )
+            if reason == "plugin_failed" {
+                let report = TunnelDiagnosticsStore.shared.makeProviderFailureReport(disconnectReason: reason)
+                logger.warning("\(report.summaryLine)")
+            }
         }
     }
 

@@ -29,6 +29,9 @@ final class WebsocketClientBridge {
     private let packetCallback: PacketCallback
     private let connectedCallback: ConnectionCallback
     private let disconnectedCallback: DisconnectionCallback
+    private let diagnosticsID = UUID().uuidString
+    private var receivedPacketCount: Int64 = 0
+    private var receivedByteCount: Int64 = 0
 
     // MARK: - Init / deinit
 
@@ -67,14 +70,16 @@ final class WebsocketClientBridge {
                 guard let ctx, let rawPtr else { return }
                 let bridge = Unmanaged<WebsocketClientBridge>
                     .fromOpaque(ctx).takeUnretainedValue()
+                bridge.recordPacketCallback(byteCount: Int(length))
                 bridge.packetCallback(Data(bytes: rawPtr, count: Int(length)))
             },
             // ConnectionCallback
             { ctx in
                 guard let ctx else { return }
-                Unmanaged<WebsocketClientBridge>
+                let bridge = Unmanaged<WebsocketClientBridge>
                     .fromOpaque(ctx).takeUnretainedValue()
-                    .connectedCallback()
+                bridge.recordConnectedCallback()
+                bridge.connectedCallback()
             },
             // DisconnectedCallback
             { wasConnected, reason, ctx in
@@ -82,15 +87,21 @@ final class WebsocketClientBridge {
                 let bridge = Unmanaged<WebsocketClientBridge>
                     .fromOpaque(ctx).takeUnretainedValue()
                 let message = reason.map { String(cString: $0) } ?? "connection_closed"
+                bridge.recordDisconnectedCallback(wasConnected: wasConnected, reason: message)
                 bridge.disconnectedCallback(wasConnected, message)
             },
             ctx
         )
 
         logger.trace("WebsocketClientBridge created — \(serverIP):\(serverPort)")
+        TunnelDiagnosticsStore.shared.recordProviderEvent(
+            category: "bridge",
+            message: "create id=\(diagnosticsID) server=\(serverIP):\(serverPort) strategy=\(censorshipStrategy)"
+        )
     }
 
     deinit {
+        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "deinit id=\(diagnosticsID) has_handle=\(handle != nil)")
         if let handle {
             websocket_client_bridge_destroy(handle)
         }
@@ -103,6 +114,7 @@ final class WebsocketClientBridge {
         guard let handle else { return false }
         let ok = websocket_client_bridge_start(handle)
         logger.debug("WebSocket start → \(ok)")
+        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "start id=\(diagnosticsID) ok=\(ok)")
         return ok
     }
 
@@ -111,6 +123,7 @@ final class WebsocketClientBridge {
         guard let handle else { return false }
         let ok = websocket_client_bridge_stop(handle)
         logger.debug("WebSocket stop → \(ok)")
+        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "stop id=\(diagnosticsID) ok=\(ok)")
         return ok
     }
 
@@ -153,3 +166,26 @@ final class WebsocketClientBridge {
 }
 
 extension WebsocketClientBridge: TunnelWebSocketTransport {}
+
+private extension WebsocketClientBridge {
+    func recordConnectedCallback() {
+        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge_callback", message: "connected id=\(diagnosticsID)")
+    }
+
+    func recordDisconnectedCallback(wasConnected: Bool, reason: String) {
+        TunnelDiagnosticsStore.shared.recordProviderEvent(
+            category: "bridge_callback",
+            message: "disconnected id=\(diagnosticsID) was_connected=\(wasConnected) reason=\(reason)"
+        )
+    }
+
+    func recordPacketCallback(byteCount: Int) {
+        receivedPacketCount += 1
+        receivedByteCount += Int64(byteCount)
+        guard receivedPacketCount == 1 || receivedPacketCount % 500 == 0 else { return }
+        TunnelDiagnosticsStore.shared.recordProviderEvent(
+            category: "bridge_callback",
+            message: "packet id=\(diagnosticsID) count=\(receivedPacketCount) bytes=\(receivedByteCount)"
+        )
+    }
+}

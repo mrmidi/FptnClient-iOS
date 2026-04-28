@@ -79,6 +79,7 @@ final class LogsViewModel: ObservableObject {
 
     func clear() {
         SharedLogSink.shared.clear()
+        TunnelDiagnosticsStore.shared.clear()
         entries = []
     }
 
@@ -91,8 +92,9 @@ final class LogsViewModel: ObservableObject {
     }
 
     func exportFilteredText() -> String {
-        let text = filteredEntries.map(\.raw).joined(separator: "\n")
-        return redactSensitive(text)
+        let logText = filteredEntries.map(\.raw).joined(separator: "\n")
+        let diagnosticsText = TunnelDiagnosticsStore.shared.exportDiagnosticsText()
+        return redactSensitive([logText, diagnosticsText].filter { !$0.isEmpty }.joined(separator: "\n\n"))
     }
 
     private func refresh() {
