@@ -28,6 +28,14 @@ typedef struct {
     int idle_timeout_seconds;
     char* last_error;
     char* last_disconnect_reason;
+    uint64_t memory_resident_bytes;
+    uint64_t memory_phys_footprint_bytes;
+    int64_t received_packet_count;
+    int64_t received_byte_count;
+    int64_t callback_enter_count;
+    int64_t callback_exit_count;
+    int64_t callback_byte_count;
+    bool in_packet_callback;
 } WebsocketClientBridgeStatus;
 
 // Creates new websocket client instance

@@ -191,6 +191,66 @@ struct FptnVPNTests {
         #expect(redacted.contains("<redacted>"))
     }
 
+    @Test func memoryPressurePolicyClassifiesThresholds() {
+        let belowWarning = TunnelMemoryPressureSnapshot(
+            residentBytes: 10 * 1024 * 1024,
+            physFootprintBytes: 34 * 1024 * 1024
+        )
+        let warning = TunnelMemoryPressureSnapshot(
+            residentBytes: 10 * 1024 * 1024,
+            physFootprintBytes: 35 * 1024 * 1024
+        )
+        let emergency = TunnelMemoryPressureSnapshot(
+            residentBytes: 10 * 1024 * 1024,
+            physFootprintBytes: 42 * 1024 * 1024
+        )
+
+        #expect(belowWarning.level == .normal)
+        #expect(warning.level == .warning)
+        #expect(emergency.level == .emergency)
+    }
+
+    @Test func memoryPressurePolicyUsesFootprintBeforeRSS() {
+        let rssEmergencyFootprintNormal = TunnelMemoryPressureSnapshot(
+            residentBytes: 50 * 1024 * 1024,
+            physFootprintBytes: 20 * 1024 * 1024
+        )
+        let rssWarningWithoutFootprint = TunnelMemoryPressureSnapshot(
+            residentBytes: 35 * 1024 * 1024,
+            physFootprintBytes: nil
+        )
+
+        #expect(rssEmergencyFootprintNormal.level == .normal)
+        #expect(rssWarningWithoutFootprint.level == .warning)
+    }
+
+    @Test func diagnosticsStoreReadsOldHeartbeatWithoutFootprint() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        try """
+        {
+          "timestamp": "\(TunnelDiagnosticsStore.now())",
+          "runtimeState": "connected",
+          "isReasserting": false,
+          "generation": 1,
+          "reconnectAttempt": 0,
+          "maxReconnectAttempts": 0,
+          "pathSatisfied": true,
+          "websocketStarted": true,
+          "websocketRunning": true,
+          "packetFlowReadPackets": 1,
+          "packetFlowWritePackets": 2,
+          "transportReceivedPackets": 3,
+          "websocketSendFailures": 0,
+          "memoryResidentBytes": 123
+        }
+        """.write(to: root.appendingPathComponent("provider-heartbeat.json"), atomically: true, encoding: .utf8)
+        let store = TunnelDiagnosticsStore(rootURL: root)
+
+        let heartbeat = store.readHeartbeat()
+        #expect(heartbeat?.memoryResidentBytes == 123)
+        #expect(heartbeat?.memoryPhysFootprintBytes == nil)
+    }
+
     @Test func providerFailureReportIncludesHeartbeatCrashMarkerAndMetricKit() throws {
         let root = try temporaryDiagnosticsDirectory()
         let store = TunnelDiagnosticsStore(rootURL: root)
@@ -214,7 +274,8 @@ struct FptnVPNTests {
                 packetFlowWritePackets: 11,
                 transportReceivedPackets: 12,
                 websocketSendFailures: 0,
-                memoryResidentBytes: 123
+                memoryResidentBytes: 123,
+                memoryPhysFootprintBytes: 456
             )
         )
         try #"{"timestamp":"signal-time-unavailable","signal":11,"signalName":"SIGSEGV","process":"FptnVPNTunnel"}"#
@@ -240,6 +301,7 @@ struct FptnVPNTests {
         #expect(report.crashMarker?.signalName == "SIGSEGV")
         #expect(report.nearestMetricKitDiagnostic?.category == "crash")
         #expect(report.summaryLine.contains("plugin_failed"))
+        #expect(report.summaryLine.contains("footprint=0MB"))
     }
 
     private func temporaryDiagnosticsDirectory() throws -> URL {

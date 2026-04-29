@@ -32,6 +32,45 @@ struct TunnelProviderHeartbeat: Codable, Equatable, Sendable {
     let transportReceivedPackets: Int64
     let websocketSendFailures: Int64
     let memoryResidentBytes: UInt64?
+    let memoryPhysFootprintBytes: UInt64?
+}
+
+enum TunnelMemoryPressureLevel: String, Codable, Sendable {
+    case normal
+    case warning
+    case emergency
+}
+
+struct TunnelMemoryPressureSnapshot: Equatable, Sendable {
+    static let warningThresholdBytes: UInt64 = 35 * 1024 * 1024
+    static let emergencyThresholdBytes: UInt64 = 42 * 1024 * 1024
+
+    let residentBytes: UInt64?
+    let physFootprintBytes: UInt64?
+
+    var primaryBytes: UInt64? {
+        physFootprintBytes ?? residentBytes
+    }
+
+    var level: TunnelMemoryPressureLevel {
+        guard let primaryBytes else { return .normal }
+        if primaryBytes >= Self.emergencyThresholdBytes {
+            return .emergency
+        }
+        if primaryBytes >= Self.warningThresholdBytes {
+            return .warning
+        }
+        return .normal
+    }
+
+    var description: String {
+        "memory_rss=\(Self.megabytesDescription(residentBytes)) memory_footprint=\(Self.megabytesDescription(physFootprintBytes)) memory_level=\(level.rawValue)"
+    }
+
+    static func megabytesDescription(_ bytes: UInt64?) -> String {
+        guard let bytes else { return "-" }
+        return "\(bytes / 1024 / 1024)MB"
+    }
 }
 
 struct TunnelCrashMarker: Codable, Equatable, Sendable {
@@ -70,15 +109,18 @@ struct TunnelProviderFailureReport: Equatable, Sendable {
         let lastEvent = heartbeat?.lastEvent ?? recentEvents.last?.message ?? "-"
         let marker = crashMarker.map { "\($0.signalName)(\($0.signal))" } ?? "none"
         let metric = nearestMetricKitDiagnostic.map { "\($0.category)@\($0.timestamp)" } ?? "none_yet"
+        let memory = heartbeat.map {
+            "rss=\(TunnelMemoryPressureSnapshot.megabytesDescription($0.memoryResidentBytes)) footprint=\(TunnelMemoryPressureSnapshot.megabytesDescription($0.memoryPhysFootprintBytes))"
+        } ?? "memory=-"
         let vanished = heartbeatAgeSeconds.map { $0 > 45 } ?? true
         let classification = vanished ? "provider_missing_without_last_gasp" : "provider_failed_with_recent_heartbeat"
-        return "Provider failure diagnostics classification=\(classification) disconnect_reason=\(disconnectReason) heartbeat_state=\(heartbeatState) heartbeat_age=\(heartbeatAge) last_event=\(lastEvent) crash_marker=\(marker) nearest_metrickit=\(metric)"
+        return "Provider failure diagnostics classification=\(classification) disconnect_reason=\(disconnectReason) heartbeat_state=\(heartbeatState) heartbeat_age=\(heartbeatAge) \(memory) last_event=\(lastEvent) crash_marker=\(marker) nearest_metrickit=\(metric)"
     }
 
     var exportText: String {
         var lines: [String] = [summaryLine]
         if let heartbeat {
-            lines.append("Heartbeat: state=\(heartbeat.runtimeState) reasserting=\(heartbeat.isReasserting) generation=\(heartbeat.generation) reconnect_attempt=\(heartbeat.reconnectAttempt)/\(heartbeat.maxReconnectAttempts == 0 ? "∞" : String(heartbeat.maxReconnectAttempts)) path_satisfied=\(heartbeat.pathSatisfied) ws_started=\(heartbeat.websocketStarted) ws_running=\(heartbeat.websocketRunning) send_failures=\(heartbeat.websocketSendFailures) last_error=\(heartbeat.lastTransportError ?? "-") last_stop=\(heartbeat.lastStopReason ?? "-") last_inbound=\(heartbeat.lastInboundActivityAt ?? "-") last_outbound=\(heartbeat.lastOutboundActivityAt ?? "-")")
+            lines.append("Heartbeat: state=\(heartbeat.runtimeState) reasserting=\(heartbeat.isReasserting) generation=\(heartbeat.generation) reconnect_attempt=\(heartbeat.reconnectAttempt)/\(heartbeat.maxReconnectAttempts == 0 ? "∞" : String(heartbeat.maxReconnectAttempts)) path_satisfied=\(heartbeat.pathSatisfied) ws_started=\(heartbeat.websocketStarted) ws_running=\(heartbeat.websocketRunning) send_failures=\(heartbeat.websocketSendFailures) rss=\(TunnelMemoryPressureSnapshot.megabytesDescription(heartbeat.memoryResidentBytes)) footprint=\(TunnelMemoryPressureSnapshot.megabytesDescription(heartbeat.memoryPhysFootprintBytes)) last_error=\(heartbeat.lastTransportError ?? "-") last_stop=\(heartbeat.lastStopReason ?? "-") last_inbound=\(heartbeat.lastInboundActivityAt ?? "-") last_outbound=\(heartbeat.lastOutboundActivityAt ?? "-")")
         }
         if let crashMarker {
             lines.append("Crash marker: signal=\(crashMarker.signalName)(\(crashMarker.signal)) timestamp=\(crashMarker.timestamp) process=\(crashMarker.process)")

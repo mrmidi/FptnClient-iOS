@@ -15,6 +15,8 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #include <thread>
 #include <vector>
 
+#include <mach/mach.h>
+
 #include <fptn-protocol-lib/https/websocket_client/websocket_client.h>
 
 #ifndef FPTN_VERSION
@@ -51,6 +53,12 @@ struct WebsocketClientWrapper {
     std::string censorship_strategy;
     std::string last_error;
     std::string last_disconnect_reason;
+    std::atomic<int64_t> received_packet_count{0};
+    std::atomic<int64_t> received_byte_count{0};
+    std::atomic<int64_t> callback_enter_count{0};
+    std::atomic<int64_t> callback_exit_count{0};
+    std::atomic<int64_t> callback_byte_count{0};
+    std::atomic<bool> in_packet_callback{false};
 
     WebsocketClientWrapper(
         IPPacketCallback p_callback,
@@ -115,6 +123,36 @@ std::string parse_string_option(const std::string& options,
 }
 
 namespace {
+uint64_t current_resident_size_bytes() {
+    mach_task_basic_info_data_t info;
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    kern_return_t kr = task_info(
+        mach_task_self(),
+        MACH_TASK_BASIC_INFO,
+        reinterpret_cast<task_info_t>(&info),
+        &count
+    );
+    if (kr != KERN_SUCCESS) {
+        return 0;
+    }
+    return static_cast<uint64_t>(info.resident_size);
+}
+
+uint64_t current_phys_footprint_bytes() {
+    task_vm_info_data_t info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    kern_return_t kr = task_info(
+        mach_task_self(),
+        TASK_VM_INFO,
+        reinterpret_cast<task_info_t>(&info),
+        &count
+    );
+    if (kr != KERN_SUCCESS) {
+        return 0;
+    }
+    return static_cast<uint64_t>(info.phys_footprint);
+}
+
 std::string normalized_strategy_name(std::string value) {
     const auto option_end = value.find(';');
     if (option_end != std::string::npos) {
@@ -181,7 +219,25 @@ void packet_callback_adapter(fptn::common::network::IPPacketPtr packet,
         const auto* raw_packet = packet->GetRawPacket();
         const auto* data = static_cast<const uint8_t*>(raw_packet->getRawData());
         const auto len = raw_packet->getRawDataLen();
+        const auto packet_count = wrapper->received_packet_count.fetch_add(1) + 1;
+        const auto total_bytes = wrapper->received_byte_count.fetch_add(len) + len;
+        wrapper->callback_enter_count.fetch_add(1);
+        wrapper->callback_byte_count.fetch_add(len);
+        wrapper->in_packet_callback = true;
+        if (packet_count == 1 || packet_count % 500 == 0) {
+            SPDLOG_WARN(
+                "WebSocket bridge memory rss={}MB footprint={}MB received_packets={} received_bytes={} callback_enter={} callback_exit={}",
+                current_resident_size_bytes() / 1024 / 1024,
+                current_phys_footprint_bytes() / 1024 / 1024,
+                packet_count,
+                total_bytes,
+                wrapper->callback_enter_count.load(),
+                wrapper->callback_exit_count.load()
+            );
+        }
         wrapper->packet_callback(data, len, wrapper->context);
+        wrapper->in_packet_callback = false;
+        wrapper->callback_exit_count.fetch_add(1);
     }
 }
 
@@ -409,7 +465,7 @@ bool websocket_client_bridge_is_started(WebsocketClientBridgePtr client) {
 }
 
 WebsocketClientBridgeStatus websocket_client_bridge_status(WebsocketClientBridgePtr client) {
-    WebsocketClientBridgeStatus status = {false, false, 0, nullptr, nullptr};
+    WebsocketClientBridgeStatus status = {false, false, 0, nullptr, nullptr, 0, 0, 0, 0, 0, 0, 0, false};
     try {
         auto wrapper = static_cast<WebsocketClientWrapper*>(client);
         if (!wrapper) {
@@ -426,6 +482,14 @@ WebsocketClientBridgeStatus websocket_client_bridge_status(WebsocketClientBridge
         if (!wrapper->last_disconnect_reason.empty()) {
             status.last_disconnect_reason = strdup(wrapper->last_disconnect_reason.c_str());
         }
+        status.memory_resident_bytes = current_resident_size_bytes();
+        status.memory_phys_footprint_bytes = current_phys_footprint_bytes();
+        status.received_packet_count = wrapper->received_packet_count.load();
+        status.received_byte_count = wrapper->received_byte_count.load();
+        status.callback_enter_count = wrapper->callback_enter_count.load();
+        status.callback_exit_count = wrapper->callback_exit_count.load();
+        status.callback_byte_count = wrapper->callback_byte_count.load();
+        status.in_packet_callback = wrapper->in_packet_callback.load();
     } catch (const std::exception& ex) {
         status.last_error = strdup(ex.what());
     } catch (...) {

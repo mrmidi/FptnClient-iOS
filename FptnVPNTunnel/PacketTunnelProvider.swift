@@ -77,6 +77,14 @@ private struct TunnelRuntimeSnapshot: Codable {
     let websocketIdleTimeoutSeconds: Int
     let websocketLastError: String?
     let websocketLastDisconnectReason: String?
+    let memoryResidentBytes: UInt64?
+    let memoryPhysFootprintBytes: UInt64?
+    let nativeReceivedPackets: Int64
+    let nativeReceivedBytes: Int64
+    let nativeCallbackEnterCount: Int64
+    let nativeCallbackExitCount: Int64
+    let nativeCallbackByteCount: Int64
+    let nativeInPacketCallback: Bool
 }
 
 private struct TunnelConfiguration {
@@ -182,11 +190,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var lastStopReason: String?
     private var lastStopReasonRawValue: Int?
     private var counters = PacketCounters()
+    private var lastMemoryWarningAt: Date?
+    private var memoryEmergencyReconnectInProgress = false
 
     private let runtimeReconnectDelayCapSeconds = 60
     private let activityResumeLogThresholdSeconds = 60
     private let sendFailureWarningIntervalSeconds: TimeInterval = 1
     private let sendFailureWarningPacketThreshold: Int64 = 100
+    private let memoryWarningLogIntervalSeconds: TimeInterval = 60
 
     deinit {
         recordProviderEvent(category: "lifecycle", message: "PacketTunnelProvider deinit")
@@ -234,6 +245,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         lastStopReason = nil
         lastStopReasonRawValue = nil
         counters = PacketCounters()
+        lastMemoryWarningAt = nil
+        memoryEmergencyReconnectInProgress = false
         stateLock.unlock()
 
         updateRuntimeState(.starting, reason: "startTunnel")
@@ -476,6 +489,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     self.isReadLoopActive = true
                     self.reconnectAttempt = 0
                     self.lastTransportError = nil
+                    self.memoryEmergencyReconnectInProgress = false
                     self.stateLock.unlock()
 
                     self.updateRuntimeState(.connected, reason: "initial websocket connected")
@@ -493,6 +507,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.lock()
         reconnectAttempt = 0
         lastTransportError = nil
+        memoryEmergencyReconnectInProgress = false
         stateLock.unlock()
 
         updateRuntimeState(.connected, reason: "transport recovered")
@@ -810,8 +825,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard shouldHandlePackets() else { return }
 
         let protocolNumber = ipProtocolNumber(for: packet)
+        let nextInboundPacketCount = currentTransportReceivedPacketCount() + 1
+        if nextInboundPacketCount == 1 || nextInboundPacketCount % 500 == 0 {
+            recordProviderEvent(
+                category: "packetflow",
+                message: "write_enter generation=\(generation) packet=\(nextInboundPacketCount) bytes=\(packet.count)",
+                generation: generation
+            )
+        }
         packetFlow.writePackets([packet], withProtocols: [protocolNumber])
-        recordPacketFlowWrite(byteCount: Int64(packet.count))
+        let packetCount = recordPacketFlowWrite(byteCount: Int64(packet.count))
+        if packetCount == 1 || packetCount % 500 == 0 {
+            recordProviderEvent(
+                category: "packetflow",
+                message: "write_after generation=\(generation) packet=\(packetCount) bytes=\(packet.count)",
+                generation: generation
+            )
+        }
     }
 
     private func shouldContinueReadLoop() -> Bool {
@@ -836,6 +866,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.lock()
         defer { stateLock.unlock() }
         return websocketGeneration
+    }
+
+    private func currentTransportReceivedPacketCount() -> Int64 {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return counters.transportReceivedPackets
     }
 
     private func replaceWebSocketClient(
@@ -912,13 +948,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
     }
 
-    private func recordPacketFlowWrite(byteCount: Int64) {
+    private func recordPacketFlowWrite(byteCount: Int64) -> Int64 {
         let now = Date()
         var previousInboundActivityAt: Date?
+        var packetCount: Int64 = 0
 
         stateLock.lock()
         previousInboundActivityAt = counters.lastInboundActivityAt
         counters.transportReceivedPackets += 1
+        packetCount = counters.transportReceivedPackets
         counters.transportReceivedBytes += byteCount
         counters.packetFlowWritePackets += 1
         counters.packetFlowWriteBytes += byteCount
@@ -932,6 +970,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             packetCount: 1,
             byteCount: byteCount
         )
+        return packetCount
     }
 
     private func ipProtocolNumber(for packet: Data) -> NSNumber {
@@ -1109,10 +1148,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     private func emitTelemetry() {
         let snapshot = currentSnapshot()
+        let memory = TunnelMemoryPressureSnapshot(
+            residentBytes: snapshot.memoryResidentBytes,
+            physFootprintBytes: snapshot.memoryPhysFootprintBytes
+        )
         logger.info(
-            "Tunnel telemetry state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) packetflow_read_packets=\(snapshot.packetFlowReadPackets) packetflow_read_bytes=\(snapshot.packetFlowReadBytes) packetflow_write_packets=\(snapshot.packetFlowWritePackets) packetflow_write_bytes=\(snapshot.packetFlowWriteBytes) transport_received_packets=\(snapshot.transportReceivedPackets) transport_received_bytes=\(snapshot.transportReceivedBytes) send_failures=\(snapshot.websocketSendFailures) last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
+            "Tunnel telemetry state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) \(memory.description) packetflow_read_packets=\(snapshot.packetFlowReadPackets) packetflow_read_bytes=\(snapshot.packetFlowReadBytes) packetflow_write_packets=\(snapshot.packetFlowWritePackets) packetflow_write_bytes=\(snapshot.packetFlowWriteBytes) transport_received_packets=\(snapshot.transportReceivedPackets) transport_received_bytes=\(snapshot.transportReceivedBytes) native_received_packets=\(snapshot.nativeReceivedPackets) native_received_bytes=\(snapshot.nativeReceivedBytes) native_callback_enter=\(snapshot.nativeCallbackEnterCount) native_callback_exit=\(snapshot.nativeCallbackExitCount) native_in_callback=\(snapshot.nativeInPacketCallback) send_failures=\(snapshot.websocketSendFailures) last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
         )
         updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "telemetry")
+        evaluateMemoryPressure(snapshot: snapshot, memory: memory)
 
         let clientAttached = currentWebSocketClient() != nil
         let readLoopActive = shouldContinueReadLoop()
@@ -1169,6 +1213,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         defer { stateLock.unlock() }
 
         let status = wsClient?.status
+        let memory = providerMemorySnapshot(status: status)
         return TunnelRuntimeSnapshot(
             runtimeState: runtimeState,
             isReasserting: runtimeState == .reasserting || runtimeState == .waitingForNetwork,
@@ -1196,7 +1241,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             websocketStarted: status?.started ?? false,
             websocketIdleTimeoutSeconds: status?.idleTimeoutSeconds ?? configuration?.websocketIdleTimeoutSeconds ?? 0,
             websocketLastError: status?.lastError,
-            websocketLastDisconnectReason: status?.lastDisconnectReason
+            websocketLastDisconnectReason: status?.lastDisconnectReason,
+            memoryResidentBytes: memory.residentBytes,
+            memoryPhysFootprintBytes: memory.physFootprintBytes,
+            nativeReceivedPackets: status?.receivedPacketCount ?? 0,
+            nativeReceivedBytes: status?.receivedByteCount ?? 0,
+            nativeCallbackEnterCount: status?.callbackEnterCount ?? 0,
+            nativeCallbackExitCount: status?.callbackExitCount ?? 0,
+            nativeCallbackByteCount: status?.callbackByteCount ?? 0,
+            nativeInPacketCallback: status?.inPacketCallback ?? false
         )
     }
 
@@ -1250,9 +1303,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 packetFlowWritePackets: snapshot.packetFlowWritePackets,
                 transportReceivedPackets: snapshot.transportReceivedPackets,
                 websocketSendFailures: snapshot.websocketSendFailures,
-                memoryResidentBytes: residentMemoryBytes()
+                memoryResidentBytes: snapshot.memoryResidentBytes,
+                memoryPhysFootprintBytes: snapshot.memoryPhysFootprintBytes
             )
         )
+    }
+
+    private func providerMemorySnapshot(status: WebsocketClientStatus?) -> TunnelMemoryPressureSnapshot {
+        let swiftResident = residentMemoryBytes()
+        let swiftFootprint = physFootprintBytes()
+        return TunnelMemoryPressureSnapshot(
+            residentBytes: nonZero(status?.memoryResidentBytes) ?? swiftResident,
+            physFootprintBytes: nonZero(status?.memoryPhysFootprintBytes) ?? swiftFootprint
+        )
+    }
+
+    private func nonZero(_ value: UInt64?) -> UInt64? {
+        guard let value, value > 0 else { return nil }
+        return value
     }
 
     private func residentMemoryBytes() -> UInt64? {
@@ -1265,6 +1333,80 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
         guard result == KERN_SUCCESS else { return nil }
         return UInt64(info.resident_size)
+    }
+
+    private func physFootprintBytes() -> UInt64? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size) / 4
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        return UInt64(info.phys_footprint)
+    }
+
+    private func evaluateMemoryPressure(
+        snapshot: TunnelRuntimeSnapshot,
+        memory: TunnelMemoryPressureSnapshot
+    ) {
+        switch memory.level {
+        case .normal:
+            return
+        case .warning:
+            let now = Date()
+            var shouldLog = false
+            stateLock.lock()
+            let elapsed = lastMemoryWarningAt.map { now.timeIntervalSince($0) } ?? .infinity
+            if elapsed >= memoryWarningLogIntervalSeconds {
+                lastMemoryWarningAt = now
+                shouldLog = true
+            }
+            stateLock.unlock()
+            guard shouldLog else { return }
+            logger.warning("Tunnel memory pressure warning \(memory.description)")
+            recordProviderEvent(category: "memory", message: "memory_pressure_warning \(memory.description)", runtimeState: snapshot.runtimeState.rawValue)
+            updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "memory_pressure_warning")
+        case .emergency:
+            triggerMemoryPressureReconnect(snapshot: snapshot, memory: memory)
+        }
+    }
+
+    private func triggerMemoryPressureReconnect(
+        snapshot: TunnelRuntimeSnapshot,
+        memory: TunnelMemoryPressureSnapshot
+    ) {
+        stateLock.lock()
+        guard !memoryEmergencyReconnectInProgress,
+              !shutdownRequested,
+              runtimeState == .connected || runtimeState == .reasserting || runtimeState == .waitingForNetwork else {
+            stateLock.unlock()
+            return
+        }
+        memoryEmergencyReconnectInProgress = true
+        websocketGeneration += 1
+        lastTransportError = "provider_memory_pressure"
+        stateLock.unlock()
+
+        logger.error("Tunnel memory pressure emergency, reconnecting websocket \(memory.description)")
+        recordProviderEvent(
+            category: "memory",
+            message: "memory_pressure_emergency reconnect \(memory.description)",
+            runtimeState: snapshot.runtimeState.rawValue
+        )
+        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "memory_pressure_emergency")
+        cancelPendingReconnect()
+        replaceWebSocketClient(with: nil, stopCurrent: true)
+
+        switch scheduleReconnectIfPossible() {
+        case .scheduled:
+            updateRuntimeState(.reasserting, reason: "provider_memory_pressure")
+        case .waitingForNetwork:
+            updateRuntimeState(.waitingForNetwork, reason: "provider_memory_pressure")
+        case .unavailable:
+            failRuntimeTunnel(reason: "provider_memory_pressure")
+        }
     }
 
     private func currentOrDefaultStopInitiator() -> LocalStopInitiator {

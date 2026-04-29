@@ -15,6 +15,14 @@ struct WebsocketClientStatus: Sendable {
     let idleTimeoutSeconds: Int
     let lastError: String?
     let lastDisconnectReason: String?
+    let memoryResidentBytes: UInt64
+    let memoryPhysFootprintBytes: UInt64
+    let receivedPacketCount: Int64
+    let receivedByteCount: Int64
+    let callbackEnterCount: Int64
+    let callbackExitCount: Int64
+    let callbackByteCount: Int64
+    let inPacketCallback: Bool
 }
 
 final class WebsocketClientBridge {
@@ -136,7 +144,15 @@ final class WebsocketClientBridge {
                 started: false,
                 idleTimeoutSeconds: 0,
                 lastError: "Invalid handle",
-                lastDisconnectReason: nil
+                lastDisconnectReason: nil,
+                memoryResidentBytes: 0,
+                memoryPhysFootprintBytes: 0,
+                receivedPacketCount: 0,
+                receivedByteCount: 0,
+                callbackEnterCount: 0,
+                callbackExitCount: 0,
+                callbackByteCount: 0,
+                inPacketCallback: false
             )
         }
 
@@ -147,7 +163,15 @@ final class WebsocketClientBridge {
             started: raw.started,
             idleTimeoutSeconds: Int(raw.idle_timeout_seconds),
             lastError: raw.last_error.map { String(cString: $0) },
-            lastDisconnectReason: raw.last_disconnect_reason.map { String(cString: $0) }
+            lastDisconnectReason: raw.last_disconnect_reason.map { String(cString: $0) },
+            memoryResidentBytes: raw.memory_resident_bytes,
+            memoryPhysFootprintBytes: raw.memory_phys_footprint_bytes,
+            receivedPacketCount: Int64(raw.received_packet_count),
+            receivedByteCount: Int64(raw.received_byte_count),
+            callbackEnterCount: Int64(raw.callback_enter_count),
+            callbackExitCount: Int64(raw.callback_exit_count),
+            callbackByteCount: Int64(raw.callback_byte_count),
+            inPacketCallback: raw.in_packet_callback
         )
     }
 }
