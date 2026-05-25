@@ -20,6 +20,7 @@ typedef void* WebsocketClientBridgePtr;
 // Callback types
 typedef void (*IPPacketCallback)(const uint8_t* packet_data, uint32_t length, void* context);
 typedef void (*ConnectionCallback)(void* context);
+typedef void (*IPAssignedCallback)(const char* ip_v4, const char* ip_v6, void* context);
 typedef void (*DisconnectedCallback)(bool was_connected, const char* reason, void* context);
 
 typedef struct {
@@ -70,6 +71,7 @@ bool websocket_client_bridge_send_packet(WebsocketClientBridgePtr client,
 bool websocket_client_bridge_is_started(WebsocketClientBridgePtr client);
 WebsocketClientBridgeStatus websocket_client_bridge_status(WebsocketClientBridgePtr client);
 void websocket_client_bridge_status_free(WebsocketClientBridgeStatus status);
+void websocket_client_bridge_register_ip_assigned_callback(WebsocketClientBridgePtr client, IPAssignedCallback callback);
 
 #ifdef __cplusplus
 }

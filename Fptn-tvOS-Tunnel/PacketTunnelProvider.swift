@@ -3,7 +3,7 @@ import NetworkExtension
 import OSLog
 import FptnSharedCore
 
-final class PacketTunnelProvider: NEPacketTunnelProvider {
+final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let log = Logger(subsystem: "net.mrmidi.Fptn-tvOS", category: "PacketTunnel")
 
     private let stateQueue = DispatchQueue(label: "net.mrmidi.Fptn-tvOS.tunnel.state")
@@ -11,6 +11,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var startCompletion: ((Error?) -> Void)?
     private var startTimeoutWorkItem: DispatchWorkItem?
     private var didCompleteStart = false
+    private var assignedIPv4: String?
+    private var assignedIPv6: String?
+    private var appliedIPv4: String?
+    private var appliedIPv6: String?
 
     private var isRunning = false
     private var runtimeLogLevel: SharedLogLevel = .warning
@@ -29,6 +33,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         stateQueue.sync {
             startCompletion = completionHandler
             didCompleteStart = false
+            assignedIPv4 = nil
+            assignedIPv6 = nil
+            appliedIPv4 = nil
+            appliedIPv6 = nil
         }
 
         log.log("startTunnel server=\(payload.server, privacy: .public):\(payload.port, privacy: .public) sni=\(payload.sni, privacy: .public) level=\(self.runtimeLogLevel.rawValue, privacy: .public)")
@@ -50,21 +58,54 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             },
             connectedCallback: { [weak self] in
                 self?.log.log("WebSocket connected; applying packet tunnel settings")
-                self?.applyNetworkSettings(
-                    tunIPv4: tunIPv4,
-                    tunIPv4Gateway: tunIPv4Gateway,
-                    dnsIPv4: payload.dnsIPv4,
-                    dnsIPv6: payload.dnsIPv6
-                ) { error in
-                    if let error {
-                        self?.log.error("setTunnelNetworkSettings failed: \(error.localizedDescription, privacy: .public)")
-                        self?.finishStart(with: error)
-                        return
-                    }
-                    self?.isRunning = true
-                    self?.startReadLoop()
-                    self?.finishStart(with: nil)
+                guard let self else { return }
+                var cIPv4: String?
+                var cIPv6: String?
+                var alreadyApplied = false
+                var ipChanged = false
+                self.stateQueue.sync {
+                    cIPv4 = self.assignedIPv4
+                    cIPv6 = self.assignedIPv6
+                    alreadyApplied = self.isRunning
+                    ipChanged = (self.assignedIPv4 != self.appliedIPv4) || (self.assignedIPv6 != self.appliedIPv6)
                 }
+                
+                let shouldApply = !alreadyApplied || ipChanged
+                if shouldApply {
+                    self.applyNetworkSettings(
+                        tunIPv4: tunIPv4,
+                        tunIPv4Gateway: tunIPv4Gateway,
+                        dnsIPv4: payload.dnsIPv4,
+                        dnsIPv6: payload.dnsIPv6,
+                        assignedIPv4: cIPv4,
+                        assignedIPv6: cIPv6
+                    ) { error in
+                        if let error {
+                            self.log.error("setTunnelNetworkSettings failed: \(error.localizedDescription, privacy: .public)")
+                            self.finishStart(with: error)
+                            return
+                        }
+                        self.stateQueue.sync {
+                            self.appliedIPv4 = cIPv4
+                            self.appliedIPv6 = cIPv6
+                        }
+                        self.isRunning = true
+                        self.startReadLoop()
+                        self.finishStart(with: nil)
+                    }
+                } else {
+                    self.isRunning = true
+                    self.startReadLoop()
+                    self.finishStart(with: nil)
+                }
+            },
+            ipAssignedCallback: { [weak self] ipv4, ipv6 in
+                guard let self else { return }
+                self.stateQueue.sync {
+                    self.assignedIPv4 = ipv4
+                    self.assignedIPv6 = ipv6
+                }
+                self.log.info("IP assignment received from bridge: IPv4=\(ipv4, privacy: .public), IPv6=\(ipv6, privacy: .public)")
             }
         )
 
@@ -116,17 +157,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         tunIPv4Gateway: String,
         dnsIPv4: String,
         dnsIPv6: String,
+        assignedIPv4: String?,
+        assignedIPv6: String?,
         completion: @escaping (Error?) -> Void
     ) {
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: tunIPv4Gateway)
+        let clientIPv4 = assignedIPv4 ?? tunIPv4
+        let gatewayIPv4 = assignedIPv4 != nil ? dnsIPv4 : tunIPv4Gateway
+        let clientIPv6 = assignedIPv6 ?? "fd00::1"
 
-        let ipv4 = NEIPv4Settings(addresses: [tunIPv4], subnetMasks: ["255.255.255.0"])
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: gatewayIPv4)
+
+        let ipv4 = NEIPv4Settings(addresses: [clientIPv4], subnetMasks: ["255.255.255.0"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
         var servers = [dnsIPv4]
-        if !dnsIPv6.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           dnsIPv6.contains(":") {
+        let hasDnsIPv6 = !dnsIPv6.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && dnsIPv6.contains(":")
+        if hasDnsIPv6 {
             servers.append(dnsIPv6)
         }
 
@@ -134,7 +181,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         dns.matchDomains = [""]
         settings.dnsSettings = dns
 
+        if hasDnsIPv6 || assignedIPv6 != nil {
+            let ipv6 = NEIPv6Settings(
+                addresses: [clientIPv6],
+                networkPrefixLengths: [64]
+            )
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            settings.ipv6Settings = ipv6
+        }
+
         settings.mtu = 1500
+
+        log.info("Applying tunnel settings ipv4=\(clientIPv4, privacy: .public)/255.255.255.0 ipv6=\(clientIPv6, privacy: .public) dns=\(servers.joined(separator: ","), privacy: .public)")
 
         setTunnelNetworkSettings(settings, completionHandler: completion)
     }

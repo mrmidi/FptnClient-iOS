@@ -36,6 +36,7 @@ struct WebsocketClientWrapper {
     IPPacketCallback packet_callback;
     ConnectionCallback connected_callback;
     DisconnectedCallback disconnected_callback;
+    IPAssignedCallback ip_assigned_callback;
     void* context;
     std::shared_ptr<fptn::protocol::https::WebsocketClient> client;
     std::thread client_thread;
@@ -69,6 +70,7 @@ struct WebsocketClientWrapper {
         : packet_callback(p_callback),
           connected_callback(c_callback),
           disconnected_callback(d_callback),
+          ip_assigned_callback(nullptr),
           context(ctx),
           idle_timeout_seconds(kDefaultIdleTimeoutSeconds) {}
 };
@@ -285,23 +287,30 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
                 return;
             }
 
+            fptn::protocol::https::WebsocketClient::Config client_config;
+            client_config.server_ip = fptn::common::network::IPv4Address::Create(wrapper->server_ip);
+            client_config.server_port = wrapper->server_port;
+            client_config.sni = wrapper->sni;
+            client_config.access_token = wrapper->access_token;
+            client_config.expected_md5_fingerprint = wrapper->md5_fingerprint;
+            client_config.censorship_strategy = parse_censorship_strategy(wrapper->censorship_strategy);
+            client_config.on_connected_callback = [wrapper]() {
+                connected_callback_adapter(wrapper);
+            };
+            client_config.new_ip_pkt_callback = [wrapper](auto packet) {
+                packet_callback_adapter(std::move(packet), wrapper);
+            };
+            client_config.on_ip_assigned_callback = [wrapper](const auto& ipv4, const auto& ipv6) {
+                if (wrapper->ip_assigned_callback) {
+                    std::string ipv4_str = ipv4.ToString();
+                    std::string ipv6_str = ipv6.ToString();
+                    wrapper->ip_assigned_callback(ipv4_str.c_str(), ipv6_str.c_str(), wrapper->context);
+                }
+            };
+
             wrapper->client = std::make_shared<fptn::protocol::https::WebsocketClient>(
-                fptn::common::network::IPv4Address::Create(wrapper->server_ip),
-                wrapper->server_port,
-                fptn::common::network::IPv4Address::Create(wrapper->tun_ipv4),
-                fptn::common::network::IPv6Address::Create(wrapper->tun_ipv6),
-                [wrapper](auto packet) {
-                    packet_callback_adapter(std::move(packet), wrapper);
-                },
-                wrapper->sni,
-                wrapper->access_token,
-                wrapper->md5_fingerprint,
-                parse_censorship_strategy(wrapper->censorship_strategy),
-                [wrapper]() {
-                    connected_callback_adapter(wrapper);
-                },
-                4,
-                wrapper->idle_timeout_seconds
+                std::move(client_config),
+                4
             );
         }
 
@@ -504,6 +513,15 @@ void websocket_client_bridge_status_free(WebsocketClientBridgeStatus status) {
     }
     if (status.last_disconnect_reason) {
         free(status.last_disconnect_reason);
+    }
+}
+
+void websocket_client_bridge_register_ip_assigned_callback(
+    WebsocketClientBridgePtr client,
+    IPAssignedCallback callback) {
+    auto wrapper = static_cast<WebsocketClientWrapper*>(client);
+    if (wrapper) {
+        wrapper->ip_assigned_callback = callback;
     }
 }
 

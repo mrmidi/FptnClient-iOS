@@ -37,6 +37,36 @@ zsh ./scripts/bootstrap-ci-secrets.sh --gh --gh-repo OWNER/REPO
 ```
 The GitHub upload uses a curated subset of values (it intentionally excludes local-only values like `KEYCHAIN_PASSWORD`).
 
+## Localization (.xcstrings)
+
+Xcode localization files live in:
+
+- iOS: `FptnVPN/Resources/Localizable.xcstrings`
+- macOS: `Fptn-macOS/Resources/Localizable.xcstrings`
+- tvOS: `Fptn-tvOS/Resources/Localizable.xcstrings`
+
+To make them easier to review/edit, use the TSV export/import helper:
+
+```bash
+python3 scripts/l10n_xcstrings.py export --all
+python3 scripts/l10n_xcstrings.py report --all
+python3 scripts/l10n_xcstrings.py compare
+```
+
+This writes artifacts to `build/l10n/` (gitignored).
+
+After editing a TSV (example: iOS):
+
+```bash
+python3 scripts/l10n_xcstrings.py import \
+   --xcstrings FptnVPN/Resources/Localizable.xcstrings \
+   --tsv build/l10n/ios.tsv \
+   --in-place \
+   --set-translated
+```
+
+For safety, you can use `--dry-run`, or write to a new file via `--out <path>`.
+
 
 
 

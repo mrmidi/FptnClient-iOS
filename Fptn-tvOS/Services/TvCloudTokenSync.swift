@@ -6,7 +6,7 @@ import OSLog
 /// Uses the same keys as the iOS TokenService so data syncs cross-platform.
 enum TvCloudTokenSync {
     private static let log = Logger(subsystem: "net.mrmidi.Fptn-tvOS", category: "CloudSync")
-    private static let cloud = NSUbiquitousKeyValueStore.default
+    nonisolated(unsafe) private static let cloud = NSUbiquitousKeyValueStore.default
 
     // Must match the keys in TokenService (iOS).
     private static let tokenKey = "fptn.cloud.tokenData"
@@ -16,7 +16,7 @@ enum TvCloudTokenSync {
     private static let passwordKey = "fptn.cloud.password"
 
     /// Kick off iCloud KVS sync and register for remote change notifications.
-    static func startObserving(onChange: @escaping () -> Void) {
+    static func startObserving(onChange: @escaping @Sendable () -> Void) {
         let synced = cloud.synchronize()
         log.log("iCloud KVS synchronize() returned \(synced, privacy: .public)")
 

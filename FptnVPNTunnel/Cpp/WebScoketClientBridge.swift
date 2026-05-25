@@ -30,6 +30,7 @@ final class WebsocketClientBridge {
     typealias PacketCallback     = (Data) -> Void
     typealias ConnectionCallback = () -> Void
     typealias DisconnectionCallback = (_ wasConnected: Bool, _ reason: String) -> Void
+    typealias IPAssignedCallback = (_ ipv4: String, _ ipv6: String) -> Void
 
     // MARK: - Private state
 
@@ -37,6 +38,7 @@ final class WebsocketClientBridge {
     private let packetCallback: PacketCallback
     private let connectedCallback: ConnectionCallback
     private let disconnectedCallback: DisconnectionCallback
+    private let ipAssignedCallback: IPAssignedCallback
     private let diagnosticsID = UUID().uuidString
     private var receivedPacketCount: Int64 = 0
     private var receivedByteCount: Int64 = 0
@@ -53,11 +55,13 @@ final class WebsocketClientBridge {
         censorshipStrategy: String = "SNI",
         packetCallback: @escaping PacketCallback,
         connectedCallback: @escaping ConnectionCallback,
-        disconnectedCallback: @escaping DisconnectionCallback = { _, _ in }
+        disconnectedCallback: @escaping DisconnectionCallback = { _, _ in },
+        ipAssignedCallback: @escaping IPAssignedCallback = { _, _ in }
     ) {
         self.packetCallback    = packetCallback
         self.connectedCallback = connectedCallback
         self.disconnectedCallback = disconnectedCallback
+        self.ipAssignedCallback = ipAssignedCallback
         self.handle            = nil   // all stored properties now initialised
 
         // passUnretained is correct here: VPNService (the owner) already holds
@@ -100,6 +104,20 @@ final class WebsocketClientBridge {
             },
             ctx
         )
+
+        if let handle {
+            websocket_client_bridge_register_ip_assigned_callback(
+                handle,
+                { ipv4Ptr, ipv6Ptr, ctx in
+                    guard let ctx, let ipv4Ptr, let ipv6Ptr else { return }
+                    let bridge = Unmanaged<WebsocketClientBridge>
+                        .fromOpaque(ctx).takeUnretainedValue()
+                    let ipv4 = String(cString: ipv4Ptr)
+                    let ipv6 = String(cString: ipv6Ptr)
+                    bridge.ipAssignedCallback(ipv4, ipv6)
+                }
+            )
+        }
 
         logger.trace("WebsocketClientBridge created — \(serverIP):\(serverPort)")
         TunnelDiagnosticsStore.shared.recordProviderEvent(

@@ -172,6 +172,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     private var wsClient: WebsocketClientBridge?
     private var configuration: TunnelConfiguration?
+    private var assignedIPv4: String?
+    private var assignedIPv6: String?
+    private var appliedIPv4: String?
+    private var appliedIPv6: String?
     private var startCompletion: ((Error?) -> Void)?
     private var startTimeoutWorkItem: DispatchWorkItem?
     private var reconnectWorkItem: DispatchWorkItem?
@@ -247,6 +251,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         counters = PacketCounters()
         lastMemoryWarningAt = nil
         memoryEmergencyReconnectInProgress = false
+        assignedIPv4 = nil
+        assignedIPv6 = nil
+        appliedIPv4 = nil
+        appliedIPv6 = nil
         stateLock.unlock()
 
         updateRuntimeState(.starting, reason: "startTunnel")
@@ -412,6 +420,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                         reason: reason
                     )
                 }
+            },
+            ipAssignedCallback: { [weak self] ipv4, ipv6 in
+                guard let self else { return }
+                self.stateLock.lock()
+                self.assignedIPv4 = ipv4
+                self.assignedIPv6 = ipv6
+                self.stateLock.unlock()
+                logger.info("IP assignment received from bridge: IPv4=\(ipv4), IPv6=\(ipv6)")
             }
         )
 
@@ -438,12 +454,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private func handleTransportConnected(generation: Int) {
         let configuration: TunnelConfiguration?
         let shouldApplySettings: Bool
+        var clientIPv4: String?
+        var clientIPv6: String?
 
         stateLock.lock()
         let isStaleCallback = generation != websocketGeneration
         let shouldIgnoreForShutdown = shutdownRequested
         configuration = self.configuration
-        shouldApplySettings = !didApplyNetworkSettings && runtimeState == .starting
+        
+        let ipChanged = (assignedIPv4 != appliedIPv4) || (assignedIPv6 != appliedIPv6)
+        shouldApplySettings = (!didApplyNetworkSettings && runtimeState == .starting) || (runtimeState == .reasserting && ipChanged)
+        
+        if shouldApplySettings {
+            clientIPv4 = assignedIPv4 ?? configuration?.tunIPv4
+            clientIPv6 = assignedIPv6 ?? configuration?.tunIPv6
+        }
         stateLock.unlock()
 
         if isStaleCallback {
@@ -468,7 +493,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         recordProviderEvent(category: "websocket", message: "transport_connected generation=\(generation)", generation: generation)
 
         if shouldApplySettings {
-            logger.info("Tunnel websocket connected — applying network settings")
+            logger.info("Tunnel websocket connected — applying network settings (IP changed/initial)")
             applyNetworkSettings(configuration: configuration) { [weak self] error in
                 guard let self else { return }
                 self.eventQueue.async { [weak self] in
@@ -483,6 +508,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     }
 
                     self.stateLock.lock()
+                    self.appliedIPv4 = clientIPv4
+                    self.appliedIPv6 = clientIPv6
                     self.didApplyNetworkSettings = true
                     let shouldStartReadLoop = !self.didStartReadLoop
                     self.didStartReadLoop = true
@@ -492,7 +519,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     self.memoryEmergencyReconnectInProgress = false
                     self.stateLock.unlock()
 
-                    self.updateRuntimeState(.connected, reason: "initial websocket connected")
+                    self.updateRuntimeState(.connected, reason: "websocket connected and settings applied")
                     self.recordProviderEvent(category: "settings", message: "apply_success generation=\(generation)", generation: generation)
                     if shouldStartReadLoop {
                         self.startReadLoop()
@@ -754,10 +781,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         configuration: TunnelConfiguration,
         completionHandler: @escaping @Sendable (Error?) -> Void
     ) {
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: configuration.tunIPv4Gateway)
+        stateLock.lock()
+        let clientIPv4 = assignedIPv4 ?? configuration.tunIPv4
+        let gatewayIPv4 = assignedIPv4 != nil ? configuration.dnsIPv4 : configuration.tunIPv4Gateway
+        let clientIPv6 = assignedIPv6 ?? configuration.tunIPv6
+        stateLock.unlock()
+
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: gatewayIPv4)
 
         let ipv4 = NEIPv4Settings(
-            addresses: [configuration.tunIPv4],
+            addresses: [clientIPv4],
             subnetMasks: ["255.255.255.0"]
         )
         ipv4.includedRoutes = [NEIPv4Route.default()]
@@ -771,7 +804,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let ipv6Enabled = configuration.dnsIPv6 != nil
         if ipv6Enabled {
             let ipv6 = NEIPv6Settings(
-                addresses: [configuration.tunIPv6],
+                addresses: [clientIPv6],
                 networkPrefixLengths: [64]
             )
             ipv6.includedRoutes = [NEIPv6Route.default()]
@@ -785,7 +818,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let ipv6ExcludedRoutes = settings.ipv6Settings?.excludedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
         let matchDomains = dns.matchDomains?.joined(separator: ",") ?? "-"
         logger.info(
-            "Applying tunnel settings ipv4=\(configuration.tunIPv4)/255.255.255.0 ipv4_included_routes=\(ipv4IncludedRoutes) ipv4_excluded_routes=\(ipv4ExcludedRoutes) ipv6=\(ipv6Enabled ? "\(configuration.tunIPv6)/64" : "none") ipv6_included_routes=\(ipv6IncludedRoutes) ipv6_excluded_routes=\(ipv6ExcludedRoutes) dns=\(dnsServers.joined(separator: ",")) match_domains=\(matchDomains) mtu=1500"
+            "Applying tunnel settings ipv4=\(clientIPv4)/255.255.255.0 ipv4_included_routes=\(ipv4IncludedRoutes) ipv4_excluded_routes=\(ipv4ExcludedRoutes) ipv6=\(ipv6Enabled ? "\(clientIPv6)/64" : "none") ipv6_included_routes=\(ipv6IncludedRoutes) ipv6_excluded_routes=\(ipv6ExcludedRoutes) dns=\(dnsServers.joined(separator: ",")) match_domains=\(matchDomains) mtu=1500"
         )
         recordProviderEvent(category: "settings", message: "apply_start ipv6=\(ipv6Enabled)")
 

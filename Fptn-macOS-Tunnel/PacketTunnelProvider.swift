@@ -92,12 +92,16 @@ private struct MacTunnelConfiguration {
     }
 }
 
-final class PacketTunnelProvider: NEPacketTunnelProvider {
+final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let log = Logger(subsystem: "net.mrmidi.Fptn-macOS", category: "PacketTunnel")
     private let eventQueue = DispatchQueue(label: "net.mrmidi.Fptn-macOS.tunnel.events")
 
     private var wsClient: WebsocketClientBridge?
     private var configuration: MacTunnelConfiguration?
+    private var assignedIPv4: String?
+    private var assignedIPv6: String?
+    private var appliedIPv4: String?
+    private var appliedIPv6: String?
     private var startCompletion: ((Error?) -> Void)?
     private var startTimeoutWorkItem: DispatchWorkItem?
     private var reconnectWorkItem: DispatchWorkItem?
@@ -133,6 +137,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             self.isNetworkPathSatisfied = true
             self.didApplyNetworkSettings = false
             self.isReadLoopActive = false
+            self.assignedIPv4 = nil
+            self.assignedIPv6 = nil
+            self.appliedIPv4 = nil
+            self.appliedIPv6 = nil
 
             self.log.log("startTunnel server=\(runtimeConfig.server, privacy: .public):\(runtimeConfig.port, privacy: .public) sni=\(runtimeConfig.sni, privacy: .public) logLevel=\(runtimeConfig.logLevel, privacy: .public)")
             self.log.debug("tokenLength=\(runtimeConfig.accessToken.count, privacy: .public) md5=\(runtimeConfig.md5Fingerprint, privacy: .private(mask: .hash))")
@@ -226,6 +234,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         reason: reason
                     )
                 }
+            },
+            ipAssignedCallback: { [weak self] ipv4, ipv6 in
+                self?.eventQueue.async {
+                    guard let self else { return }
+                    self.assignedIPv4 = ipv4
+                    self.assignedIPv6 = ipv6
+                    self.log.info("IP assignment received from bridge: IPv4=\(ipv4, privacy: .public), IPv6=\(ipv6, privacy: .public)")
+                }
             }
         )
 
@@ -254,7 +270,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         log.log("WebSocket connected generation=\(generation, privacy: .public)")
-        if !didApplyNetworkSettings && runtimeState == .starting {
+        
+        let ipChanged = (assignedIPv4 != appliedIPv4) || (assignedIPv6 != appliedIPv6)
+        let shouldApplySettings = (!didApplyNetworkSettings && runtimeState == .starting) || (runtimeState == .reasserting && ipChanged)
+        
+        if shouldApplySettings {
+            let clientIPv4 = assignedIPv4 ?? configuration.tunIPv4
+            let clientIPv6 = assignedIPv6 ?? "fd00::1"
             applyNetworkSettings(configuration: configuration) { [weak self] error in
                 self?.eventQueue.async {
                     guard let self else { return }
@@ -264,6 +286,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         self.replaceWebSocketClient(with: nil, stopCurrent: true)
                         return
                     }
+                    self.appliedIPv4 = clientIPv4
+                    self.appliedIPv6 = clientIPv6
                     self.didApplyNetworkSettings = true
                     self.runtimeState = .connected
                     self.reconnectAttempt = 0
@@ -362,30 +386,46 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         reconnectWorkItem = nil
-        log.warning("Starting reconnect attempt \(reconnectAttempt, privacy: .public)")
-        startWebSocket(using: configuration, context: "reconnect_attempt_\(reconnectAttempt)")
+        log.warning("Starting reconnect attempt \(self.reconnectAttempt, privacy: .public)")
+        startWebSocket(using: configuration, context: "reconnect_attempt_\(self.reconnectAttempt)")
     }
 
     private func applyNetworkSettings(
         configuration: MacTunnelConfiguration,
         completion: @escaping (Error?) -> Void
     ) {
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: configuration.tunIPv4Gateway)
+        let clientIPv4 = assignedIPv4 ?? configuration.tunIPv4
+        let gatewayIPv4 = assignedIPv4 != nil ? configuration.dnsIPv4 : configuration.tunIPv4Gateway
+        let clientIPv6 = assignedIPv6 ?? "fd00::1"
 
-        let ipv4 = NEIPv4Settings(addresses: [configuration.tunIPv4], subnetMasks: ["255.255.255.0"])
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: gatewayIPv4)
+
+        let ipv4 = NEIPv4Settings(addresses: [clientIPv4], subnetMasks: ["255.255.255.0"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
         var servers = [configuration.dnsIPv4]
-        if !configuration.dnsIPv6.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           configuration.dnsIPv6.contains(":") {
+        let hasDnsIPv6 = !configuration.dnsIPv6.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && configuration.dnsIPv6.contains(":")
+        if hasDnsIPv6 {
             servers.append(configuration.dnsIPv6)
         }
 
         let dns = NEDNSSettings(servers: servers)
         dns.matchDomains = [""]
         settings.dnsSettings = dns
+
+        if hasDnsIPv6 || assignedIPv6 != nil {
+            let ipv6 = NEIPv6Settings(
+                addresses: [clientIPv6],
+                networkPrefixLengths: [64]
+            )
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            settings.ipv6Settings = ipv6
+        }
+
         settings.mtu = 1500
+
+        log.info("Applying tunnel settings ipv4=\(clientIPv4, privacy: .public)/255.255.255.0 ipv6=\(clientIPv6, privacy: .public) dns=\(servers.joined(separator: ","), privacy: .public)")
 
         setTunnelNetworkSettings(settings, completionHandler: completion)
     }

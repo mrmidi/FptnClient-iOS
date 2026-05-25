@@ -148,11 +148,11 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Откройте FPTN VPN на iPhone, iPad или Mac и войдите с вашим токеном." } }
       }
     },
-    "Make sure you are signed in with the same Apple\u{00A0}ID on all devices." : {
+    "Make sure you are signed in with the same Apple\u00A0ID on all devices." : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Make sure you are signed in with the same Apple\u{00A0}ID on all devices." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Убедитесь, что вы вошли с одним Apple\u{00A0}ID на всех устройствах." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Make sure you are signed in with the same Apple\u00A0ID on all devices." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Убедитесь, что вы вошли с одним Apple\u00A0ID на всех устройствах." } }
       }
     },
     "Your credentials will sync here automatically via iCloud." : {
