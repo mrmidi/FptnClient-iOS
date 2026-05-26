@@ -1,14 +1,6 @@
-/*=============================================================================
-Copyright (c) 2024-2025 Stas Skokov
+#ifndef FPTN_VPN_TUNNEL_BRIDGING_HEADER
+#define FPTN_VPN_TUNNEL_BRIDGING_HEADER
 
-Distributed under the MIT License (https://opensource.org/licenses/MIT)
-=============================================================================*/
+#include <fptn_native_lib/src/websocket/WrapperWebsocketClientBridge.h>
 
-#ifndef FPTN_VPN_BRIDGING_HEADER
-#define FPTN_VPN_BRIDGING_HEADER
-
-#import <fptn_native_lib/WrapperApiClientBridge.h>
-#import <fptn_native_lib/WrapperWebsocketClientBridge.h>
-
-
-#endif // FPTN_VPN_BRIDGING_HEADER
+#endif // FPTN_VPN_TUNNEL_BRIDGING_HEADER

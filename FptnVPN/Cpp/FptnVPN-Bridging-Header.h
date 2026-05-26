@@ -7,8 +7,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #ifndef FPTN_VPN_BRIDGING_HEADER
 #define FPTN_VPN_BRIDGING_HEADER
 
-#import <fptn_native_lib/WrapperApiClientBridge.h>
-#import <fptn_native_lib/WrapperWebsocketClientBridge.h>
-
+#include <fptn_native_lib/src/https/SwiftApiClient.h>
+#include <fptn_native_lib/src/websocket/WrapperWebsocketClientBridge.h>
 
 #endif // FPTN_VPN_BRIDGING_HEADER

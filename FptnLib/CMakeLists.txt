@@ -52,7 +52,7 @@ include_directories(fptn/src/fptn-protocol-lib)
 
 # Create library target
 add_library(fptn_native_lib SHARED
-    src/https/WrapperApiClientBridge.cpp src/https/WrapperApiClientBridge.h
+    src/https/SwiftApiClient.cpp src/https/SwiftApiClient.h
     src/websocket/WrapperWebsocketClientBridge.cpp src/websocket/WrapperWebsocketClientBridge.h
 )
 

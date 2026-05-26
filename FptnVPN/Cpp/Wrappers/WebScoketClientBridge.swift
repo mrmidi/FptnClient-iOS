@@ -4,9 +4,6 @@ Copyright (c) 2024-2025 Stas Skokov
 Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
-// Phase 2: Single-layer Swift → C bridge. The ObjC++ NativeWebsocketClientBridge
-// class and both .mm files have been removed. Callbacks are now wired correctly.
-
 import Foundation
 
 struct WebsocketClientStatus: Sendable {
@@ -34,7 +31,7 @@ final class WebsocketClientBridge {
 
     // MARK: - Private state
 
-    private var handle: WebsocketClientBridgePtr?
+    private var clientBridge: WebsocketSwiftBridge! = nil
     private let packetCallback: PacketCallback
     private let connectedCallback: ConnectionCallback
     private let disconnectedCallback: DisconnectionCallback
@@ -59,21 +56,17 @@ final class WebsocketClientBridge {
         self.connectedCallback = connectedCallback
         self.disconnectedCallback = disconnectedCallback
         self.ipAssignedCallback = ipAssignedCallback
-        self.handle            = nil   // all stored properties now initialised
 
-        // passUnretained is correct here: VPNService (the owner) already holds
-        // a strong reference to this object, so the raw pointer stays valid for
-        // the lifetime of the C client. No retain cycle, no manual release needed.
         let ctx = Unmanaged.passUnretained(self).toOpaque()
 
-        handle = websocket_client_bridge_create(
-            serverIP,
+        self.clientBridge = WebsocketSwiftBridge(
+            std.string(serverIP),
             Int32(serverPort),
-            tunInterfaceIPv4,
-            sni,
-            accessToken,
-            md5Fingerprint,
-            censorshipStrategy,
+            std.string(tunInterfaceIPv4),
+            std.string(sni),
+            std.string(accessToken),
+            std.string(md5Fingerprint),
+            std.string(censorshipStrategy),
             // IPPacketCallback
             { rawPtr, length, ctx in
                 guard let ctx, let rawPtr else { return }
@@ -99,89 +92,56 @@ final class WebsocketClientBridge {
             ctx
         )
 
-        if let handle {
-            websocket_client_bridge_register_ip_assigned_callback(
-                handle,
-                { ipv4Ptr, ipv6Ptr, ctx in
-                    guard let ctx, let ipv4Ptr, let ipv6Ptr else { return }
-                    let bridge = Unmanaged<WebsocketClientBridge>
-                        .fromOpaque(ctx).takeUnretainedValue()
-                    let ipv4 = String(cString: ipv4Ptr)
-                    let ipv6 = String(cString: ipv6Ptr)
-                    bridge.ipAssignedCallback(ipv4, ipv6)
-                }
-            )
+        self.clientBridge.registerIPAssignedCallback { ipv4Ptr, ipv6Ptr, ctx in
+            guard let ctx, let ipv4Ptr, let ipv6Ptr else { return }
+            let bridge = Unmanaged<WebsocketClientBridge>
+                .fromOpaque(ctx).takeUnretainedValue()
+            let ipv4 = String(cString: ipv4Ptr)
+            let ipv6 = String(cString: ipv6Ptr)
+            bridge.ipAssignedCallback(ipv4, ipv6)
         }
 
         logger.trace("WebsocketClientBridge created — \(serverIP):\(serverPort)")
-    }
-
-    deinit {
-        if let handle {
-            websocket_client_bridge_destroy(handle)
-        }
     }
 
     // MARK: - Control
 
     @discardableResult
     func start() -> Bool {
-        guard let handle else { return false }
-        let ok = websocket_client_bridge_start(handle)
+        let ok = clientBridge.start()
         logger.debug("WebSocket start → \(ok)")
         return ok
     }
 
     @discardableResult
     func stop() -> Bool {
-        guard let handle else { return false }
-        let ok = websocket_client_bridge_stop(handle)
+        let ok = clientBridge.stop()
         logger.debug("WebSocket stop → \(ok)")
         return ok
     }
 
     @discardableResult
     func sendPacket(_ data: Data) -> Bool {
-        guard let handle else { return false }
         return data.withUnsafeBytes { buf in
             guard let ptr = buf.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 return false
             }
-            return websocket_client_bridge_send_packet(handle, ptr, UInt32(data.count))
+            return clientBridge.sendPacket(ptr, UInt32(data.count))
         }
     }
 
     var isStarted: Bool {
-        handle.map { websocket_client_bridge_is_started($0) } ?? false
+        clientBridge.isStarted()
     }
 
     var status: WebsocketClientStatus {
-        guard let handle else {
-            return WebsocketClientStatus(
-                running: false,
-                started: false,
-                idleTimeoutSeconds: 0,
-                lastError: "Invalid handle",
-                lastDisconnectReason: nil,
-                memoryResidentBytes: 0,
-                memoryPhysFootprintBytes: 0,
-                receivedPacketCount: 0,
-                receivedByteCount: 0,
-                callbackEnterCount: 0,
-                callbackExitCount: 0,
-                callbackByteCount: 0,
-                inPacketCallback: false
-            )
-        }
-
-        let raw = websocket_client_bridge_status(handle)
-        defer { websocket_client_bridge_status_free(raw) }
+        let raw = clientBridge.getStatus()
         return WebsocketClientStatus(
             running: raw.running,
             started: raw.started,
             idleTimeoutSeconds: Int(raw.idle_timeout_seconds),
-            lastError: raw.last_error.map { String(cString: $0) },
-            lastDisconnectReason: raw.last_disconnect_reason.map { String(cString: $0) },
+            lastError: raw.last_error.empty() ? nil : String(raw.last_error),
+            lastDisconnectReason: raw.last_disconnect_reason.empty() ? nil : String(raw.last_disconnect_reason),
             memoryResidentBytes: raw.memory_resident_bytes,
             memoryPhysFootprintBytes: raw.memory_phys_footprint_bytes,
             receivedPacketCount: Int64(raw.received_packet_count),

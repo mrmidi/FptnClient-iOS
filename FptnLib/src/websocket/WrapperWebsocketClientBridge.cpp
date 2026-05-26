@@ -33,10 +33,10 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 constexpr const int kDefaultIdleTimeoutSeconds = 60;
 
 struct WebsocketClientWrapper {
-    IPPacketCallback packet_callback;
-    ConnectionCallback connected_callback;
-    DisconnectedCallback disconnected_callback;
-    IPAssignedCallback ip_assigned_callback;
+    WebsocketSwiftBridge::IPPacketCallback packet_callback;
+    WebsocketSwiftBridge::ConnectionCallback connected_callback;
+    WebsocketSwiftBridge::DisconnectedCallback disconnected_callback;
+    WebsocketSwiftBridge::IPAssignedCallback ip_assigned_callback;
     void* context;
     std::shared_ptr<fptn::protocol::https::WebsocketClient> client;
     std::thread client_thread;
@@ -62,9 +62,9 @@ struct WebsocketClientWrapper {
     std::atomic<bool> in_packet_callback{false};
 
     WebsocketClientWrapper(
-        IPPacketCallback p_callback,
-        ConnectionCallback c_callback,
-        DisconnectedCallback d_callback,
+        WebsocketSwiftBridge::IPPacketCallback p_callback,
+        WebsocketSwiftBridge::ConnectionCallback c_callback,
+        WebsocketSwiftBridge::DisconnectedCallback d_callback,
         void* ctx
     )
         : packet_callback(p_callback),
@@ -204,7 +204,7 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(
         return CensorshipStrategy::kSniRealityModeYandex25;
     }
     if (strategy == "yandex24" || strategy == "sni_reality_yandex24" ||
-        strategy == "sni-reality-yandex24") {
+        std::string(strategy) == "sni-reality-yandex24") {
         return CensorshipStrategy::kSniRealityModeYandex24;
     }
     if (strategy == "safari26" || strategy == "sni_reality_safari26" ||
@@ -340,189 +340,164 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
 }
 } // namespace
 
-extern "C" {
-
-WebsocketClientBridgePtr websocket_client_bridge_create(
-    const char* server_ip,
+WebsocketSwiftBridge::WebsocketSwiftBridge(
+    const std::string& server_ip,
     int server_port,
-    const char* tun_ipv4,
-    const char* sni,
-    const char* access_token,
-    const char* md5_fingerprint,
-    const char* censorship_strategy,
+    const std::string& tun_ipv4,
+    const std::string& sni,
+    const std::string& access_token,
+    const std::string& md5_fingerprint,
+    const std::string& censorship_strategy,
     IPPacketCallback packet_callback,
     ConnectionCallback connected_callback,
     DisconnectedCallback disconnected_callback,
-    void* context) {
+    void* context
+) {
+    wrapper_ = new WebsocketClientWrapper(
+        packet_callback,
+        connected_callback,
+        disconnected_callback,
+        context
+    );
 
-    try {
-        auto wrapper = new WebsocketClientWrapper(
-            packet_callback,
-            connected_callback,
-            disconnected_callback,
-            context
-        );
+    wrapper_->server_ip = server_ip;
+    wrapper_->server_port = server_port;
+    wrapper_->tun_ipv4 = tun_ipv4;
+    wrapper_->sni = sni;
+    wrapper_->access_token = access_token;
+    wrapper_->md5_fingerprint = md5_fingerprint;
+    wrapper_->censorship_strategy = censorship_strategy.empty() ? "SNI" : censorship_strategy;
+    wrapper_->idle_timeout_seconds = parse_int_option(
+        wrapper_->censorship_strategy,
+        "idle_timeout",
+        kDefaultIdleTimeoutSeconds
+    );
+    wrapper_->tun_ipv6 = parse_string_option(
+        wrapper_->censorship_strategy,
+        "tun_ipv6",
+        FPTN_CLIENT_DEFAULT_ADDRESS_IP6
+    );
 
-        wrapper->server_ip = server_ip;
-        wrapper->server_port = server_port;
-        wrapper->tun_ipv4 = tun_ipv4;
-        wrapper->sni = sni;
-        wrapper->access_token = access_token;
-        wrapper->md5_fingerprint = md5_fingerprint;
-        wrapper->censorship_strategy = censorship_strategy ? censorship_strategy : "SNI";
-        wrapper->idle_timeout_seconds = parse_int_option(
-            wrapper->censorship_strategy,
-            "idle_timeout",
-            kDefaultIdleTimeoutSeconds
-        );
-        wrapper->tun_ipv6 = parse_string_option(
-            wrapper->censorship_strategy,
-            "tun_ipv6",
-            FPTN_CLIENT_DEFAULT_ADDRESS_IP6
-        );
+    SPDLOG_INFO(
+        "WebSocket bridge config idle_timeout={}s tun_ipv6={}",
+        wrapper_->idle_timeout_seconds,
+        wrapper_->tun_ipv6
+    );
+}
 
-        SPDLOG_INFO(
-            "WebSocket bridge config idle_timeout={}s tun_ipv6={}",
-            wrapper->idle_timeout_seconds,
-            wrapper->tun_ipv6
-        );
-
-        return static_cast<WebsocketClientBridgePtr>(wrapper);
-    } catch (...) {
-        return nullptr;
+WebsocketSwiftBridge::~WebsocketSwiftBridge() {
+    if (wrapper_) {
+        stop();
+        delete wrapper_;
+        wrapper_ = nullptr;
     }
 }
 
-void websocket_client_bridge_destroy(WebsocketClientBridgePtr client) {
-    auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-    if (wrapper) {
-        websocket_client_bridge_stop(client);
-        delete wrapper;
-    }
+WebsocketSwiftBridge::WebsocketSwiftBridge(WebsocketSwiftBridge&& other) noexcept : wrapper_(other.wrapper_) {
+    other.wrapper_ = nullptr;
 }
 
-bool websocket_client_bridge_start(WebsocketClientBridgePtr client) {
-    try {
-        auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-        if (!wrapper || wrapper->running || wrapper->client_thread.joinable()) {
-            return false;
+WebsocketSwiftBridge& WebsocketSwiftBridge::operator=(WebsocketSwiftBridge&& other) noexcept {
+    if (this != &other) {
+        if (wrapper_) {
+            stop();
+            delete wrapper_;
         }
+        wrapper_ = other.wrapper_;
+        other.wrapper_ = nullptr;
+    }
+    return *this;
+}
 
-        wrapper->running = true;
-        wrapper->client_thread = std::thread(client_run_thread, wrapper);
+bool WebsocketSwiftBridge::start() {
+    if (!wrapper_ || wrapper_->running || wrapper_->client_thread.joinable()) {
+        return false;
+    }
+
+    try {
+        wrapper_->running = true;
+        wrapper_->client_thread = std::thread(client_run_thread, wrapper_);
         return true;
     } catch (...) {
+        wrapper_->running = false;
         return false;
     }
 }
 
-bool websocket_client_bridge_stop(WebsocketClientBridgePtr client) {
-    try {
-        auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-        if (!wrapper) {
-            return false;
-        }
-
-        wrapper->running = false;
-
-        std::shared_ptr<fptn::protocol::https::WebsocketClient> active_client;
-        {
-            std::unique_lock<std::mutex> lock(wrapper->mutex);
-            active_client = wrapper->client;
-            wrapper->client.reset();
-        }
-
-        if (active_client) {
-            active_client->Stop();
-        }
-
-        if (wrapper->client_thread.joinable()) {
-            wrapper->client_thread.join();
-        }
-
-        return active_client != nullptr;
-    } catch (...) {
+bool WebsocketSwiftBridge::stop() {
+    if (!wrapper_) {
         return false;
     }
+
+    wrapper_->running = false;
+
+    std::shared_ptr<fptn::protocol::https::WebsocketClient> active_client;
+    {
+        std::unique_lock<std::mutex> lock(wrapper_->mutex);
+        active_client = wrapper_->client;
+        wrapper_->client.reset();
+    }
+
+    if (active_client) {
+        active_client->Stop();
+    }
+
+    if (wrapper_->client_thread.joinable()) {
+        wrapper_->client_thread.join();
+    }
+
+    return active_client != nullptr;
 }
 
-bool websocket_client_bridge_send_packet(WebsocketClientBridgePtr client,
-                                         const uint8_t* packet_data,
-                                         uint32_t length) {
-    try {
-        auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-        if (wrapper && wrapper->client && wrapper->running) {
+bool WebsocketSwiftBridge::sendPacket(const uint8_t* packet_data, uint32_t length) {
+    if (wrapper_ && wrapper_->client && wrapper_->running) {
+        try {
             fptn::common::network::IPPacketData buffer(packet_data, packet_data + length);
             auto packet = fptn::common::network::IPPacket::Parse(std::move(buffer));
             if (packet) {
-                return wrapper->client->Send(std::move(packet));
+                return wrapper_->client->Send(std::move(packet));
             }
-            return false;
+        } catch (...) {
         }
-    } catch (...) {
     }
     return false;
 }
 
-bool websocket_client_bridge_is_started(WebsocketClientBridgePtr client) {
-    try {
-        auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-        return wrapper && wrapper->client && wrapper->client->IsStarted();
-    } catch (...) {
-        return false;
-    }
+bool WebsocketSwiftBridge::isStarted() const {
+    return wrapper_ && wrapper_->client && wrapper_->client->IsStarted();
 }
 
-WebsocketClientBridgeStatus websocket_client_bridge_status(WebsocketClientBridgePtr client) {
-    WebsocketClientBridgeStatus status = {false, false, 0, nullptr, nullptr, 0, 0, 0, 0, 0, 0, 0, false};
+WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
+    WebsocketClientBridgeStatus status = {false, false, 0, "", "", 0, 0, 0, 0, 0, 0, 0, false};
+    if (!wrapper_) {
+        status.last_error = "Invalid handle";
+        return status;
+    }
     try {
-        auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-        if (!wrapper) {
-            status.last_error = strdup("Invalid handle");
-            return status;
-        }
-        std::unique_lock<std::mutex> lock(wrapper->mutex);
-        status.running = wrapper->running;
-        status.started = wrapper->client && wrapper->client->IsStarted();
-        status.idle_timeout_seconds = wrapper->idle_timeout_seconds;
-        if (!wrapper->last_error.empty()) {
-            status.last_error = strdup(wrapper->last_error.c_str());
-        }
-        if (!wrapper->last_disconnect_reason.empty()) {
-            status.last_disconnect_reason = strdup(wrapper->last_disconnect_reason.c_str());
-        }
+        std::unique_lock<std::mutex> lock(wrapper_->mutex);
+        status.running = wrapper_->running;
+        status.started = wrapper_->client && wrapper_->client->IsStarted();
+        status.idle_timeout_seconds = wrapper_->idle_timeout_seconds;
+        status.last_error = wrapper_->last_error;
+        status.last_disconnect_reason = wrapper_->last_disconnect_reason;
         status.memory_resident_bytes = current_resident_size_bytes();
         status.memory_phys_footprint_bytes = current_phys_footprint_bytes();
-        status.received_packet_count = wrapper->received_packet_count.load();
-        status.received_byte_count = wrapper->received_byte_count.load();
-        status.callback_enter_count = wrapper->callback_enter_count.load();
-        status.callback_exit_count = wrapper->callback_exit_count.load();
-        status.callback_byte_count = wrapper->callback_byte_count.load();
-        status.in_packet_callback = wrapper->in_packet_callback.load();
+        status.received_packet_count = wrapper_->received_packet_count.load();
+        status.received_byte_count = wrapper_->received_byte_count.load();
+        status.callback_enter_count = wrapper_->callback_enter_count.load();
+        status.callback_exit_count = wrapper_->callback_exit_count.load();
+        status.callback_byte_count = wrapper_->callback_byte_count.load();
+        status.in_packet_callback = wrapper_->in_packet_callback.load();
     } catch (const std::exception& ex) {
-        status.last_error = strdup(ex.what());
+        status.last_error = ex.what();
     } catch (...) {
-        status.last_error = strdup("Unknown error occurred");
+        status.last_error = "Unknown error occurred";
     }
     return status;
 }
 
-void websocket_client_bridge_status_free(WebsocketClientBridgeStatus status) {
-    if (status.last_error) {
-        free(status.last_error);
-    }
-    if (status.last_disconnect_reason) {
-        free(status.last_disconnect_reason);
+void WebsocketSwiftBridge::registerIPAssignedCallback(IPAssignedCallback callback) {
+    if (wrapper_) {
+        wrapper_->ip_assigned_callback = callback;
     }
 }
-
-void websocket_client_bridge_register_ip_assigned_callback(
-    WebsocketClientBridgePtr client,
-    IPAssignedCallback callback) {
-    auto wrapper = static_cast<WebsocketClientWrapper*>(client);
-    if (wrapper) {
-        wrapper->ip_assigned_callback = callback;
-    }
-}
-
-} // extern "C"
