@@ -85,6 +85,15 @@ final class MacVPNService: ObservableObject {
                 proto.providerBundleIdentifier = "net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel"
                 proto.providerConfiguration = payload.asDictionary()
 
+                // Force APNs (push) traffic through the tunnel. excludeAPNs is only
+                // honored when includeAllNetworks is true, which captures all traffic;
+                // excludeLocalNetworks keeps LAN access working (matches iOS default).
+                if #available(macOS 13.3, *), MacSettingsStore.readRoutePushThroughTunnel() {
+                    proto.includeAllNetworks = true
+                    proto.excludeAPNs = false
+                    proto.excludeLocalNetworks = true
+                }
+
                 manager.protocolConfiguration = proto
                 manager.localizedDescription = "FPTN macOS"
                 manager.isEnabled = true

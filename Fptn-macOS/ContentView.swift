@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var selectedServer: MacVPNServer?
     @State private var sni: String = "rutube.ru"
     @State private var parserError: String?
+    @State private var routePushThroughTunnel: Bool = MacSettingsStore.readRoutePushThroughTunnel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -78,6 +79,14 @@ struct ContentView: View {
                         TextField("rutube.ru", text: $sni)
                             .textFieldStyle(.roundedBorder)
                     }
+
+                    Toggle("Route push notifications through VPN", isOn: Binding(
+                        get: { routePushThroughTunnel },
+                        set: { newValue in
+                            routePushThroughTunnel = newValue
+                            MacSettingsStore.saveRoutePushThroughTunnel(newValue)
+                        }
+                    ))
 
                     HStack {
                         Button(vpnService.isConnected ? "Disconnect" : "Connect") {

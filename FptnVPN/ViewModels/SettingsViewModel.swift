@@ -17,6 +17,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var websocketIdleTimeoutSeconds: Int
     @Published var colorScheme: AppColorScheme
     @Published var logLevel: LogLevel
+    @Published var routePushThroughTunnel: Bool
 
     var onLogout: (() -> Void)?
 
@@ -39,6 +40,7 @@ final class SettingsViewModel: ObservableObject {
         self.websocketIdleTimeoutSeconds = settingsService.websocketIdleTimeoutSeconds
         self.colorScheme = settingsService.colorScheme
         self.logLevel = settingsService.logLevel
+        self.routePushThroughTunnel = settingsService.routePushThroughTunnel
     }
 
     func saveSni() {
@@ -88,6 +90,11 @@ final class SettingsViewModel: ObservableObject {
             await settingsService.setLogLevel(level)
             await VPNService.pushLogLevelToActiveTunnel(level)
         }
+    }
+
+    func saveRoutePushThroughTunnel(_ value: Bool) {
+        routePushThroughTunnel = value
+        Task { await settingsService.setRoutePushThroughTunnel(value) }
     }
 
     func logout() {

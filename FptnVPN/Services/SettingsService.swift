@@ -18,6 +18,7 @@ actor SettingsService {
     private static let websocketIdleTimeoutKey = "fptn.settings.websocketIdleTimeoutSeconds"
     private static let colorSchemeKey        = "fptn.settings.colorScheme"
     private static let logLevelKey           = "fptn.settings.logLevel"
+    private static let routePushThroughTunnelKey = "fptn.settings.routePushThroughTunnel"
 
     // MARK: - Nonisolated reads (UserDefaults is thread-safe)
 
@@ -72,6 +73,13 @@ actor SettingsService {
         return level
     }
 
+    /// When enabled, APNs (push) traffic is forced through the tunnel via
+    /// `includeAllNetworks` + `excludeAPNs = false`. Defaults to ON.
+    nonisolated var routePushThroughTunnel: Bool {
+        let stored = UserDefaults.standard.object(forKey: Self.routePushThroughTunnelKey)
+        return stored == nil ? true : UserDefaults.standard.bool(forKey: Self.routePushThroughTunnelKey)
+    }
+
     // MARK: - Setters
 
     func setSni(_ value: String) {
@@ -112,6 +120,10 @@ actor SettingsService {
 
     func setLogLevel(_ level: LogLevel) {
         UserDefaults.standard.set(level.rawValue, forKey: Self.logLevelKey)
+    }
+
+    func setRoutePushThroughTunnel(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: Self.routePushThroughTunnelKey)
     }
 
     // MARK: - SNI sanitization

@@ -193,11 +193,20 @@ struct SettingsView: View {
                         Text("Per-App VPN")
                             .foregroundStyle(Color.appPrimaryText)
                     }
+
+                    Toggle(isOn: Binding(
+                        get: { viewModel.routePushThroughTunnel },
+                        set: { viewModel.saveRoutePushThroughTunnel($0) }
+                    )) {
+                        Text("Route Push Notifications")
+                            .foregroundStyle(Color.appPrimaryText)
+                    }
+                    .tint(Color.appAccent)
                 } header: {
                     Text("Routing")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
-                    Text("Restrict VPN to specific apps or exclude selected apps from the tunnel.")
+                    Text("Restrict VPN to specific apps or exclude selected apps from the tunnel.\n\nRoute Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected.")
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)

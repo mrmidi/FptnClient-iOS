@@ -381,6 +381,14 @@ final class VPNService: ObservableObject {
                 }
                 config.providerConfiguration = providerConfiguration
 
+                // Force APNs (push) traffic through the tunnel. excludeAPNs is only
+                // honored when includeAllNetworks is true, which also makes the tunnel
+                // fail-closed (all traffic captured) while connected.
+                if #available(iOS 16.4, *), SettingsService.shared.routePushThroughTunnel {
+                    config.includeAllNetworks = true
+                    config.excludeAPNs = false
+                }
+
                 manager.protocolConfiguration = config
                 manager.localizedDescription = "FPTN"
                 manager.isEnabled = true
