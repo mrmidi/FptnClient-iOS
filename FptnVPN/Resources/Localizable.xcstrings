@@ -1506,7 +1506,21 @@
       }
     },
     "Restrict VPN to specific apps or exclude selected apps from the tunnel.\n\nRoute Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected." : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restrict VPN to specific apps or exclude selected apps from the tunnel.\n\nRoute Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ограничить VPN выбранными приложениями или исключить их из туннеля.\n\n«Маршрутизация push-уведомлений» направляет трафик Apple Push (APNs) через туннель, чтобы уведомления продолжали приходить в сетях, где они блокируются напрямую. При этом весь сетевой трафик идёт через VPN, пока он подключён."
+          }
+        }
+      }
     },
     "Retry delay" : {
       "extractionState" : "manual",
@@ -1526,7 +1540,21 @@
       }
     },
     "Route Push Notifications" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route Push Notifications"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрутизация push-уведомлений"
+          }
+        }
+      }
     },
     "Routing" : {
       "extractionState" : "manual",

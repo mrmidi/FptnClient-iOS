@@ -113,6 +113,23 @@
         }
       }
     },
+    "Route push notifications through VPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route push notifications through VPN"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрутизировать push-уведомления через VPN"
+          }
+        }
+      }
+    },
     "rutube.ru" : {
       "extractionState" : "manual",
       "localizations" : {
