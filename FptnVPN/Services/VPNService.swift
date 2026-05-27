@@ -41,7 +41,6 @@ private struct TunnelControlResponse: Codable, Sendable {
 final class VPNService: ObservableObject {
     @Published var connection = VPNConnection()
 
-    private var timer: Timer?
     private var speedTimer: Timer?
     private var packetTunnelProvider: NETunnelProviderManager?
     private var tunnelStatusObserver: NSObjectProtocol?
@@ -578,19 +577,16 @@ final class VPNService: ObservableObject {
     }
 
     private func startTimer() {
-        guard timer == nil else { return }
-
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.connection.connectionTime += 1
-            }
-        }
+        // Anchor to the system's connection timestamp so the displayed duration
+        // reflects real elapsed time across backgrounding and app relaunches,
+        // not just foreground ticks. Set once and preserved across
+        // reasserting/reconnect so the total session time isn't reset on blips.
+        guard connection.connectedAt == nil else { return }
+        connection.connectedAt = packetTunnelProvider?.connection.connectedDate ?? Date()
     }
 
     private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-        connection.connectionTime = 0
+        connection.connectedAt = nil
     }
 
     private func stopSpeedMonitoring() {
@@ -603,9 +599,11 @@ final class VPNService: ObservableObject {
     // MARK: - Formatting
 
     func formatConnectionTime() -> String {
-        let hours = Int(connection.connectionTime) / 3600
-        let minutes = (Int(connection.connectionTime) % 3600) / 60
-        let seconds = Int(connection.connectionTime) % 60
+        guard let connectedAt = connection.connectedAt else { return "00:00:00" }
+        let total = Int(max(0, Date().timeIntervalSince(connectedAt)))
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
         return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 

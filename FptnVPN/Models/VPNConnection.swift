@@ -16,7 +16,7 @@ struct VPNConnection: Sendable {
     var lastTransportError: String? = nil
     var lastStopReason: String? = nil
     var selectedServer: VPNServer?
-    var connectionTime: TimeInterval = 0
+    var connectedAt: Date? = nil
     var downloadSpeed: Double = 0
     var uploadSpeed: Double = 0
     var connectionMode: ConnectionMode = .auto

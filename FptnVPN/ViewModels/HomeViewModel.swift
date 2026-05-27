@@ -73,6 +73,18 @@ final class HomeViewModel: ObservableObject {
                 self?.syncFromService()
             }
             .store(in: &cancellables)
+
+        // Repaint the duration label every second. The value is derived from the
+        // connection start time, so this only repaints — backgrounding (which
+        // pauses this timer) no longer loses elapsed time; it catches up on the
+        // next tick and on the scenePhase resync.
+        Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isConnected else { return }
+                self.connectionTimeString = self.vpnService.formatConnectionTime()
+            }
+            .store(in: &cancellables)
     }
 
     private func syncFromService() {
