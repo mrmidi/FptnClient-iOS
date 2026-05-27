@@ -185,10 +185,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var localStopInitiator: LocalStopInitiator?
     private var shutdownRequested = false
     private var isNetworkPathSatisfied = true
+    private var lastNetworkPathChangeAt: Date?
+    private var lastNetworkPathSatisfied: Bool?
+    private var lastNetworkPathSummary = "unknown"
     private var websocketGeneration = 0
     private var didApplyNetworkSettings = false
-    private var didStartReadLoop = false
     private var isReadLoopActive = false
+    private var isPacketReadPending = false
     private var reconnectAttempt = 0
     private var lastTransportError: String?
     private var lastStopReason: String?
@@ -196,12 +199,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var counters = PacketCounters()
     private var lastMemoryWarningAt: Date?
     private var memoryEmergencyReconnectInProgress = false
+    private var readBackpressureUntil: Date?
+    private var readBackpressureWorkItem: DispatchWorkItem?
+    private var consecutiveSendFailureBatches = 0
 
     private let runtimeReconnectDelayCapSeconds = 60
     private let activityResumeLogThresholdSeconds = 60
     private let sendFailureWarningIntervalSeconds: TimeInterval = 1
     private let sendFailureWarningPacketThreshold: Int64 = 100
+    private let sendFailureBackpressureBaseDelaySeconds: TimeInterval = 0.25
+    private let sendFailureBackpressureMaxDelaySeconds: TimeInterval = 2
+    private let pathChangeBackpressureDelaySeconds: TimeInterval = 1
     private let memoryWarningLogIntervalSeconds: TimeInterval = 60
+    private let pathHandoffHintWindowSeconds: TimeInterval = 10
 
     deinit {
         recordProviderEvent(category: "lifecycle", message: "PacketTunnelProvider deinit")
@@ -242,15 +252,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         isNetworkPathSatisfied = true
         websocketGeneration = 0
         didApplyNetworkSettings = false
-        didStartReadLoop = false
         isReadLoopActive = false
+        isPacketReadPending = false
         reconnectAttempt = 0
         lastTransportError = nil
         lastStopReason = nil
         lastStopReasonRawValue = nil
+        lastNetworkPathChangeAt = nil
+        lastNetworkPathSatisfied = nil
+        lastNetworkPathSummary = "unknown"
         counters = PacketCounters()
         lastMemoryWarningAt = nil
         memoryEmergencyReconnectInProgress = false
+        readBackpressureUntil = nil
+        readBackpressureWorkItem = nil
+        consecutiveSendFailureBatches = 0
         assignedIPv4 = nil
         assignedIPv6 = nil
         appliedIPv4 = nil
@@ -276,6 +292,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         lastStopReasonRawValue = Int(reason.rawValue)
         lastStopReason = description
         isReadLoopActive = false
+        isPacketReadPending = false
         stateLock.unlock()
 
         updateRuntimeState(.stopping, reason: "stopTunnel(\(description))")
@@ -291,6 +308,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         cancelStartTimeout()
         cancelPendingReconnect()
+        cancelReadBackpressure()
         stopPathMonitor()
         stopTelemetry()
         finishStart(with: makeError("Tunnel stopped before startup completed"))
@@ -323,8 +341,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 localStopInitiator = .appDisconnect
                 shutdownRequested = true
                 isReadLoopActive = false
+                isPacketReadPending = false
                 stateLock.unlock()
                 cancelPendingReconnect()
+                cancelReadBackpressure()
                 logger.info("Marked local stop initiator via IPC: \(initiator); reconnect will be suppressed")
                 recordProviderEvent(category: "ipc", message: "prepare_stop initiator=\(initiator)")
                 updateDiagnosticsHeartbeat(lastEvent: "prepare_stop")
@@ -513,8 +533,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     self.appliedIPv4 = pendingAppliedIPv4
                     self.appliedIPv6 = pendingAppliedIPv6
                     self.didApplyNetworkSettings = true
-                    let shouldStartReadLoop = !self.didStartReadLoop
-                    self.didStartReadLoop = true
                     self.isReadLoopActive = true
                     self.reconnectAttempt = 0
                     self.lastTransportError = nil
@@ -523,9 +541,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
                     self.updateRuntimeState(.connected, reason: "websocket connected and settings applied")
                     self.recordProviderEvent(category: "settings", message: "apply_success generation=\(generation)", generation: generation)
-                    if shouldStartReadLoop {
-                        self.startReadLoop()
-                    }
+                    self.clearReadBackpressure()
+                    self.startReadLoop()
                     self.startTelemetryIfNeeded()
                     self.finishStart(with: nil)
                 }
@@ -542,6 +559,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         updateRuntimeState(.connected, reason: "transport recovered")
         recordProviderEvent(category: "websocket", message: "transport_recovered generation=\(generation)", generation: generation)
         updateDiagnosticsHeartbeat(lastEvent: "transport_recovered")
+        clearReadBackpressure()
+        startReadLoop()
     }
 
     private func handleTransportDisconnected(
@@ -552,11 +571,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         var stopInitiator: LocalStopInitiator?
         var isStaleCallback = false
         var shouldSuppressForShutdown = false
+        var pathHandoffHint = ""
 
         stateLock.lock()
         stopInitiator = localStopInitiator
         isStaleCallback = generation != websocketGeneration
         shouldSuppressForShutdown = shutdownRequested
+        pathHandoffHint = pathHandoffHintDescriptionLocked(now: Date())
         stateLock.unlock()
 
         if isStaleCallback {
@@ -570,10 +591,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         )
         recordProviderEvent(
             category: "websocket",
-            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-")",
+            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-")\(pathHandoffHint)",
             generation: generation
         )
         updateDiagnosticsHeartbeat(lastEvent: "transport_disconnected")
+        applyReadBackpressure(delay: sendFailureBackpressureMaxDelaySeconds, reason: "transport_disconnected")
         replaceWebSocketClient(with: nil, stopCurrent: false)
         cancelStartTimeout()
 
@@ -825,10 +847,28 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     // MARK: - Packet flow
 
     private func startReadLoop() {
-        guard shouldContinueReadLoop() else { return }
+        guard shouldReadOutboundPackets() else { return }
+        if let delay = currentReadBackpressureDelay() {
+            scheduleReadLoopAfterBackpressure(delay: delay)
+            return
+        }
+
+        stateLock.lock()
+        guard !isPacketReadPending else {
+            stateLock.unlock()
+            return
+        }
+        isPacketReadPending = true
+        stateLock.unlock()
 
         packetFlow.readPackets { [weak self] packets, _ in
-            guard let self, self.shouldContinueReadLoop() else { return }
+            guard let self else { return }
+
+            self.stateLock.lock()
+            self.isPacketReadPending = false
+            self.stateLock.unlock()
+
+            guard self.shouldReadOutboundPackets() else { return }
 
             var totalBytes: Int64 = 0
             var sendFailures: Int64 = 0
@@ -841,11 +881,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 }
             }
 
-            self.recordPacketFlowRead(
+            let backpressureDelay = self.recordPacketFlowRead(
                 packetCount: Int64(packets.count),
                 byteCount: totalBytes,
                 sendFailures: sendFailures
             )
+            if let backpressureDelay {
+                self.scheduleReadLoopAfterBackpressure(delay: backpressureDelay)
+                return
+            }
             self.startReadLoop()
         }
     }
@@ -863,6 +907,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.lock()
         defer { stateLock.unlock() }
         return isReadLoopActive
+    }
+
+    private func shouldReadOutboundPackets() -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return isReadLoopActive &&
+            runtimeState == .connected &&
+            didApplyNetworkSettings &&
+            wsClient != nil
     }
 
     private func shouldHandlePackets() -> Bool {
@@ -902,8 +955,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         packetCount: Int64,
         byteCount: Int64,
         sendFailures: Int64
-    ) {
-        guard packetCount > 0 || sendFailures > 0 else { return }
+    ) -> TimeInterval? {
+        guard packetCount > 0 || sendFailures > 0 else { return nil }
 
         let now = Date()
         var previousOutboundActivityAt: Date?
@@ -911,6 +964,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         var pendingSendFailures: Int64 = 0
         var totalSendFailures: Int64 = 0
         var suppressSendFailureLog = false
+        var backpressureDelay: TimeInterval?
 
         stateLock.lock()
         previousOutboundActivityAt = counters.lastOutboundActivityAt
@@ -936,7 +990,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     counters.pendingWebsocketSendFailures = 0
                     counters.lastSendFailureWarningAt = now
                 }
+                consecutiveSendFailureBatches += 1
+                let backoffStep = min(max(0, consecutiveSendFailureBatches - 1), 3)
+                let delay = min(
+                    sendFailureBackpressureMaxDelaySeconds,
+                    sendFailureBackpressureBaseDelaySeconds * Double(1 << backoffStep)
+                )
+                let until = now.addingTimeInterval(delay)
+                if readBackpressureUntil.map({ until > $0 }) ?? true {
+                    readBackpressureUntil = until
+                }
+                backpressureDelay = delay
             }
+        } else if packetCount > 0 {
+            consecutiveSendFailureBatches = 0
+            readBackpressureUntil = nil
         }
         stateLock.unlock()
 
@@ -955,6 +1023,69 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 "Tunnel transport send failures throttled pending=\(pendingSendFailures) total=\(totalSendFailures) latest_batch_failures=\(sendFailures) outbound_packets=\(packetCount) outbound_bytes=\(byteCount) \(activityDiagnosticsDescription())"
             )
         }
+        return backpressureDelay
+    }
+
+    private func currentReadBackpressureDelay() -> TimeInterval? {
+        let now = Date()
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard isReadLoopActive, let until = readBackpressureUntil else {
+            return nil
+        }
+        let delay = until.timeIntervalSince(now)
+        if delay <= 0 {
+            readBackpressureUntil = nil
+            return nil
+        }
+        return min(delay, sendFailureBackpressureMaxDelaySeconds)
+    }
+
+    private func applyReadBackpressure(delay: TimeInterval, reason: String) {
+        let clampedDelay = min(max(delay, sendFailureBackpressureBaseDelaySeconds), sendFailureBackpressureMaxDelaySeconds)
+        let until = Date().addingTimeInterval(clampedDelay)
+        stateLock.lock()
+        if readBackpressureUntil.map({ until > $0 }) ?? true {
+            readBackpressureUntil = until
+        }
+        stateLock.unlock()
+        recordProviderEvent(category: "packet_flow", message: "read_backpressure reason=\(reason) delay=\(String(format: "%.2f", clampedDelay))s")
+    }
+
+    private func scheduleReadLoopAfterBackpressure(delay: TimeInterval) {
+        let clampedDelay = min(max(delay, sendFailureBackpressureBaseDelaySeconds), sendFailureBackpressureMaxDelaySeconds)
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.stateLock.lock()
+            self.readBackpressureWorkItem = nil
+            self.stateLock.unlock()
+            self.startReadLoop()
+        }
+
+        stateLock.lock()
+        guard isReadLoopActive, !shutdownRequested else {
+            stateLock.unlock()
+            return
+        }
+        readBackpressureWorkItem?.cancel()
+        readBackpressureWorkItem = workItem
+        stateLock.unlock()
+
+        eventQueue.asyncAfter(deadline: .now() + clampedDelay, execute: workItem)
+    }
+
+    private func clearReadBackpressure() {
+        stateLock.lock()
+        let workItem = readBackpressureWorkItem
+        readBackpressureWorkItem = nil
+        readBackpressureUntil = nil
+        consecutiveSendFailureBatches = 0
+        stateLock.unlock()
+        workItem?.cancel()
+    }
+
+    private func cancelReadBackpressure() {
+        clearReadBackpressure()
     }
 
     private func recordPacketFlowWrite(byteCount: Int64) -> Int64 {
@@ -1031,7 +1162,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
             self?.eventQueue.async { [weak self] in
-                self?.handleNetworkPathChanged(isSatisfied: path.status == .satisfied)
+                self?.handleNetworkPathChanged(path)
             }
         }
 
@@ -1050,14 +1181,26 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         monitor?.cancel()
     }
 
-    private func handleNetworkPathChanged(isSatisfied: Bool) {
+    private func handleNetworkPathChanged(_ path: NWPath) {
+        let isSatisfied = path.status == .satisfied
+        let pathSummary = networkPathSummary(path)
         var shouldScheduleReconnect = false
         var attempt = 0
         var maxAttempts = 0
+        var previousSummary = "unknown"
+        var didPathChange = false
 
         stateLock.lock()
         let previous = isNetworkPathSatisfied
+        previousSummary = lastNetworkPathSummary
         isNetworkPathSatisfied = isSatisfied
+        lastNetworkPathSummary = pathSummary
+        let now = Date()
+        didPathChange = previous != isSatisfied || previousSummary != pathSummary
+        if didPathChange {
+            lastNetworkPathChangeAt = now
+            lastNetworkPathSatisfied = isSatisfied
+        }
         if isSatisfied && runtimeState == .waitingForNetwork && !shutdownRequested {
             shouldScheduleReconnect = true
             attempt = reconnectAttempt
@@ -1065,13 +1208,67 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
         stateLock.unlock()
 
-        guard previous != isSatisfied || shouldScheduleReconnect else { return }
+        guard didPathChange || shouldScheduleReconnect else { return }
 
-        logger.info("Network path satisfied=\(isSatisfied)")
-        recordProviderEvent(category: "path", message: "path_satisfied=\(isSatisfied)", pathSatisfied: isSatisfied)
-        updateDiagnosticsHeartbeat(lastEvent: "path_satisfied=\(isSatisfied)")
+        logger.info("Network path satisfied=\(isSatisfied) network=\(pathSummary)")
+        recordProviderEvent(category: "path", message: "path_satisfied=\(isSatisfied) network=\(pathSummary)", pathSatisfied: isSatisfied)
+        updateDiagnosticsHeartbeat(lastEvent: "path_satisfied=\(isSatisfied) network=\(pathSummary)")
+        if didPathChange {
+            applyReadBackpressure(delay: pathChangeBackpressureDelaySeconds, reason: "network_path_changed")
+        }
         if shouldScheduleReconnect {
             scheduleReconnectAttempt(attempt: max(1, attempt), maxAttempts: maxAttempts)
+        }
+    }
+
+    private func networkPathSummary(_ path: NWPath) -> String {
+        var interfaceTypes: [String] = []
+        if path.usesInterfaceType(.wifi) {
+            interfaceTypes.append("wifi")
+        }
+        if path.usesInterfaceType(.cellular) {
+            interfaceTypes.append("cellular")
+        }
+        if path.usesInterfaceType(.wiredEthernet) {
+            interfaceTypes.append("wired")
+        }
+        if path.usesInterfaceType(.loopback) {
+            interfaceTypes.append("loopback")
+        }
+        if path.usesInterfaceType(.other) {
+            interfaceTypes.append("other")
+        }
+        if interfaceTypes.isEmpty {
+            interfaceTypes = path.availableInterfaces.map { networkInterfaceTypeDescription($0.type) }
+        }
+        if interfaceTypes.isEmpty {
+            interfaceTypes = ["none"]
+        }
+
+        var flags = ["interfaces=\(interfaceTypes.joined(separator: "+"))"]
+        flags.append("expensive=\(path.isExpensive)")
+        if #available(iOS 13.0, *) {
+            flags.append("constrained=\(path.isConstrained)")
+        }
+        flags.append("ipv4=\(path.supportsIPv4)")
+        flags.append("ipv6=\(path.supportsIPv6)")
+        return flags.joined(separator: " ")
+    }
+
+    private func networkInterfaceTypeDescription(_ type: NWInterface.InterfaceType) -> String {
+        switch type {
+        case .wifi:
+            return "wifi"
+        case .cellular:
+            return "cellular"
+        case .wiredEthernet:
+            return "wired"
+        case .loopback:
+            return "loopback"
+        case .other:
+            return "other"
+        @unknown default:
+            return "unknown"
         }
     }
 
@@ -1464,7 +1661,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let outboundIdle = idleDurationDescription(from: snapshot.lastOutboundActivityAt)
         let clientAttached = currentWebSocketClient() != nil
         let readLoopActive = shouldContinueReadLoop()
-        return "inbound_idle=\(inboundIdle) outbound_idle=\(outboundIdle) client_attached=\(clientAttached) read_loop_active=\(readLoopActive)"
+        let pathHint: String
+        stateLock.lock()
+        pathHint = pathHandoffHintDescriptionLocked(now: Date())
+        stateLock.unlock()
+        return "inbound_idle=\(inboundIdle) outbound_idle=\(outboundIdle) client_attached=\(clientAttached) read_loop_active=\(readLoopActive)\(pathHint)"
     }
 
     private func idleDurationDescription(from iso8601DateString: String?) -> String {
@@ -1473,6 +1674,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             return "never"
         }
         return "\(Int(max(0, Date().timeIntervalSince(date))))s"
+    }
+
+    private func pathHandoffHintDescriptionLocked(now: Date) -> String {
+        guard let lastNetworkPathChangeAt else { return "" }
+
+        let ageSeconds = now.timeIntervalSince(lastNetworkPathChangeAt)
+        guard ageSeconds >= 0, ageSeconds <= pathHandoffHintWindowSeconds else { return "" }
+
+        let status = lastNetworkPathSatisfied.map(String.init) ?? "unknown"
+        return " likely_path_handoff=true path_change_age=\(Int(ageSeconds))s path_satisfied=\(status) network=\(lastNetworkPathSummary)"
     }
 
     private func logActivityResumedIfNeeded(
