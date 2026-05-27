@@ -80,7 +80,7 @@ final class Prober: Sendable {
             )
         }
 
-        let response = client.get(path: "/api/v1/dns", timeout: timeoutSeconds)
+        let response = client.get(path: "/api/v1/test/file.bin", timeout: timeoutSeconds)
         let duration = clock.now - start
         let elapsed = Int(
             Double(duration.components.seconds) * 1000
@@ -96,6 +96,19 @@ final class Prober: Sendable {
                 handshakeLatencyMs: handshake.latencyMs,
                 httpCode: response.code,
                 detail: error,
+                ts: Date().timeIntervalSince1970
+            )
+        }
+
+        guard response.code == 200 else {
+            return ProbeResult(
+                sni: sni,
+                strategyRawValue: cfg.bypassMethod.rawValue,
+                status: .unreachable,
+                latencyMs: elapsed,
+                handshakeLatencyMs: handshake.latencyMs,
+                httpCode: response.code,
+                detail: "HTTP \(response.code)",
                 ts: Date().timeIntervalSince1970
             )
         }
