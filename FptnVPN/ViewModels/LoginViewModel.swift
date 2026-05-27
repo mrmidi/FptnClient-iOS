@@ -7,6 +7,26 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 import Compression
 import Foundation
 
+private enum LoginTokenParseError: LocalizedError {
+    case empty
+    case invalidBase64
+    case brotliFailed(Error)
+    case jsonDecodeFailed(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .empty:
+            return "Token is empty after removing prefix"
+        case .invalidBase64:
+            return "Invalid base64 encoding — check that you copied the full token from @fptn_bot"
+        case .brotliFailed:
+            return "Failed to decompress token — make sure you have the latest token from @fptn_bot"
+        case .jsonDecodeFailed(let error):
+            return "Failed to parse token: \(error.localizedDescription)"
+        }
+    }
+}
+
 @MainActor
 final class LoginViewModel: ObservableObject {
 
@@ -19,6 +39,7 @@ final class LoginViewModel: ObservableObject {
     @Published var isCloudSynced = false
 
     var isLoginButtonEnabled: Bool { !token.isEmpty }
+    private var lastAutoLoginCandidate: String?
 
     // MARK: - Dependencies
 
@@ -59,10 +80,50 @@ final class LoginViewModel: ObservableObject {
     func login() async {
         errorMessage = nil
 
+        do {
+            let tokenData = try decodeToken(token)
+            await tokenService.saveTokenData(tokenData)
+            logger.info("Login successful, servers: \(tokenData.servers.count)")
+            isLoggedIn = true
+        } catch {
+            errorMessage = error.localizedDescription
+            logger.error("\(error.localizedDescription)")
+        }
+    }
+
+    func shouldAutoLoginAfterTokenChange(from oldValue: String, to newValue: String) -> Bool {
+        let addedCharacterCount = newValue.count - oldValue.count
+        let looksPasted = oldValue.isEmpty || addedCharacterCount >= 16 || newValue.contains(where: \.isNewline)
+        return !isLoggedIn && looksPasted && looksLikeToken(newValue)
+    }
+
+    func loginIfValidPastedToken(_ candidate: String) async {
+        guard !isLoggedIn,
+              candidate == token,
+              candidate != lastAutoLoginCandidate else {
+            return
+        }
+
+        lastAutoLoginCandidate = candidate
+        do {
+            let tokenData = try decodeToken(candidate)
+            guard candidate == token else { return }
+            await tokenService.saveTokenData(tokenData)
+            logger.info("Auto-login successful, servers: \(tokenData.servers.count)")
+            errorMessage = nil
+            isLoggedIn = true
+        } catch {
+            logger.debug("Ignoring pasted token candidate: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Private
+
+    private func decodeToken(_ rawToken: String) throws -> FPTNToken {
         // Detect format before any prefix stripping.
         // fptnb: = base64(brotli(json))  — new format (bot commit d1ed549)
         // fptn:  = base64(json)          — legacy format
-        let trimmed = token
+        let trimmed = rawToken
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "`", with: "")
         let isBrotli = trimmed.hasPrefix("fptnb:") || trimmed.hasPrefix("fptnb//")
@@ -83,14 +144,12 @@ final class LoginViewModel: ObservableObject {
             .trimmingCharacters(in: CharacterSet(charactersIn: "="))
 
         guard !sanitizedToken.isEmpty else {
-            errorMessage = "Token is empty after removing prefix"
-            return
+            throw LoginTokenParseError.empty
         }
 
         guard let compressed = Data(base64Encoded: addBase64Padding(sanitizedToken)) else {
-            errorMessage = "Invalid base64 encoding — check that you copied the full token from @fptn_bot"
             logger.error("Token base64 decode failed")
-            return
+            throw LoginTokenParseError.invalidBase64
         }
 
         // Decompress if necessary, then decode JSON.
@@ -100,27 +159,40 @@ final class LoginViewModel: ObservableObject {
                 jsonData = try decompressBrotli(compressed)
                 logger.debug("fptnb: Brotli decompressed \(compressed.count) → \(jsonData.count) bytes")
             } catch {
-                errorMessage = "Failed to decompress token — make sure you have the latest token from @fptn_bot"
                 logger.error("Brotli decompression failed: \(error.localizedDescription)")
-                return
+                throw LoginTokenParseError.brotliFailed(error)
             }
         } else {
             jsonData = compressed
         }
 
         do {
-            let tokenData = try JSONDecoder().decode(FPTNToken.self, from: jsonData)
-            await tokenService.saveTokenData(tokenData)
-            logger.info("Login successful, servers: \(tokenData.servers.count)")
-            isLoggedIn = true
+            return try JSONDecoder().decode(FPTNToken.self, from: jsonData)
         } catch {
-            let msg = "Failed to parse token: \(error.localizedDescription)"
-            logger.error("\(msg)")
-            errorMessage = msg
+            throw LoginTokenParseError.jsonDecodeFailed(error)
         }
     }
 
-    // MARK: - Private
+    private func looksLikeToken(_ rawToken: String) -> Bool {
+        let trimmed = rawToken
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "`", with: "")
+        let hasKnownPrefix = trimmed.hasPrefix("fptn:")
+            || trimmed.hasPrefix("fptn://")
+            || trimmed.hasPrefix("fptnb:")
+            || trimmed.hasPrefix("fptnb://")
+
+        guard hasKnownPrefix else { return false }
+
+        let payload = trimmed
+            .replacingOccurrences(of: "fptnb://", with: "")
+            .replacingOccurrences(of: "fptnb:", with: "")
+            .replacingOccurrences(of: "fptn://", with: "")
+            .replacingOccurrences(of: "fptn:", with: "")
+            .components(separatedBy: .whitespacesAndNewlines).joined()
+
+        return payload.count >= 32
+    }
 
     private func addBase64Padding(_ value: String) -> String {
         let remainder = value.count % 4

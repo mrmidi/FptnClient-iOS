@@ -37,6 +37,12 @@ private struct TunnelControlResponse: Codable, Sendable {
     let message: String
 }
 
+private enum StartupAPIRequestRetry {
+    static let maxAttempts = 5
+    static let timeoutSeconds = 5
+    static let delayNanoseconds: UInt64 = 300_000_000
+}
+
 @MainActor
 final class VPNService: ObservableObject {
     @Published var connection = VPNConnection()
@@ -251,33 +257,49 @@ final class VPNService: ObservableObject {
         }
         """
 
-        let response = apiClient.post(path: "/api/v1/login", body: requestBody, timeout: 10)
-        let responseCode = response.code
+        var lastErrorMessage = "Unknown error"
+        for attempt in 1...StartupAPIRequestRetry.maxAttempts {
+            let response = apiClient.post(
+                path: "/api/v1/login",
+                body: requestBody,
+                timeout: StartupAPIRequestRetry.timeoutSeconds
+            )
+            let responseCode = response.code
 
-        guard responseCode == 200 else {
-            let errorMessage = response.error ?? "Unknown error"
-            logger.error("Login request failed host=\(server.host) port=\(server.port) sni=\(sni) code=\(responseCode) error=\(errorMessage)")
-            return .failure(NSError(
-                domain: "VPNService",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: errorMessage]
-            ))
+            if responseCode == 200 {
+                guard let body = response.body,
+                      let data = body.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let accessToken = json["access_token"] as? String else {
+                    lastErrorMessage = "Access token not found"
+                    logger.warning("Login response parse failed attempt=\(attempt)/\(StartupAPIRequestRetry.maxAttempts) code=\(responseCode)")
+                    await sleepBeforeStartupAPIRetryIfNeeded(attempt)
+                    continue
+                }
+
+                logger.debug("Login successful, token: \(hideCred(accessToken))")
+                return .success(accessToken)
+            }
+
+            lastErrorMessage = response.error ?? "Login request failed with code \(responseCode)"
+            if responseCode == 401 {
+                logger.error("Login rejected by server code=\(responseCode)")
+                return .failure(NSError(
+                    domain: "VPNService",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: lastErrorMessage]
+                ))
+            }
+
+            logger.warning("Login request attempt \(attempt)/\(StartupAPIRequestRetry.maxAttempts) failed code=\(responseCode)")
+            await sleepBeforeStartupAPIRetryIfNeeded(attempt)
         }
 
-        guard let body = response.body,
-              let data = body.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let accessToken = json["access_token"] as? String else {
-            logger.error("Login response parse failed host=\(server.host) port=\(server.port) code=\(responseCode)")
-            return .failure(NSError(
-                domain: "VPNService",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Access token not found"]
-            ))
-        }
-
-        logger.debug("Login successful, token: \(hideCred(accessToken))")
-        return .success(accessToken)
+        return .failure(NSError(
+            domain: "VPNService",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: lastErrorMessage]
+        ))
     }
 
     // MARK: - DNS
@@ -299,34 +321,42 @@ final class VPNService: ObservableObject {
             censorshipStrategy: censorshipStrategy
         )
 
-        let response = apiClient.get(path: "/api/v1/dns", timeout: 10)
-        let responseCode = response.code
+        var lastErrorMessage = "Unknown error"
+        for attempt in 1...StartupAPIRequestRetry.maxAttempts {
+            let response = apiClient.get(path: "/api/v1/dns", timeout: StartupAPIRequestRetry.timeoutSeconds)
+            let responseCode = response.code
 
-        guard responseCode == 200 else {
-            let errorMessage = response.error ?? "Unknown error"
-            logger.error("DNS request failed host=\(server.host) port=\(server.port) sni=\(sni) code=\(responseCode) error=\(errorMessage)")
-            return .failure(NSError(
-                domain: "VPNService",
-                code: 4,
-                userInfo: [NSLocalizedDescriptionKey: errorMessage]
-            ))
+            if responseCode == 200 {
+                guard let body = response.body,
+                      let data = body.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let dnsIPv4 = json["dns"] as? String else {
+                    lastErrorMessage = "DNS info not found"
+                    logger.warning("DNS response parse failed attempt=\(attempt)/\(StartupAPIRequestRetry.maxAttempts) code=\(responseCode)")
+                    await sleepBeforeStartupAPIRetryIfNeeded(attempt)
+                    continue
+                }
+
+                let dnsIPv6 = Self.validIPv6(json["dns_ipv6"] as? String)
+                logger.debug("DNS response parsed ipv6_available=\(dnsIPv6 != nil)")
+                return .success((dnsIPv4, dnsIPv6))
+            }
+
+            lastErrorMessage = response.error ?? "DNS request failed with code \(responseCode)"
+            logger.warning("DNS request attempt \(attempt)/\(StartupAPIRequestRetry.maxAttempts) failed code=\(responseCode)")
+            await sleepBeforeStartupAPIRetryIfNeeded(attempt)
         }
 
-        guard let body = response.body,
-              let data = body.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let dnsIPv4 = json["dns"] as? String else {
-            logger.error("DNS response parse failed host=\(server.host) port=\(server.port) code=\(responseCode)")
-            return .failure(NSError(
-                domain: "VPNService",
-                code: 3,
-                userInfo: [NSLocalizedDescriptionKey: "DNS info not found"]
-            ))
-        }
+        return .failure(NSError(
+            domain: "VPNService",
+            code: 4,
+            userInfo: [NSLocalizedDescriptionKey: lastErrorMessage]
+        ))
+    }
 
-        let dnsIPv6 = Self.validIPv6(json["dns_ipv6"] as? String)
-        logger.debug("DNS response parsed ipv6_available=\(dnsIPv6 != nil)")
-        return .success((dnsIPv4, dnsIPv6))
+    nonisolated private func sleepBeforeStartupAPIRetryIfNeeded(_ attempt: Int) async {
+        guard attempt < StartupAPIRequestRetry.maxAttempts else { return }
+        try? await Task.sleep(nanoseconds: StartupAPIRequestRetry.delayNanoseconds)
     }
 
     // MARK: - VPN tunnel configuration

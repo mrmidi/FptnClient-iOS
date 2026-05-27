@@ -9,6 +9,7 @@ import SwiftUI
 struct LoginView: View {
     @StateObject private var viewModel = LoginViewModel()
     @State private var showingAlert = false
+    @State private var autoLoginTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -114,9 +115,22 @@ struct LoginView: View {
                                     .textInputAutocapitalization(.never)
                                     .disableAutocorrection(true)
                                     .textFieldStyle(.plain)
+                                    .onChange(of: viewModel.token) { oldValue, newValue in
+                                        autoLoginTask?.cancel()
+                                        guard viewModel.shouldAutoLoginAfterTokenChange(from: oldValue, to: newValue) else {
+                                            return
+                                        }
+
+                                        autoLoginTask = Task {
+                                            try? await Task.sleep(nanoseconds: 150_000_000)
+                                            guard !Task.isCancelled else { return }
+                                            await viewModel.loginIfValidPastedToken(newValue)
+                                        }
+                                    }
                                 
                                 if !viewModel.token.isEmpty {
                                     Button {
+                                        autoLoginTask?.cancel()
                                         viewModel.token = ""
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
@@ -190,6 +204,9 @@ struct LoginView: View {
                         viewModel.isLoggedIn = false
                     }
                 )
+            }
+            .onDisappear {
+                autoLoginTask?.cancel()
             }
         }
     }
