@@ -325,7 +325,7 @@ final class VPNService: ObservableObject {
         }
 
         let dnsIPv6 = Self.validIPv6(json["dns_ipv6"] as? String)
-        logger.debug("DNS IPv4: \(dnsIPv4)  IPv6: \(dnsIPv6 ?? "none")")
+        logger.debug("DNS response parsed ipv6_available=\(dnsIPv6 != nil)")
         return .success((dnsIPv4, dnsIPv6))
     }
 

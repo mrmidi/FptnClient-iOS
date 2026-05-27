@@ -427,7 +427,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 self.assignedIPv4 = ipv4
                 self.assignedIPv6 = ipv6
                 self.stateLock.unlock()
-                logger.info("IP assignment received from bridge: IPv4=\(ipv4), IPv6=\(ipv6)")
+                logger.info("IP assignment received from bridge")
             }
         )
 
@@ -493,6 +493,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         recordProviderEvent(category: "websocket", message: "transport_connected generation=\(generation)", generation: generation)
 
         if shouldApplySettings {
+            let pendingAppliedIPv4 = clientIPv4
+            let pendingAppliedIPv6 = clientIPv6
             logger.info("Tunnel websocket connected — applying network settings (IP changed/initial)")
             applyNetworkSettings(configuration: configuration) { [weak self] error in
                 guard let self else { return }
@@ -508,8 +510,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     }
 
                     self.stateLock.lock()
-                    self.appliedIPv4 = clientIPv4
-                    self.appliedIPv6 = clientIPv6
+                    self.appliedIPv4 = pendingAppliedIPv4
+                    self.appliedIPv6 = pendingAppliedIPv6
                     self.didApplyNetworkSettings = true
                     let shouldStartReadLoop = !self.didStartReadLoop
                     self.didStartReadLoop = true
@@ -812,13 +814,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
         settings.mtu = 1500
 
-        let ipv4IncludedRoutes = ipv4.includedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
-        let ipv4ExcludedRoutes = ipv4.excludedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
-        let ipv6IncludedRoutes = settings.ipv6Settings?.includedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
-        let ipv6ExcludedRoutes = settings.ipv6Settings?.excludedRoutes?.map(\.destinationAddress).joined(separator: ",") ?? "-"
-        let matchDomains = dns.matchDomains?.joined(separator: ",") ?? "-"
         logger.info(
-            "Applying tunnel settings ipv4=\(clientIPv4)/255.255.255.0 ipv4_included_routes=\(ipv4IncludedRoutes) ipv4_excluded_routes=\(ipv4ExcludedRoutes) ipv6=\(ipv6Enabled ? "\(clientIPv6)/64" : "none") ipv6_included_routes=\(ipv6IncludedRoutes) ipv6_excluded_routes=\(ipv6ExcludedRoutes) dns=\(dnsServers.joined(separator: ",")) match_domains=\(matchDomains) mtu=1500"
+            "Applying tunnel settings ipv4_enabled=true ipv6_enabled=\(ipv6Enabled) dns_server_count=\(dnsServers.count) mtu=1500"
         )
         recordProviderEvent(category: "settings", message: "apply_start ipv6=\(ipv6Enabled)")
 
@@ -858,23 +855,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard shouldHandlePackets() else { return }
 
         let protocolNumber = ipProtocolNumber(for: packet)
-        let nextInboundPacketCount = currentTransportReceivedPacketCount() + 1
-        if nextInboundPacketCount == 1 || nextInboundPacketCount % 500 == 0 {
-            recordProviderEvent(
-                category: "packetflow",
-                message: "write_enter generation=\(generation) packet=\(nextInboundPacketCount) bytes=\(packet.count)",
-                generation: generation
-            )
-        }
         packetFlow.writePackets([packet], withProtocols: [protocolNumber])
-        let packetCount = recordPacketFlowWrite(byteCount: Int64(packet.count))
-        if packetCount == 1 || packetCount % 500 == 0 {
-            recordProviderEvent(
-                category: "packetflow",
-                message: "write_after generation=\(generation) packet=\(packetCount) bytes=\(packet.count)",
-                generation: generation
-            )
-        }
+        recordPacketFlowWrite(byteCount: Int64(packet.count))
     }
 
     private func shouldContinueReadLoop() -> Bool {
@@ -899,12 +881,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.lock()
         defer { stateLock.unlock() }
         return websocketGeneration
-    }
-
-    private func currentTransportReceivedPacketCount() -> Int64 {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        return counters.transportReceivedPackets
     }
 
     private func replaceWebSocketClient(
@@ -1185,20 +1161,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             residentBytes: snapshot.memoryResidentBytes,
             physFootprintBytes: snapshot.memoryPhysFootprintBytes
         )
-        logger.info(
-            "Tunnel telemetry state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) \(memory.description) packetflow_read_packets=\(snapshot.packetFlowReadPackets) packetflow_read_bytes=\(snapshot.packetFlowReadBytes) packetflow_write_packets=\(snapshot.packetFlowWritePackets) packetflow_write_bytes=\(snapshot.packetFlowWriteBytes) transport_received_packets=\(snapshot.transportReceivedPackets) transport_received_bytes=\(snapshot.transportReceivedBytes) native_received_packets=\(snapshot.nativeReceivedPackets) native_received_bytes=\(snapshot.nativeReceivedBytes) native_callback_enter=\(snapshot.nativeCallbackEnterCount) native_callback_exit=\(snapshot.nativeCallbackExitCount) native_in_callback=\(snapshot.nativeInPacketCallback) send_failures=\(snapshot.websocketSendFailures) last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-") \(activityDiagnosticsDescription(for: snapshot))"
-        )
         updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "telemetry")
         evaluateMemoryPressure(snapshot: snapshot, memory: memory)
-
-        let clientAttached = currentWebSocketClient() != nil
-        let readLoopActive = shouldContinueReadLoop()
-        if snapshot.runtimeState == .connected && !clientAttached {
-            logger.warning("Tunnel telemetry detected connected state without an attached websocket client")
-        }
-        if snapshot.runtimeState == .connected && !readLoopActive {
-            logger.warning("Tunnel telemetry detected connected state with an inactive packet read loop")
-        }
     }
 
     // MARK: - State helpers
@@ -1422,7 +1386,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         lastTransportError = "provider_memory_pressure"
         stateLock.unlock()
 
-        logger.error("Tunnel memory pressure emergency, reconnecting websocket \(memory.description)")
+        logger.warning("Tunnel memory pressure emergency, reconnecting websocket \(memory.description)")
         recordProviderEvent(
             category: "memory",
             message: "memory_pressure_emergency reconnect \(memory.description)",

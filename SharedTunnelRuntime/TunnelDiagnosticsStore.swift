@@ -42,7 +42,7 @@ enum TunnelMemoryPressureLevel: String, Codable, Sendable {
 }
 
 struct TunnelMemoryPressureSnapshot: Equatable, Sendable {
-    static let warningThresholdBytes: UInt64 = 35 * 1024 * 1024
+    static let warningThresholdBytes: UInt64 = 30 * 1024 * 1024
     static let emergencyThresholdBytes: UInt64 = 42 * 1024 * 1024
 
     let residentBytes: UInt64?
@@ -174,7 +174,7 @@ final class TunnelDiagnosticsStore: @unchecked Sendable {
             timestamp: Self.now(),
             source: "provider",
             category: category,
-            message: message,
+            message: TunnelDiagnosticsRedactor.redact(message),
             runtimeState: runtimeState,
             generation: generation,
             reconnectAttempt: reconnectAttempt,
@@ -332,6 +332,8 @@ enum TunnelDiagnosticsRedactor {
     static func redact(_ input: String) -> String {
         var text = input
         let patterns: [(String, String)] = [
+            (#"(?<![A-Za-z0-9])(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\.){3}(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?![A-Za-z0-9])"#, "<redacted-ipv4>"),
+            (#"(?i)(?<![A-Za-z0-9])(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{0,4}(?:%[A-Za-z0-9_.-]+)?(?![A-Za-z0-9])"#, "<redacted-ipv6>"),
             (#"(?i)(access[_-]?token\"?\s*[:=]\s*\"?)([^\",\s]+)"#, "$1<redacted>"),
             (#"(?i)(password\"?\s*[:=]\s*\"?)([^\",\s]+)"#, "$1<redacted>"),
             (#"(?i)(authorization\"?\s*[:=]?\s*\"?bearer\s+)([^\",\s]+)"#, "$1<redacted>"),

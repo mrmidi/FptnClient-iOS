@@ -80,7 +80,9 @@ struct AppLogHandler: Logging.LogHandler {
         function: String,
         line: UInt
     ) {
-        let text = format(level: level, message: message, file: file, line: line)
+        let text = SensitiveLogRedactor.redact(
+            format(level: level, message: message, file: file, line: line)
+        )
 
         // 1. os_log — appears in Xcode console when attached to this process
         let osType = level.osLogType
@@ -99,6 +101,23 @@ struct AppLogHandler: Logging.LogHandler {
         let fileName = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
         let prefix = level.emoji
         return "\(prefix) [\(label)] \(fileName):\(line) \(message)"
+    }
+}
+
+private enum SensitiveLogRedactor {
+    private static let replacements: [(String, String)] = [
+        (#"(?<![A-Za-z0-9])(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\.){3}(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?![A-Za-z0-9])"#, "<redacted-ipv4>"),
+        (#"(?i)(?<![A-Za-z0-9])(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{0,4}(?:%[A-Za-z0-9_.-]+)?(?![A-Za-z0-9])"#, "<redacted-ipv6>")
+    ]
+
+    static func redact(_ input: String) -> String {
+        var text = input
+        for (pattern, template) in replacements {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(location: 0, length: (text as NSString).length)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
+        }
+        return text
     }
 }
 

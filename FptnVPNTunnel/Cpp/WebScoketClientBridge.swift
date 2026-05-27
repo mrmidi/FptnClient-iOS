@@ -37,8 +37,6 @@ final class WebsocketClientBridge {
     private let disconnectedCallback: DisconnectionCallback
     private let ipAssignedCallback: IPAssignedCallback
     private let diagnosticsID = UUID().uuidString
-    private var receivedPacketCount: Int64 = 0
-    private var receivedByteCount: Int64 = 0
 
     // MARK: - Init / deinit
 
@@ -75,7 +73,6 @@ final class WebsocketClientBridge {
                 guard let ctx, let rawPtr else { return }
                 let bridge = Unmanaged<WebsocketClientBridge>
                     .fromOpaque(ctx).takeUnretainedValue()
-                bridge.recordPacketCallback(byteCount: Int(length))
                 bridge.packetCallback(Data(bytes: rawPtr, count: Int(length)))
             },
             // ConnectionCallback
@@ -107,10 +104,10 @@ final class WebsocketClientBridge {
             bridge.ipAssignedCallback(ipv4, ipv6)
         }
 
-        logger.trace("WebsocketClientBridge created — \(serverIP):\(serverPort)")
+        logger.trace("WebsocketClientBridge created")
         TunnelDiagnosticsStore.shared.recordProviderEvent(
             category: "bridge",
-            message: "create id=\(diagnosticsID) server=\(serverIP):\(serverPort) strategy=\(censorshipStrategy)"
+            message: "create id=\(diagnosticsID) strategy=\(censorshipStrategy)"
         )
     }
 
@@ -181,17 +178,6 @@ private extension WebsocketClientBridge {
         TunnelDiagnosticsStore.shared.recordProviderEvent(
             category: "bridge_callback",
             message: "disconnected id=\(diagnosticsID) was_connected=\(wasConnected) reason=\(reason)"
-        )
-    }
-
-    func recordPacketCallback(byteCount: Int) {
-        receivedPacketCount += 1
-        receivedByteCount += Int64(byteCount)
-        guard receivedPacketCount == 1 || receivedPacketCount % 500 == 0 else { return }
-        let status = self.status
-        TunnelDiagnosticsStore.shared.recordProviderEvent(
-            category: "bridge_callback",
-            message: "packet id=\(diagnosticsID) count=\(receivedPacketCount) bytes=\(receivedByteCount) native_received_packets=\(status.receivedPacketCount) native_received_bytes=\(status.receivedByteCount) native_callback_enter=\(status.callbackEnterCount) native_callback_exit=\(status.callbackExitCount) native_in_callback=\(status.inPacketCallback) native_rss=\(TunnelMemoryPressureSnapshot.megabytesDescription(status.memoryResidentBytes == 0 ? nil : status.memoryResidentBytes)) native_footprint=\(TunnelMemoryPressureSnapshot.megabytesDescription(status.memoryPhysFootprintBytes == 0 ? nil : status.memoryPhysFootprintBytes))"
         )
     }
 }
