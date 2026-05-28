@@ -142,7 +142,7 @@ struct TunnelLogHandler: Logging.LogHandler {
         os_log("%{public}@", log: osLog, type: osType, text)
 
         // 2. Shared App Group file — readable by the main app's DebugLogView
-        SharedLogSink.shared.write(text)
+        SharedLogSink.tunnel.write(text)
     }
 
     private func format(

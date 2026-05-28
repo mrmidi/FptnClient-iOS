@@ -40,6 +40,9 @@ packages:
   swift-log:
     url: https://github.com/apple/swift-log.git
     from: "1.6.0"
+  swift-collections:
+    url: https://github.com/apple/swift-collections.git
+    from: "1.1.0"
 
 # ── Target templates ───────────────────────────────────────────────────────────
 
@@ -132,6 +135,8 @@ targets:
         product: FptnSharedCore
       - package: swift-log
         product: Logging
+      - package: swift-collections
+        product: Collections
       - framework: FptnVPN/Cpp/fptn_native_lib.framework
         embed: true
         codeSign: false

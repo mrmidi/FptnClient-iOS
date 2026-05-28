@@ -5,6 +5,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import Collections
 
 @MainActor
 final class LogsViewModel: ObservableObject {
@@ -35,13 +36,17 @@ final class LogsViewModel: ObservableObject {
     @Published var selectedLevel: LogLevel
     @Published var selectedSource: SourceFilter = .all
     @Published var showRecentOnly = true
-    @Published private(set) var entries: [LogEntry] = []
+    @Published private(set) var entries = Deque<LogEntry>()
     @Published var isFollowing = true
 
     private let settingsService: SettingsService
     private let recentWindow: TimeInterval = 24 * 60 * 60
     private let refreshIntervalNs: UInt64 = 1_000_000_000
     private var refreshTask: Task<Void, Never>?
+
+    private var lastAppOffset: UInt64 = 0
+    private var lastTunnelOffset: UInt64 = 0
+    private var nextEntryId = 0
 
     init(settingsService: SettingsService = .shared) {
         self.settingsService = settingsService
@@ -78,9 +83,13 @@ final class LogsViewModel: ObservableObject {
     }
 
     func clear() {
-        SharedLogSink.shared.clear()
+        SharedLogSink.app.clear()
+        SharedLogSink.tunnel.clear()
         TunnelDiagnosticsStore.shared.clear()
-        entries = []
+        entries.removeAll()
+        lastAppOffset = 0
+        lastTunnelOffset = 0
+        nextEntryId = 0
     }
 
     func saveLogLevel(_ level: LogLevel) {
@@ -98,26 +107,75 @@ final class LogsViewModel: ObservableObject {
     }
 
     private func refresh() {
-        let text = SharedLogSink.shared.readAll()
-        let lines = text
-            .components(separatedBy: .newlines)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var newEntries: [LogEntry] = []
 
-        entries = lines.enumerated().map { index, line in
-            let source: SourceFilter
-            if line.contains("[org.fptn.tunnel]") {
-                source = .tunnel
-            } else {
-                source = .app
+        // 1. Read new App logs
+        if let (appData, nextAppOffset) = SharedLogSink.app.readNewBytes(from: lastAppOffset) {
+            if nextAppOffset < lastAppOffset {
+                entries.removeAll()
+                nextEntryId = 0
+                lastTunnelOffset = 0
+            }
+            lastAppOffset = nextAppOffset
+            if !appData.isEmpty, let text = String(data: appData, encoding: .utf8) {
+                let lines = text.components(separatedBy: .newlines)
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                for line in lines {
+                    newEntries.append(LogEntry(
+                        id: nextEntryId,
+                        raw: line,
+                        level: levelFor(line: line),
+                        source: .app,
+                        timestamp: parseTimestamp(line)
+                    ))
+                    nextEntryId += 1
+                }
+            }
+        }
+
+        // 2. Read new Tunnel logs
+        if let (tunnelData, nextTunnelOffset) = SharedLogSink.tunnel.readNewBytes(from: lastTunnelOffset) {
+            if nextTunnelOffset < lastTunnelOffset {
+                entries.removeAll()
+                nextEntryId = 0
+                lastAppOffset = 0
+            }
+            lastTunnelOffset = nextTunnelOffset
+            if !tunnelData.isEmpty, let text = String(data: tunnelData, encoding: .utf8) {
+                let lines = text.components(separatedBy: .newlines)
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                for line in lines {
+                    newEntries.append(LogEntry(
+                        id: nextEntryId,
+                        raw: line,
+                        level: levelFor(line: line),
+                        source: .tunnel,
+                        timestamp: parseTimestamp(line)
+                    ))
+                    nextEntryId += 1
+                }
+            }
+        }
+
+        // 3. Merge, sort and trim
+        if !newEntries.isEmpty {
+            entries.append(contentsOf: newEntries)
+            
+            // Sort chronologically by timestamp
+            entries.sort { (a, b) -> Bool in
+                guard let ta = a.timestamp, let tb = b.timestamp else {
+                    return a.id < b.id
+                }
+                if ta == tb {
+                    return a.id < b.id
+                }
+                return ta < tb
             }
 
-            return LogEntry(
-                id: index,
-                raw: line,
-                level: levelFor(line: line),
-                source: source,
-                timestamp: parseTimestamp(line)
-            )
+            // Trim to max 500 lines for this phase
+            if entries.count > 500 {
+                entries.removeFirst(entries.count - 500)
+            }
         }
     }
 

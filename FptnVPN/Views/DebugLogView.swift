@@ -12,32 +12,28 @@ import SwiftUI
 /// Access: long-press the status text on HomeView.
 @MainActor
 struct DebugLogView: View {
-    @State private var logContent: String = ""
+    @StateObject private var viewModel = LogsViewModel()
     @State private var isAutoScrolling = true
     @Environment(\.dismiss) private var dismiss
-
-    private let refreshInterval: TimeInterval = 1.0
 
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        let lines = logContent.components(separatedBy: "\n").filter { !$0.isEmpty }
-                        ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                            Text(line)
+                        ForEach(viewModel.filteredEntries) { entry in
+                            Text(entry.raw)
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(lineColor(for: line))
+                                .foregroundColor(lineColor(for: entry.raw))
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(index)
+                                .id(entry.id)
                         }
                     }
                     .padding(8)
                 }
-                .onChange(of: logContent) { _, _ in
-                    if isAutoScrolling {
-                        let lines = logContent.components(separatedBy: "\n").filter { !$0.isEmpty }
-                        proxy.scrollTo(lines.count - 1, anchor: .bottom)
+                .onChange(of: viewModel.filteredEntries.count) { _, _ in
+                    if isAutoScrolling, let last = viewModel.filteredEntries.last {
+                        proxy.scrollTo(last.id, anchor: .bottom)
                     }
                 }
             }
@@ -46,8 +42,7 @@ struct DebugLogView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Clear") {
-                        SharedLogSink.shared.clear()
-                        logContent = ""
+                        viewModel.clear()
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -59,20 +54,18 @@ struct DebugLogView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .task {
-                await startRefreshing()
+            .onAppear {
+                viewModel.selectedSource = .all
+                viewModel.selectedLevel = .debug // Debug view defaults to showing debug logs
+                viewModel.start()
+            }
+            .onDisappear {
+                viewModel.stop()
             }
         }
     }
 
     // MARK: - Private
-
-    private func startRefreshing() async {
-        while !Task.isCancelled {
-            logContent = SharedLogSink.shared.readAll()
-            try? await Task.sleep(for: .seconds(refreshInterval))
-        }
-    }
 
     private func lineColor(for line: String) -> Color {
         if line.contains("💥") || line.contains("❌") { return .red }

@@ -89,7 +89,7 @@ struct AppLogHandler: Logging.LogHandler {
         os_log("%{public}@", log: osLog, type: osType, text)
 
         // 2. Shared file sink
-        SharedLogSink.shared.write(text)
+        SharedLogSink.app.write(text)
     }
 
     private func format(
