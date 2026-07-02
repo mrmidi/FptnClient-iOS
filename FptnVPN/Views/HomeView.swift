@@ -181,7 +181,7 @@ struct HomeView: View {
                     }
                 }
                 .sheet(isPresented: $showingTools) {
-                    ToolsView(initialConnectionMode: viewModel.connectionMode)
+                    ToolsView(initialConnectionMode: viewModel.connectionMode, vpnService: viewModel.vpnService)
                 }
                 Spacer()
                 Button {

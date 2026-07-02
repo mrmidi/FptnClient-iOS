@@ -322,8 +322,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         guard runtimeState != .starting else {
-            runtimeState = .failed
-            finishStart(with: makeError(reason))
+            // If the path is not yet satisfied at startup, wait for network instead of
+            // hard-failing. scheduleReconnect() transitions to .waitingForNetwork and the
+            // path monitor will retry once connectivity is restored.
+            if !isNetworkPathSatisfied {
+                scheduleReconnect()
+            } else {
+                runtimeState = .failed
+                finishStart(with: makeError(reason))
+            }
             return
         }
 
@@ -423,9 +430,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             settings.ipv6Settings = ipv6
         }
 
-        settings.mtu = 1500
+        settings.mtu = 1400
 
-        log.info("Applying tunnel settings ipv4=\(clientIPv4, privacy: .public)/255.255.255.0 ipv6=\(clientIPv6, privacy: .public) dns=\(servers.joined(separator: ","), privacy: .public)")
+        log.info("Applying tunnel settings ipv4=\(clientIPv4, privacy: .public)/255.255.255.0 ipv6=\(clientIPv6, privacy: .public) dns=\(servers.joined(separator: ","), privacy: .public) mtu=1400")
 
         setTunnelNetworkSettings(settings, completionHandler: completion)
     }

@@ -21,8 +21,27 @@ final class MetricKitManager: NSObject, MXMetricManagerSubscriber, @unchecked Se
 
     func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
-            logger.info("MetricKit metric payload received: \(payload.dictionaryRepresentation())")
+            let dict = payload.dictionaryRepresentation()
+            let cpu = Self.nestedString(dict, "cpuMetrics", "cumulativeCPUTime")
+            let mem = Self.nestedString(dict, "memoryMetrics", "peakMemoryUsage")
+            let hang = Self.nestedString(dict, "applicationResponsivenessMetrics",
+                                         "histogrammedAppHangTime")
+            let begin = dict["timeStampBegin"].map { String(describing: $0) } ?? "-"
+            let end   = dict["timeStampEnd"].map   { String(describing: $0) } ?? "-"
+            logger.info(
+                "MetricKit period=[\(begin) – \(end)] cpu=\(cpu ?? "-") peakMem=\(mem ?? "-") hang=\(hang != nil ? "YES — check debug log" : "none")"
+            )
+            logger.debug("MetricKit full payload: \(dict)")
         }
+    }
+
+    private static func nestedString(_ dict: [AnyHashable: Any], _ keys: String...) -> String? {
+        var current: Any = dict
+        for key in keys {
+            guard let d = current as? [AnyHashable: Any], let next = d[key] else { return nil }
+            current = next
+        }
+        return current is NSNull ? nil : String(describing: current)
     }
 
     func didReceive(_ payloads: [MXDiagnosticPayload]) {

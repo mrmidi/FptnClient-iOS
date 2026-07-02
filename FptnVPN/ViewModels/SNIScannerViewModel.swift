@@ -29,6 +29,14 @@ final class SNIScannerViewModel: ObservableObject {
     @Published private(set) var progress: ScanProgress?
     @Published private(set) var isScanning = false
     @Published private(set) var bestResult: ProbeResult?
+    @Published var showVPNDisconnectConfirm = false
+
+    // MARK: - VPN state
+
+    var vpnIsActive: Bool {
+        vpnService?.connection.isConnected == true ||
+        vpnService?.connection.isConnecting == true
+    }
 
     // MARK: - Filter
 
@@ -52,10 +60,12 @@ final class SNIScannerViewModel: ObservableObject {
     private var scanTask: Task<Void, Never>?
     private var resultBuffer: [ProbeResult] = []
     private var currentBest: ProbeResult?
+    private weak var vpnService: VPNService?
 
     // MARK: - Init
 
-    init(initialConnectionMode: VPNConnection.ConnectionMode = .auto) {
+    init(initialConnectionMode: VPNConnection.ConnectionMode = .auto, vpnService: VPNService? = nil) {
+        self.vpnService = vpnService
         Task {
             let all = await TokenService.shared.getServers()
             servers = all
@@ -71,25 +81,27 @@ final class SNIScannerViewModel: ObservableObject {
     // MARK: - Actions
 
     func startScan() {
-        guard let server = selectedServer, !isScanning else { return }
+        guard selectedServer != nil, !isScanning else { return }
+        if vpnIsActive {
+            showVPNDisconnectConfirm = true
+            return
+        }
+        performScan()
+    }
+
+    /// Called when user confirms "disconnect VPN and scan".
+    func disconnectAndStartScan() {
+        guard selectedServer != nil else { return }
+        vpnService?.disconnect()
         results = []; resultBuffer = []; progress = nil
         bestResult = nil; currentBest = nil; isScanning = true
 
-        let cfg = ProbeConfig(
-            server: server,
-            bypassMethod: bypassMethod,
-            timeoutMs: timeoutMs,
-            concurrency: concurrency
-        )
-        let snis = ScannerEngine.sanitize(sniInput)
-
         scanTask = Task { [weak self] in
             guard let self else { return }
-            let stream = await engine.runScan(snis: snis, cfg: cfg)
-            for await event in stream {
-                if Task.isCancelled { break }
-                await MainActor.run { self.handle(event: event) }
-            }
+            // Give the tunnel ~1 s to tear down its TUN interface before sending
+            // direct probes — otherwise early connections still route through the tunnel.
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run { self.performScan() }
         }
     }
 
@@ -114,6 +126,29 @@ final class SNIScannerViewModel: ObservableObject {
     }
 
     // MARK: - Private
+
+    private func performScan() {
+        guard let server = selectedServer, !isScanning else { return }
+        results = []; resultBuffer = []; progress = nil
+        bestResult = nil; currentBest = nil; isScanning = true
+
+        let cfg = ProbeConfig(
+            server: server,
+            bypassMethod: bypassMethod,
+            timeoutMs: timeoutMs,
+            concurrency: concurrency
+        )
+        let snis = ScannerEngine.sanitize(sniInput)
+
+        scanTask = Task { [weak self] in
+            guard let self else { return }
+            let stream = await engine.runScan(snis: snis, cfg: cfg)
+            for await event in stream {
+                if Task.isCancelled { break }
+                await MainActor.run { self.handle(event: event) }
+            }
+        }
+    }
 
     private func handle(event: ScanEvent) {
         switch event {

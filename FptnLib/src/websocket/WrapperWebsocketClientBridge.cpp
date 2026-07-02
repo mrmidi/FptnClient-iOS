@@ -197,7 +197,7 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(
     }
     if (strategy == "yandex26" || strategy == "sni_reality_yandex26" ||
         strategy == "sni-reality-yandex26") {
-        return CensorshipStrategy::kSniRealityModeYandex26;
+        return CensorshipStrategy::kSniRealityModeYandex26_4;
     }
     if (strategy == "yandex25" || strategy == "sni_reality_yandex25" ||
         strategy == "sni-reality-yandex25") {
@@ -209,7 +209,7 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(
     }
     if (strategy == "safari26" || strategy == "sni_reality_safari26" ||
         strategy == "sni-reality-safari26") {
-        return CensorshipStrategy::kSniRealityModeSafari26;
+        return CensorshipStrategy::kSniRealityModeSafari26_5;
     }
     return CensorshipStrategy::kSni;
 }
@@ -218,9 +218,9 @@ void packet_callback_adapter(fptn::common::network::IPPacketPtr packet,
                              void* user_data) {
     auto wrapper = static_cast<WebsocketClientWrapper*>(user_data);
     if (wrapper && wrapper->packet_callback && packet) {
-        const auto* raw_packet = packet->GetRawPacket();
-        const auto* data = static_cast<const uint8_t*>(raw_packet->getRawData());
-        const auto len = raw_packet->getRawDataLen();
+        const auto& data_vec = packet->Data();
+        const auto* data = data_vec.data();
+        const auto len = data_vec.size();
         const auto packet_count = wrapper->received_packet_count.fetch_add(1) + 1;
         const auto total_bytes = wrapper->received_byte_count.fetch_add(len) + len;
         wrapper->callback_enter_count.fetch_add(1);

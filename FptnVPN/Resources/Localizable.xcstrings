@@ -1505,23 +1505,6 @@
         }
       }
     },
-    "Route Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Route Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "«Маршрутизация push-уведомлений» направляет трафик Apple Push (APNs) через туннель, чтобы уведомления продолжали приходить в сетях, где они блокируются напрямую. При этом весь сетевой трафик идёт через VPN, пока он подключён."
-          }
-        }
-      }
-    },
     "Retry delay" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1552,6 +1535,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Маршрутизация push-уведомлений"
+          }
+        }
+      }
+    },
+    "Route Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Маршрутизация push-уведомлений» направляет трафик Apple Push (APNs) через туннель, чтобы уведомления продолжали приходить в сетях, где они блокируются напрямую. При этом весь сетевой трафик идёт через VPN, пока он подключён."
           }
         }
       }
@@ -1800,6 +1800,9 @@
         }
       }
     },
+    "The VPN will be disconnected before scanning so probes reach the server directly." : {
+
+    },
     "This removes the stored password from iCloud Keychain on all devices. The app will re-sync it on next launch." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2037,6 +2040,9 @@
           }
         }
       }
+    },
+    "VPN is active. Tapping Start will disconnect VPN first so probes reach the server directly." : {
+
     },
     "Waiting for tunnel transport to recover." : {
       "extractionState" : "manual",

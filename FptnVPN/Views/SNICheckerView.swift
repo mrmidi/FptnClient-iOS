@@ -184,15 +184,29 @@ struct SNICheckerView: View {
     @State private var selectedResult: ProbeResult?
     @State private var isAdvancedExpanded = false
 
-    init(initialConnectionMode: VPNConnection.ConnectionMode = .auto) {
+    init(initialConnectionMode: VPNConnection.ConnectionMode = .auto, vpnService: VPNService? = nil) {
         _viewModel = StateObject(
-            wrappedValue: SNIScannerViewModel(initialConnectionMode: initialConnectionMode)
+            wrappedValue: SNIScannerViewModel(initialConnectionMode: initialConnectionMode, vpnService: vpnService)
         )
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+
+                // MARK: VPN-active warning
+                if viewModel.vpnIsActive {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color.appError)
+                        Text("VPN is active. Tapping Start will disconnect VPN first so probes reach the server directly.")
+                            .font(.caption)
+                            .foregroundStyle(Color.appPrimaryText)
+                    }
+                    .padding(12)
+                    .background(Color.appError.opacity(0.12))
+                    .cornerRadius(10)
+                }
 
                 // MARK: Server + Method pickers
                 VStack(alignment: .leading, spacing: 10) {
@@ -420,6 +434,14 @@ struct SNICheckerView: View {
             ProbeDetailSheet(result: result) {
                 viewModel.applySNI(result.sni)
             }
+        }
+        .alert("VPN is Active", isPresented: $viewModel.showVPNDisconnectConfirm) {
+            Button("Disconnect & Scan", role: .destructive) {
+                viewModel.disconnectAndStartScan()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The VPN will be disconnected before scanning so probes reach the server directly.")
         }
     }
 

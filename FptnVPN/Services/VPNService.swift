@@ -557,6 +557,15 @@ final class VPNService: ObservableObject {
         logger.info(
             "Tunnel snapshot state=\(snapshot.runtimeState.rawValue) reasserting=\(snapshot.isReasserting) reconnect_attempt=\(snapshot.reconnectAttempt)/\(snapshot.maxReconnectAttempts == 0 ? "∞" : String(snapshot.maxReconnectAttempts)) ipv6=\(snapshot.ipv6Enabled) ws_started=\(snapshot.websocketStarted) ws_idle=\(snapshot.websocketIdleTimeoutSeconds)s last_error=\(snapshot.lastTransportError ?? snapshot.websocketLastError ?? "-") last_stop=\(snapshot.lastStopReason ?? "-") last_inbound=\(snapshot.lastInboundActivityAt ?? "-") last_outbound=\(snapshot.lastOutboundActivityAt ?? "-")"
         )
+
+        // NE fires .connected when setTunnelNetworkSettings is applied, one frame before
+        // finishStart(nil) — so the first snapshot often comes back with ws_started=false.
+        // Retry once after a short delay so the UI reflects the real connected state.
+        if !snapshot.websocketStarted,
+           manager.connection.status == .connected {
+            try? await Task.sleep(for: .seconds(2))
+            await refreshTunnelRuntimeSnapshot()
+        }
     }
 
     private func clearConnectionState(resetErrors: Bool) {

@@ -8,15 +8,17 @@ import SwiftUI
 
 struct ToolsView: View {
     let initialConnectionMode: VPNConnection.ConnectionMode
+    let vpnService: VPNService?
     @Environment(\.dismiss) private var dismiss
 
-    init(initialConnectionMode: VPNConnection.ConnectionMode = .auto) {
+    init(initialConnectionMode: VPNConnection.ConnectionMode = .auto, vpnService: VPNService? = nil) {
         self.initialConnectionMode = initialConnectionMode
+        self.vpnService = vpnService
     }
 
     var body: some View {
         NavigationStack {
-            SNICheckerView(initialConnectionMode: initialConnectionMode)
+            SNICheckerView(initialConnectionMode: initialConnectionMode, vpnService: vpnService)
                 .navigationTitle("SNI Checker")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

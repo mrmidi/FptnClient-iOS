@@ -73,6 +73,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 let shouldApply = !alreadyApplied || ipChanged
                 if shouldApply {
                     self.applyNetworkSettings(
+                        serverIP: payload.server,
                         tunIPv4: tunIPv4,
                         tunIPv4Gateway: tunIPv4Gateway,
                         dnsIPv4: payload.dnsIPv4,

@@ -624,6 +624,33 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         if currentState == .starting || configuration == nil {
+            let pathSatisfied: Bool
+            stateLock.lock()
+            pathSatisfied = isNetworkPathSatisfied
+            stateLock.unlock()
+
+            // When the path is not yet satisfied at startup, wait for network instead
+            // of hard-failing. The path monitor will kick off a reconnect when
+            // connectivity is restored, at which point finishStart(nil) will fire normally.
+            if !pathSatisfied && configuration != nil {
+                recordProviderEvent(
+                    category: "reconnect",
+                    message: "initial_transport_no_path reason=\(reason)",
+                    runtimeState: currentState.rawValue,
+                    generation: generation
+                )
+                switch scheduleReconnectIfPossible() {
+                case .scheduled:
+                    updateRuntimeState(.reasserting, reason: "initial transport, path not yet ready")
+                case .waitingForNetwork:
+                    updateRuntimeState(.waitingForNetwork, reason: "initial transport failure, waiting for path")
+                case .unavailable:
+                    updateRuntimeState(.failed, reason: "initial transport failure")
+                    finishStart(with: makeError(reason))
+                }
+                return
+            }
+
             recordProviderEvent(category: "reconnect", message: "initial_transport_failure reason=\(reason)", runtimeState: currentState.rawValue, generation: generation)
             updateRuntimeState(.failed, reason: "initial transport failure")
             finishStart(with: makeError(reason))
@@ -807,11 +834,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     ) {
         stateLock.lock()
         let clientIPv4 = assignedIPv4 ?? configuration.tunIPv4
-        let gatewayIPv4 = assignedIPv4 != nil ? configuration.dnsIPv4 : configuration.tunIPv4Gateway
+        let remoteAddress = configuration.serverIP
         let clientIPv6 = assignedIPv6 ?? configuration.tunIPv6
         stateLock.unlock()
 
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: gatewayIPv4)
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: remoteAddress)
 
         let ipv4 = NEIPv4Settings(
             addresses: [clientIPv4],
@@ -834,10 +861,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             ipv6.includedRoutes = [NEIPv6Route.default()]
             settings.ipv6Settings = ipv6
         }
-        settings.mtu = 1500
+        settings.mtu = 1400
 
         logger.info(
-            "Applying tunnel settings ipv4_enabled=true ipv6_enabled=\(ipv6Enabled) dns_server_count=\(dnsServers.count) mtu=1500"
+            "Applying tunnel settings ipv4_enabled=true ipv6_enabled=\(ipv6Enabled) dns_server_count=\(dnsServers.count) mtu=1400"
         )
         recordProviderEvent(category: "settings", message: "apply_start ipv6=\(ipv6Enabled)")
 

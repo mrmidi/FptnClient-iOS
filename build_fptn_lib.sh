@@ -21,16 +21,10 @@ resolve_default_target() {
     fi
 
     case "${PLATFORM_NAME:-}" in
-        iphonesimulator)
-            echo "ios-simulator"
-            ;;
-        iphoneos)
+        iphonesimulator|iphoneos)
             echo "ios-device"
             ;;
-        appletvsimulator)
-            echo "tvos-simulator"
-            ;;
-        appletvos)
+        appletvsimulator|appletvos)
             echo "tvos-device"
             ;;
         macosx)
@@ -137,9 +131,7 @@ run_aggregate_build() {
     local aggregate_name="$1"
     local target_name
     local targets=(
-        "ios-simulator"
         "ios-device"
-        "tvos-simulator"
         "tvos-device"
         "macos"
     )

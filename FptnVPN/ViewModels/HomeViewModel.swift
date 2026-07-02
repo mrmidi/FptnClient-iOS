@@ -26,7 +26,7 @@ final class HomeViewModel: ObservableObject {
 
     // MARK: - Dependencies (injected)
 
-    private let vpnService: VPNService
+    let vpnService: VPNService
 
     init(vpnService: VPNService) {
         self.vpnService = vpnService
