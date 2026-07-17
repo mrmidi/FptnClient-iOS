@@ -4,6 +4,8 @@ project(fptn_native_lib VERSION 1.0.0 LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Ensure C++20 even if Conan's toolchain tries to override
+add_compile_options(-std=c++20)
 
 # Platform-specific deployment target defaults
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
