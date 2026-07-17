@@ -224,7 +224,7 @@ if [ "$TARGET" = "macos" ]; then
     # ── arm64 slice ──────────────────────────────────────────────────────────
     ARM64_DIR="build-macos"
     echo "Building arm64 slice..."
-    conan install . --profile:host="conan-macos-profile" --profile:build=default --build=missing --output-folder="$ARM64_DIR"
+    conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR"
     cd "$ARM64_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE=Debug \
@@ -236,7 +236,7 @@ if [ "$TARGET" = "macos" ]; then
     # ── x86_64 slice ─────────────────────────────────────────────────────────
     X86_DIR="build-macos-x86_64"
     echo "Building x86_64 slice..."
-    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=default --build=missing --output-folder="$X86_DIR"
+    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR"
     cd "$X86_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE=Debug \
@@ -293,7 +293,7 @@ if [ "$TARGET" = "macos" ]; then
     exit 0
 fi
 
-conan install . --profile:host="$HOST_PROFILE" --profile:build=default --build=missing --output-folder="$OUTPUT_DIR"
+conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR"
 
 cd "$OUTPUT_DIR"
 cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
