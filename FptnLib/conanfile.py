@@ -31,6 +31,7 @@ class FptnLib(ConanFile):
     def requirements(self):
         self._register_local_recipe("fptn", "fptn", "0.0.0")
         self._register_boring_ssl("boringssl", "openssl", "boringssl", True, False)
+        self.requires("zlib/1.3.2", force=True)
 
     def layout(self):
         cmake_layout(self)
