@@ -197,7 +197,7 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(
     }
     if (strategy == "yandex26" || strategy == "sni_reality_yandex26" ||
         strategy == "sni-reality-yandex26") {
-        return CensorshipStrategy::kSniRealityModeYandex26;
+        return CensorshipStrategy::kSniRealityModeYandex26_4;
     }
     if (strategy == "yandex25" || strategy == "sni_reality_yandex25" ||
         strategy == "sni-reality-yandex25") {
@@ -209,7 +209,7 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(
     }
     if (strategy == "safari26" || strategy == "sni_reality_safari26" ||
         strategy == "sni-reality-safari26") {
-        return CensorshipStrategy::kSniRealityModeSafari26;
+        return CensorshipStrategy::kSniRealityModeSafari26_5;
     }
     return CensorshipStrategy::kSni;
 }
@@ -218,9 +218,9 @@ void packet_callback_adapter(fptn::common::network::IPPacketPtr packet,
                              void* user_data) {
     auto wrapper = static_cast<WebsocketClientWrapper*>(user_data);
     if (wrapper && wrapper->packet_callback && packet) {
-        const auto* raw_packet = packet->GetRawPacket();
-        const auto* data = static_cast<const uint8_t*>(raw_packet->getRawData());
-        const auto len = raw_packet->getRawDataLen();
+        const auto& data_vec = packet->Data();
+        const auto* data = data_vec.data();
+        const auto len = data_vec.size();
         const auto packet_count = wrapper->received_packet_count.fetch_add(1) + 1;
         const auto total_bytes = wrapper->received_byte_count.fetch_add(len) + len;
         wrapper->callback_enter_count.fetch_add(1);
@@ -287,21 +287,24 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
                 return;
             }
 
+            fptn::protocol::https::WebsocketClient::Config client_config;
+            client_config.server_ip = fptn::common::network::IPv4Address::Create(wrapper->server_ip);
+            client_config.server_port = wrapper->server_port;
+            client_config.tun_interface_address_ipv4 = fptn::common::network::IPv4Address::Create(wrapper->tun_ipv4);
+            client_config.tun_interface_address_ipv6 = fptn::common::network::IPv6Address::Create(wrapper->tun_ipv6);
+            client_config.sni = wrapper->sni;
+            client_config.access_token = wrapper->access_token;
+            client_config.expected_md5_fingerprint = wrapper->md5_fingerprint;
+            client_config.censorship_strategy = parse_censorship_strategy(wrapper->censorship_strategy);
+            client_config.on_connected_callback = [wrapper]() {
+                connected_callback_adapter(wrapper);
+            };
+            client_config.new_ip_pkt_callback = [wrapper](auto packet) {
+                packet_callback_adapter(std::move(packet), wrapper);
+            };
+
             wrapper->client = std::make_shared<fptn::protocol::https::WebsocketClient>(
-                fptn::common::network::IPv4Address::Create(wrapper->server_ip),
-                wrapper->server_port,
-                fptn::common::network::IPv4Address::Create(wrapper->tun_ipv4),
-                fptn::common::network::IPv6Address::Create(wrapper->tun_ipv6),
-                [wrapper](auto packet) {
-                    packet_callback_adapter(std::move(packet), wrapper);
-                },
-                wrapper->sni,
-                wrapper->access_token,
-                wrapper->md5_fingerprint,
-                parse_censorship_strategy(wrapper->censorship_strategy),
-                [wrapper]() {
-                    connected_callback_adapter(wrapper);
-                },
+                std::move(client_config),
                 4
             );
         }

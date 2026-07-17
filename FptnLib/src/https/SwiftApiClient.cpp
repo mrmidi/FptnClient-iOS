@@ -56,7 +56,7 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(const char* 
     }
     if (strategy == "yandex26" || strategy == "sni_reality_yandex26" ||
         strategy == "sni-reality-yandex26") {
-        return CensorshipStrategy::kSniRealityModeYandex26;
+        return CensorshipStrategy::kSniRealityModeYandex26_4;
     }
     if (strategy == "yandex25" || strategy == "sni_reality_yandex25" ||
         strategy == "sni-reality-yandex25") {
@@ -68,7 +68,7 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(const char* 
     }
     if (strategy == "safari26" || strategy == "sni_reality_safari26" ||
         strategy == "sni-reality-safari26") {
-        return CensorshipStrategy::kSniRealityModeSafari26;
+        return CensorshipStrategy::kSniRealityModeSafari26_5;
     }
     return CensorshipStrategy::kSni;
 }
