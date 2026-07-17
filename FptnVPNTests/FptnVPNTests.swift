@@ -327,6 +327,24 @@ struct FptnVPNTests {
         let serverB = VPNServer(name: "Premium B (Slow)", host: "2.2.2.2", md5_fingerprint: "b", port: 443)
         let serverC = VPNServer(name: "Premium C (Fast)", host: "3.3.3.3", md5_fingerprint: "c", port: 443)
         
+        class RaceCoordinator: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _cFinished = false
+            
+            var cFinished: Bool {
+                lock.lock()
+                defer { lock.unlock() }
+                return _cFinished
+            }
+            
+            func markCFinished() {
+                lock.lock()
+                _cFinished = true
+                lock.unlock()
+            }
+        }
+        
+        let coordinator = RaceCoordinator()
         let service = ServerLatencyProbeService()
         let result = await service.raceServerHandshakes(
             servers: [serverA, serverB, serverC],
@@ -334,7 +352,18 @@ struct FptnVPNTests {
                 if server.name == "Premium A (Unreachable)" {
                     return nil
                 } else if server.name == "Premium B (Slow)" {
-                    try? await Task.sleep(for: .seconds(1))
+                    // Loop and sleep until C is finished or we are cancelled
+                    for _ in 0..<200 {
+                        if coordinator.cFinished {
+                            // If C has finished, we return nil so B never races C's return
+                            return nil
+                        }
+                        do {
+                            try await Task.sleep(for: .milliseconds(50))
+                        } catch {
+                            return nil
+                        }
+                    }
                     return ServerLatencyProbeResult(
                         server: server,
                         state: .reachable,
@@ -343,7 +372,8 @@ struct FptnVPNTests {
                         checkedAt: Date().timeIntervalSince1970
                     )
                 } else if server.name == "Premium C (Fast)" {
-                    try? await Task.sleep(for: .milliseconds(50))
+                    try? await Task.sleep(for: .milliseconds(10))
+                    coordinator.markCFinished()
                     return ServerLatencyProbeResult(
                         server: server,
                         state: .reachable,
