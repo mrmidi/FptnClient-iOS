@@ -5,6 +5,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import OSLog
 
 extension ServerLatencyProbeService {
     
@@ -88,6 +89,9 @@ extension ServerLatencyProbeService {
         tokenData: FPTNToken,
         config: ServerLatencyProbeConfig = .default,
         loginBlock: @Sendable @escaping (VPNServer, FPTNToken) async -> ServerLoginRaceResult? = { server, tokenData in
+            let logger = Logger(subsystem: "net.mrmidi.FptnVPN", category: "ServerLatencyProbeService")
+            logger.info("Probe starting for server \(server.name) (host=\(server.host))")
+            
             let settings = SettingsService.shared
             let client = ApiClientBridge(
                 host: server.host,
@@ -99,10 +103,16 @@ extension ServerLatencyProbeService {
             
             // Run TCP/TLS handshake
             let handshake = client.testHandshake(timeout: 5)
-            guard handshake.reachable else { return nil }
+            guard handshake.reachable else {
+                logger.warning("Probe handshake failed for server \(server.name): \(handshake.error ?? "unknown error")")
+                return nil
+            }
             
             // Cooperative cancellation check before performing login request
-            guard !Task.isCancelled else { return nil }
+            guard !Task.isCancelled else {
+                logger.info("Probe cancelled for server \(server.name) before login")
+                return nil
+            }
             
             // Run login request
             let requestBody = """
@@ -118,13 +128,20 @@ extension ServerLatencyProbeService {
                 timeout: 5
             )
             
-            guard response.code == 200,
-                  let body = response.body,
+            guard response.code == 200 else {
+                logger.warning("Probe login failed for server \(server.name) code=\(response.code) error=\(response.error ?? "none") body=\(response.body ?? "empty")")
+                return nil
+            }
+            
+            guard let body = response.body,
                   let data = body.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let accessToken = json["access_token"] as? String else {
+                logger.warning("Probe login response parse failed for server \(server.name)")
                 return nil
             }
+            
+            logger.info("Probe successfully logged in for server \(server.name) with latency \(handshake.latencyMs ?? 0)ms")
             
             let probeResult = ServerLatencyProbeResult(
                 server: server,
