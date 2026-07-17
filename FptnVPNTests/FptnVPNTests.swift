@@ -304,6 +304,62 @@ struct FptnVPNTests {
         #expect(report.summaryLine.contains("footprint=0MB"))
     }
 
+    @Test func selectCandidatesForTestingFiltersPremiumAndSamplesRegular() {
+        let servers = [
+            VPNServer(name: "Regular 1", host: "1.1.1.1", md5_fingerprint: "a", port: 443),
+            VPNServer(name: "Premium Alpha", host: "2.2.2.2", md5_fingerprint: "b", port: 443),
+            VPNServer(name: "Regular 2", host: "3.3.3.3", md5_fingerprint: "c", port: 443),
+            VPNServer(name: "Regular 3", host: "4.4.4.4", md5_fingerprint: "d", port: 443),
+            VPNServer(name: "Regular 4", host: "5.5.5.5", md5_fingerprint: "e", port: 443),
+            VPNServer(name: "Regular 5", host: "6.6.6.6", md5_fingerprint: "f", port: 443),
+        ]
+        
+        let selected = ServerLatencyProbeService.selectCandidatesForTesting(servers: servers)
+        
+        // Premium must always be included
+        #expect(selected.contains { $0.name == "Premium Alpha" })
+        // Total selected: 1 premium + ceil(5 * 0.5) = 1 + 3 = 4
+        #expect(selected.count == 4)
+    }
+
+    @Test func raceServerHandshakesSelectsFastestServer() async {
+        let serverA = VPNServer(name: "Premium A (Unreachable)", host: "1.1.1.1", md5_fingerprint: "a", port: 443)
+        let serverB = VPNServer(name: "Premium B (Slow)", host: "2.2.2.2", md5_fingerprint: "b", port: 443)
+        let serverC = VPNServer(name: "Premium C (Fast)", host: "3.3.3.3", md5_fingerprint: "c", port: 443)
+        
+        let service = ServerLatencyProbeService()
+        let result = await service.raceServerHandshakes(
+            servers: [serverA, serverB, serverC],
+            probeBlock: { server in
+                if server.name == "Premium A (Unreachable)" {
+                    return nil
+                } else if server.name == "Premium B (Slow)" {
+                    try? await Task.sleep(for: .seconds(1))
+                    return ServerLatencyProbeResult(
+                        server: server,
+                        state: .reachable,
+                        latencyMs: 1000,
+                        detail: "verified_http_200",
+                        checkedAt: Date().timeIntervalSince1970
+                    )
+                } else if server.name == "Premium C (Fast)" {
+                    try? await Task.sleep(for: .milliseconds(50))
+                    return ServerLatencyProbeResult(
+                        server: server,
+                        state: .reachable,
+                        latencyMs: 50,
+                        detail: "verified_http_200",
+                        checkedAt: Date().timeIntervalSince1970
+                    )
+                }
+                return nil
+            }
+        )
+        
+        #expect(result?.server.name == "Premium C (Fast)")
+        #expect(result?.latencyMs == 50)
+    }
+
     private func temporaryDiagnosticsDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("FptnVPNTests-\(UUID().uuidString)", isDirectory: true)

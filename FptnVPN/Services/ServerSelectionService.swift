@@ -55,21 +55,21 @@ actor ServerSelectionService {
         config: ServerLatencyProbeConfig = .default
     ) async -> AutoServerSelection {
         let servers = await tokenService.getServers()
-        let results = await probeService.collectAll(servers: servers, config: config)
-        await latencyCache.save(results)
-        var records = Dictionary(uniqueKeysWithValues: results.map { ($0.server.id, $0.cacheRecord) })
-        let tcpRows = composeRows(
-            servers: servers,
-            cache: records
-        )
-        if let bestTcpServer = tcpRows.first(where: { $0.isReachable })?.server {
-            let verified = verifyServerForCurrentStrategy(bestTcpServer)
-            records[bestTcpServer.id] = verified.cacheRecord
-            await latencyCache.save(verified.cacheRecord)
+        var records = await latencyCache.freshRecords()
+        
+        if let winnerResult = await probeService.raceServerHandshakes(servers: servers, config: config) {
+            // Update the cache with the winning server result
+            await latencyCache.save(winnerResult.cacheRecord)
+            records[winnerResult.server.id] = winnerResult.cacheRecord
+            
+            let rows = composeRows(servers: servers, cache: records)
+            return AutoServerSelection(selectedServer: winnerResult.server, rows: rows)
+        } else {
+            // If racing fails entirely (all unreachable), do a compose with existing cache
+            let rows = composeRows(servers: servers, cache: records)
+            let best = rows.first(where: { $0.isReachable })?.server
+            return AutoServerSelection(selectedServer: best, rows: rows)
         }
-        let rows = composeRows(servers: servers, cache: records)
-        let best = rows.first(where: { $0.isReachable })?.server
-        return AutoServerSelection(selectedServer: best, rows: rows)
     }
 
     func cachedWarningMessage() async -> String? {
