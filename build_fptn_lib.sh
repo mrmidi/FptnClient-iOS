@@ -21,10 +21,16 @@ resolve_default_target() {
     fi
 
     case "${PLATFORM_NAME:-}" in
-        iphonesimulator|iphoneos)
+        iphonesimulator)
+            echo "ios-simulator"
+            ;;
+        iphoneos)
             echo "ios-device"
             ;;
-        appletvsimulator|appletvos)
+        appletvsimulator)
+            echo "tvos-simulator"
+            ;;
+        appletvos)
             echo "tvos-device"
             ;;
         macosx)
