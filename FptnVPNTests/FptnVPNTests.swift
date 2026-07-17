@@ -194,7 +194,7 @@ struct FptnVPNTests {
     @Test func memoryPressurePolicyClassifiesThresholds() {
         let belowWarning = TunnelMemoryPressureSnapshot(
             residentBytes: 10 * 1024 * 1024,
-            physFootprintBytes: 34 * 1024 * 1024
+            physFootprintBytes: 29 * 1024 * 1024
         )
         let warning = TunnelMemoryPressureSnapshot(
             residentBytes: 10 * 1024 * 1024,
