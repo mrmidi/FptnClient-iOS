@@ -152,6 +152,9 @@
         }
       }
     },
+    "Another VPN may be active. Disable it to connect." : {
+
+    },
     "App" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -586,6 +589,9 @@
           }
         }
       }
+    },
+    "Custom DNS" : {
+
     },
     "Dark" : {
       "extractionState" : "manual",
@@ -2042,6 +2048,9 @@
       }
     },
     "VPN is active. Tapping Start will disconnect VPN first so probes reach the server directly." : {
+
+    },
+    "Waiting for network..." : {
 
     },
     "Waiting for tunnel transport to recover." : {
