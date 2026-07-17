@@ -19,7 +19,7 @@ struct FptnVPNApp: App {
         logger.info("FptnVPN app started")
 
         // Start collecting crash/hang diagnostics via MetricKit.
-        _ = MetricKitManager.shared
+        // _ = MetricKitManager.shared
 
         // Begin observing iCloud KVS changes for cross-device token sync.
         TokenService.shared.startCloudSync()

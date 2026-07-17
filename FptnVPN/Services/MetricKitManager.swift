@@ -13,15 +13,18 @@ final class MetricKitManager: NSObject, MXMetricManagerSubscriber, @unchecked Se
 
     private override init() {
         super.init()
-        MXMetricManager.shared.add(self)
-        logger.info("MetricKitManager initialized")
+        // MXMetricManager.shared.add(self)
+        logger.info("MetricKitManager initialized (disabled)")
     }
 
     // MARK: - MXMetricManagerSubscriber
 
     func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
-            let dict = payload.dictionaryRepresentation()
+            let jsonData = payload.jsonRepresentation()
+            guard let dict = (try? JSONSerialization.jsonObject(with: jsonData, options: [])) as? [String: Any] else {
+                continue
+            }
             let cpu = Self.nestedString(dict, "cpuMetrics", "cumulativeCPUTime")
             let mem = Self.nestedString(dict, "memoryMetrics", "peakMemoryUsage")
             let hang = Self.nestedString(dict, "applicationResponsivenessMetrics",
@@ -35,10 +38,10 @@ final class MetricKitManager: NSObject, MXMetricManagerSubscriber, @unchecked Se
         }
     }
 
-    private static func nestedString(_ dict: [AnyHashable: Any], _ keys: String...) -> String? {
+    private static func nestedString(_ dict: [String: Any], _ keys: String...) -> String? {
         var current: Any = dict
         for key in keys {
-            guard let d = current as? [AnyHashable: Any], let next = d[key] else { return nil }
+            guard let d = current as? [String: Any], let next = d[key] else { return nil }
             current = next
         }
         return current is NSNull ? nil : String(describing: current)
@@ -51,34 +54,36 @@ final class MetricKitManager: NSObject, MXMetricManagerSubscriber, @unchecked Se
             if let crashDiagnostics = payload.crashDiagnostics {
                 for crash in crashDiagnostics {
                     logger.error("MetricKit crash: \(crash)")
-                    persistDiagnostic(category: "crash", dictionary: crash.dictionaryRepresentation())
+                    persistDiagnostic(category: "crash", diagnostic: crash)
                 }
             }
 
             if let hangDiagnostics = payload.hangDiagnostics {
                 for hang in hangDiagnostics {
                     logger.warning("MetricKit hang: \(hang)")
-                    persistDiagnostic(category: "hang", dictionary: hang.dictionaryRepresentation())
+                    persistDiagnostic(category: "hang", diagnostic: hang)
                 }
             }
 
             if let cpuExceptionDiagnostics = payload.cpuExceptionDiagnostics {
                 for cpuException in cpuExceptionDiagnostics {
                     logger.warning("MetricKit CPU exception: \(cpuException)")
-                    persistDiagnostic(category: "cpu_exception", dictionary: cpuException.dictionaryRepresentation())
+                    persistDiagnostic(category: "cpu_exception", diagnostic: cpuException)
                 }
             }
 
             if let diskWriteExceptionDiagnostics = payload.diskWriteExceptionDiagnostics {
                 for diskWrite in diskWriteExceptionDiagnostics {
                     logger.warning("MetricKit disk write exception: \(diskWrite)")
-                    persistDiagnostic(category: "disk_write_exception", dictionary: diskWrite.dictionaryRepresentation())
+                    persistDiagnostic(category: "disk_write_exception", diagnostic: diskWrite)
                 }
             }
         }
     }
 
-    private func persistDiagnostic(category: String, dictionary: Any) {
+    private func persistDiagnostic(category: String, diagnostic: MXDiagnostic) {
+        let jsonData = diagnostic.jsonRepresentation()
+        let dictionary = (try? JSONSerialization.jsonObject(with: jsonData, options: [])) as? [String: Any] ?? [:]
         let normalizedDictionary = Self.normalizedForJSON(dictionary)
         let payload = Self.stableDescription(normalizedDictionary)
         let record = MetricKitDiagnosticRecord(
