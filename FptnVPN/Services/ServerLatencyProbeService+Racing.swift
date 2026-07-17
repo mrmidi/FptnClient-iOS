@@ -79,4 +79,104 @@ extension ServerLatencyProbeService {
             return nil
         }
     }
+
+    /// Concurrently logs into candidates and returns the first server that successfully
+    /// authenticates and provides an access token. Cooperatively cancels remaining requests.
+    /// Incorporates a 30-second global timeout using GCD.
+    func raceServerLogins(
+        servers: [VPNServer],
+        tokenData: FPTNToken,
+        config: ServerLatencyProbeConfig = .default,
+        loginBlock: @Sendable @escaping (VPNServer, FPTNToken) async -> ServerLoginRaceResult? = { server, tokenData in
+            let settings = SettingsService.shared
+            let client = ApiClientBridge(
+                host: server.host,
+                port: server.port,
+                sni: settings.sni,
+                md5Fingerprint: server.md5_fingerprint,
+                censorshipStrategy: settings.censorshipStrategy.rawValue
+            )
+            
+            // Run TCP/TLS handshake
+            let handshake = client.testHandshake(timeout: 5)
+            guard handshake.reachable else { return nil }
+            
+            // Cooperative cancellation check before performing login request
+            guard !Task.isCancelled else { return nil }
+            
+            // Run login request
+            let requestBody = """
+            {
+                "username": "\(tokenData.username)",
+                "password": "\(tokenData.password)"
+            }
+            """
+            
+            let response = client.post(
+                path: "/api/v1/login",
+                body: requestBody,
+                timeout: 5
+            )
+            
+            guard response.code == 200,
+                  let body = response.body,
+                  let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let accessToken = json["access_token"] as? String else {
+                return nil
+            }
+            
+            let probeResult = ServerLatencyProbeResult(
+                server: server,
+                state: .reachable,
+                latencyMs: handshake.latencyMs,
+                detail: "verified_login_200",
+                checkedAt: Date().timeIntervalSince1970
+            )
+            
+            return ServerLoginRaceResult(probeResult: probeResult, accessToken: accessToken)
+        }
+    ) async -> ServerLoginRaceResult? {
+        guard !servers.isEmpty else { return nil }
+        
+        let candidates = Self.selectCandidatesForTesting(servers: servers)
+        guard !candidates.isEmpty else { return nil }
+        
+        let raceTask = Task {
+            await withTaskGroup(of: ServerLoginRaceResult?.self, returning: ServerLoginRaceResult?.self) { group in
+                for server in candidates {
+                    group.addTask {
+                        guard !Task.isCancelled else { return nil }
+                        return await loginBlock(server, tokenData)
+                    }
+                }
+                
+                for await result in group {
+                    if let winner = result {
+                        group.cancelAll()
+                        return winner
+                    }
+                }
+                
+                return nil
+            }
+        }
+        
+        // Schedule a timeout using GCD to cooperatively cancel the Task
+        let timeoutWorkItem = DispatchWorkItem {
+            raceTask.cancel()
+        }
+        
+        DispatchQueue.global().asyncAfter(deadline: .now() + 30.0, execute: timeoutWorkItem)
+        
+        let result = await raceTask.value
+        timeoutWorkItem.cancel()
+        
+        return result
+    }
+}
+
+struct ServerLoginRaceResult: Sendable {
+    let probeResult: ServerLatencyProbeResult
+    let accessToken: String
 }

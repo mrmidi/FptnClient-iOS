@@ -740,8 +740,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if exceededConfiguredBudget {
             logger.warning(
-                "Reconnect attempt \(nextAttempt) exceeded configured budget \(maxAttempts); continuing runtime recovery with backoff \(delaySeconds)s \(activityDiagnosticsDescription())"
+                "Reconnect attempt \(nextAttempt) exceeded configured budget \(maxAttempts). Failing tunnel."
             )
+            failRuntimeTunnel(reason: "reconnect_attempts_exceeded")
+            return .unavailable
         } else {
             logger.warning(
                 "Scheduling reconnect attempt \(nextAttempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") after \(delaySeconds)s \(activityDiagnosticsDescription())"
@@ -1337,11 +1339,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if exceededConfiguredBudget {
             logger.warning(
-                "Reconnect attempt \(attempt) exceeded configured budget \(maxAttempts); continuing runtime recovery with backoff \(delaySeconds)s after network path recovery \(activityDiagnosticsDescription())"
+                "Reconnect attempt \(attempt) exceeded configured budget \(maxAttempts). Failing tunnel."
             )
+            failRuntimeTunnel(reason: "reconnect_attempts_exceeded_on_path_recovery")
+            return
         } else {
             logger.warning(
-                "Scheduling reconnect attempt \(attempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") after \(delaySeconds)s after network path recovery \(activityDiagnosticsDescription())"
+                "Scheduling reconnect attempt \(attempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(attempt)") after \(delaySeconds)s after network path recovery \(activityDiagnosticsDescription())"
             )
         }
         recordProviderEvent(

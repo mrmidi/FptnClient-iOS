@@ -322,7 +322,7 @@ struct FptnVPNTests {
         #expect(selected.count == 4)
     }
 
-    @Test func raceServerHandshakesSelectsFastestServer() async {
+    @Test func raceServerLoginsSelectsFastestServer() async {
         let serverA = VPNServer(name: "Premium A (Unreachable)", host: "1.1.1.1", md5_fingerprint: "a", port: 443)
         let serverB = VPNServer(name: "Premium B (Slow)", host: "2.2.2.2", md5_fingerprint: "b", port: 443)
         let serverC = VPNServer(name: "Premium C (Fast)", host: "3.3.3.3", md5_fingerprint: "c", port: 443)
@@ -346,16 +346,18 @@ struct FptnVPNTests {
         
         let coordinator = RaceCoordinator()
         let service = ServerLatencyProbeService()
-        let result = await service.raceServerHandshakes(
+        let tokenData = FPTNToken(version: 1, service_name: "test", username: "user", password: "pwd", servers: [])
+        
+        let result = await service.raceServerLogins(
             servers: [serverA, serverB, serverC],
-            probeBlock: { server in
+            tokenData: tokenData,
+            loginBlock: { server, token in
                 if server.name == "Premium A (Unreachable)" {
                     return nil
                 } else if server.name == "Premium B (Slow)" {
                     // Loop and sleep until C is finished or we are cancelled
                     for _ in 0..<200 {
                         if coordinator.cFinished {
-                            // If C has finished, we return nil so B never races C's return
                             return nil
                         }
                         do {
@@ -364,30 +366,33 @@ struct FptnVPNTests {
                             return nil
                         }
                     }
-                    return ServerLatencyProbeResult(
+                    let probe = ServerLatencyProbeResult(
                         server: server,
                         state: .reachable,
                         latencyMs: 1000,
-                        detail: "verified_http_200",
+                        detail: "verified_login_200",
                         checkedAt: Date().timeIntervalSince1970
                     )
+                    return ServerLoginRaceResult(probeResult: probe, accessToken: "token-b")
                 } else if server.name == "Premium C (Fast)" {
                     try? await Task.sleep(for: .milliseconds(10))
                     coordinator.markCFinished()
-                    return ServerLatencyProbeResult(
+                    let probe = ServerLatencyProbeResult(
                         server: server,
                         state: .reachable,
                         latencyMs: 50,
-                        detail: "verified_http_200",
+                        detail: "verified_login_200",
                         checkedAt: Date().timeIntervalSince1970
                     )
+                    return ServerLoginRaceResult(probeResult: probe, accessToken: "token-c")
                 }
                 return nil
             }
         )
         
-        #expect(result?.server.name == "Premium C (Fast)")
-        #expect(result?.latencyMs == 50)
+        #expect(result?.probeResult.server.name == "Premium C (Fast)")
+        #expect(result?.probeResult.latencyMs == 50)
+        #expect(result?.accessToken == "token-c")
     }
 
     private func temporaryDiagnosticsDirectory() throws -> URL {

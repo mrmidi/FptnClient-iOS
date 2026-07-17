@@ -52,6 +52,9 @@ final class VPNService: ObservableObject {
     private var tunnelStatusObserver: NSObjectProtocol?
     private var lastExpectedConnectedAt: Date?
     private var conflictDisconnects: Int = 0
+    private var remainingFallbackBudget: Int = 0
+    private var isUserInitiatedDisconnect: Bool = true
+    private var isFallbackReconnecting: Bool = false
 
     private let tokenService = TokenService.shared
     private let serverSelectionService = ServerSelectionService.shared
@@ -80,12 +83,17 @@ final class VPNService: ObservableObject {
 
     func connect() {
         Task {
+            isUserInitiatedDisconnect = false
+            let maxAttempts = SettingsService.shared.maxReconnectAttempts
+            remainingFallbackBudget = maxAttempts == 0 ? Int.max : maxAttempts
             await performConnect()
         }
     }
 
     func disconnect() {
         let manager = packetTunnelProvider
+        isUserInitiatedDisconnect = true
+        isFallbackReconnecting = false
         connection.isConnected = false
         connection.isConnecting = false
         connection.isReconnecting = false
@@ -165,6 +173,8 @@ final class VPNService: ObservableObject {
         }
 
         let server: VPNServer
+        var prefetchedAccessToken: String? = nil
+        
         switch connection.connectionMode {
         case .manual(let chosen):
             server = chosen
@@ -185,6 +195,7 @@ final class VPNService: ObservableObject {
                 return
             }
             server = best
+            prefetchedAccessToken = selection.accessToken
         }
 
         connection.selectedServer = server
@@ -199,19 +210,26 @@ final class VPNService: ObservableObject {
         let sni = settings.sni
         let strategy = settings.censorshipStrategy.rawValue
 
-        let accessTokenResult = await loginToServer(
-            server: server,
-            username: tokenData.username,
-            password: tokenData.password,
-            sni: sni,
-            censorshipStrategy: strategy
-        )
-        guard case .success(let accessToken) = accessTokenResult else {
-            if case .failure(let error) = accessTokenResult {
-                connection.errorMessage = "Login failed: \(error.localizedDescription)"
-                logger.error("Login error: \(error.localizedDescription)")
+        let accessToken: String
+        if let prefetched = prefetchedAccessToken {
+            logger.info("Using pre-fetched access token from server race")
+            accessToken = prefetched
+        } else {
+            let accessTokenResult = await loginToServer(
+                server: server,
+                username: tokenData.username,
+                password: tokenData.password,
+                sni: sni,
+                censorshipStrategy: strategy
+            )
+            guard case .success(let token) = accessTokenResult else {
+                if case .failure(let error) = accessTokenResult {
+                    connection.errorMessage = "Login failed: \(error.localizedDescription)"
+                    logger.error("Login error: \(error.localizedDescription)")
+                }
+                return
             }
-            return
+            accessToken = token
         }
 
         let dnsResult = await getDNSInfo(
@@ -387,9 +405,24 @@ final class VPNService: ObservableObject {
         sni: String,
         bypassMethod: String
     ) async -> Result<NETunnelProviderManager, Error> {
+        let isAutoMode: Bool
+        if case .auto = connection.connectionMode {
+            isAutoMode = true
+        } else {
+            isAutoMode = false
+        }
+        let maxAttempts: Int
+        if isAutoMode {
+            // In auto mode, let the tunnel retry the same server 3 times before failing back to the app for all-server racing
+            maxAttempts = 3
+        } else {
+            // In manual mode, respect the user's settings
+            maxAttempts = SettingsService.shared.maxReconnectAttempts
+        }
+        
         let reconnectPolicy = TunnelReconnectPolicy(
             isEnabled: SettingsService.shared.reconnectEnabled,
-            maxAttempts: SettingsService.shared.maxReconnectAttempts,
+            maxAttempts: maxAttempts,
             delaySeconds: SettingsService.shared.reconnectDelay
         )
 
@@ -518,6 +551,10 @@ final class VPNService: ObservableObject {
             conflictDisconnects = 0
             startTimer()
             startRealSpeedMonitoring()
+            
+            // Reset budget on successful connection
+            let maxAttempts = SettingsService.shared.maxReconnectAttempts
+            remainingFallbackBudget = maxAttempts == 0 ? Int.max : maxAttempts
         case .reasserting:
             connection.isConnected = true
             connection.isConnecting = false
@@ -543,6 +580,11 @@ final class VPNService: ObservableObject {
             if status == .disconnected {
                 logLastDisconnectError(from: tunnelConnection)
                 detectConflictAfterDisconnect()
+                
+                // If it's an unexpected disconnect (connection drop) and fallback reconnect is enabled
+                if !isUserInitiatedDisconnect && SettingsService.shared.reconnectEnabled {
+                    triggerFallbackReconnect()
+                }
             }
             clearConnectionState(resetErrors: false)
         @unknown default:
@@ -646,6 +688,40 @@ final class VPNService: ObservableObject {
                 let report = TunnelDiagnosticsStore.shared.makeProviderFailureReport(disconnectReason: reason)
                 logger.warning("\(report.summaryLine)")
             }
+        }
+    }
+
+    private func triggerFallbackReconnect() {
+        guard !isUserInitiatedDisconnect else { return }
+        guard !isFallbackReconnecting else { return }
+        
+        isFallbackReconnecting = true
+        
+        Task { @MainActor in
+            defer { isFallbackReconnecting = false }
+            
+            let delaySeconds = SettingsService.shared.reconnectDelay
+            logger.info("Scheduling fallback reconnect after \(delaySeconds)s")
+            try? await Task.sleep(for: .seconds(delaySeconds))
+            
+            guard !isUserInitiatedDisconnect else { return }
+            
+            let maxAttempts = SettingsService.shared.maxReconnectAttempts
+            if maxAttempts != 0 {
+                remainingFallbackBudget -= 1
+                if remainingFallbackBudget <= 0 {
+                    logger.warning("Reconnection budget exhausted. Stopping reconnection attempts.")
+                    connection.errorMessage = "All servers unreachable (attempts exhausted)"
+                    return
+                }
+            }
+            
+            logger.info("Triggering fallback reconnect attempt. Remaining budget: \(maxAttempts == 0 ? "infinite" : String(remainingFallbackBudget))")
+            
+            connection.isReconnecting = true
+            connection.runtimeState = .starting
+            
+            await performConnect()
         }
     }
 

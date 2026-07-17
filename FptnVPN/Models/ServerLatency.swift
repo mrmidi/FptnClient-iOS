@@ -119,5 +119,6 @@ struct ServerListRow: Sendable, Hashable, Identifiable {
 
 struct AutoServerSelection: Sendable {
     let selectedServer: VPNServer?
+    let accessToken: String?
     let rows: [ServerListRow]
 }

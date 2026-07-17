@@ -41,7 +41,7 @@ actor ServerSelectionService {
         let cache = await latencyCache.freshRecords()
         let rows = composeRows(servers: servers, cache: cache)
         let best = rows.first(where: { $0.isReachable })?.server
-        return AutoServerSelection(selectedServer: best, rows: rows)
+        return AutoServerSelection(selectedServer: best, accessToken: nil, rows: rows)
     }
 
     func runLatencyScan(
@@ -57,18 +57,32 @@ actor ServerSelectionService {
         let servers = await tokenService.getServers()
         var records = await latencyCache.freshRecords()
         
-        if let winnerResult = await probeService.raceServerHandshakes(servers: servers, config: config) {
+        guard let tokenData = await tokenService.getTokenData() else {
+            let rows = composeRows(servers: servers, cache: records)
+            let best = rows.first(where: { $0.isReachable })?.server
+            return AutoServerSelection(selectedServer: best, accessToken: nil, rows: rows)
+        }
+        
+        if let winnerResult = await probeService.raceServerLogins(
+            servers: servers,
+            tokenData: tokenData,
+            config: config
+        ) {
             // Update the cache with the winning server result
-            await latencyCache.save(winnerResult.cacheRecord)
-            records[winnerResult.server.id] = winnerResult.cacheRecord
+            await latencyCache.save(winnerResult.probeResult.cacheRecord)
+            records[winnerResult.probeResult.server.id] = winnerResult.probeResult.cacheRecord
             
             let rows = composeRows(servers: servers, cache: records)
-            return AutoServerSelection(selectedServer: winnerResult.server, rows: rows)
+            return AutoServerSelection(
+                selectedServer: winnerResult.probeResult.server,
+                accessToken: winnerResult.accessToken,
+                rows: rows
+            )
         } else {
             // If racing fails entirely (all unreachable), do a compose with existing cache
             let rows = composeRows(servers: servers, cache: records)
             let best = rows.first(where: { $0.isReachable })?.server
-            return AutoServerSelection(selectedServer: best, rows: rows)
+            return AutoServerSelection(selectedServer: best, accessToken: nil, rows: rows)
         }
     }
 
