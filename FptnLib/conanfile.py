@@ -11,7 +11,6 @@ class FptnLib(ConanFile):
     requires = (
         "nlohmann_json/3.12.0",
         "protobuf/5.29.3",
-        "zlib/1.3.2",
     )
     settings = (
         "os",
