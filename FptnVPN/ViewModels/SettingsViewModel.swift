@@ -18,6 +18,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var colorScheme: AppColorScheme
     @Published var logLevel: LogLevel
     @Published var routePushThroughTunnel: Bool
+    @Published var customDnsEnabled: Bool
+    @Published var customDnsIPv4: String
 
     var onLogout: (() -> Void)?
 
@@ -41,6 +43,8 @@ final class SettingsViewModel: ObservableObject {
         self.colorScheme = settingsService.colorScheme
         self.logLevel = settingsService.logLevel
         self.routePushThroughTunnel = settingsService.routePushThroughTunnel
+        self.customDnsEnabled = settingsService.customDnsEnabled
+        self.customDnsIPv4 = settingsService.customDnsIPv4
     }
 
     func saveSni() {
@@ -95,6 +99,16 @@ final class SettingsViewModel: ObservableObject {
     func saveRoutePushThroughTunnel(_ value: Bool) {
         routePushThroughTunnel = value
         Task { await settingsService.setRoutePushThroughTunnel(value) }
+    }
+
+    func saveCustomDnsEnabled(_ value: Bool) {
+        customDnsEnabled = value
+        Task { await settingsService.setCustomDnsEnabled(value) }
+    }
+
+    func saveCustomDnsIPv4(_ value: String) {
+        customDnsIPv4 = value
+        Task { await settingsService.setCustomDnsIPv4(value) }
     }
 
     func logout() {

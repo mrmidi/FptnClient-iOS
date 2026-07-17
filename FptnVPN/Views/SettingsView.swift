@@ -153,6 +153,29 @@ struct SettingsView: View {
                         }
                     }
 
+                    Toggle(isOn: Binding(
+                        get: { viewModel.customDnsEnabled },
+                        set: { viewModel.saveCustomDnsEnabled($0) }
+                    )) {
+                        Text("Custom DNS")
+                            .foregroundStyle(Color.appPrimaryText)
+                    }
+                    .tint(Color.appAccent)
+
+                    if viewModel.customDnsEnabled {
+                        TextField("e.g. 8.8.8.8", text: $viewModel.customDnsIPv4)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                            .keyboardType(.numbersAndPunctuation)
+                            .foregroundStyle(Color.appPrimaryText)
+                            .padding(.vertical, 6)
+                            .onChange(of: viewModel.customDnsIPv4) { _, newValue in
+                                let filtered = newValue.filter { $0.isNumber || $0 == "." }
+                                if filtered != newValue { viewModel.customDnsIPv4 = filtered }
+                                viewModel.saveCustomDnsIPv4(filtered)
+                            }
+                    }
+
                 } header: {
                     Text("Connection")
                         .foregroundStyle(Color.appAccent)

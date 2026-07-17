@@ -93,6 +93,7 @@ private struct TunnelConfiguration {
     let accessToken: String
     let dnsIPv4: String
     let dnsIPv6: String?
+    let customDnsIPv4: String?
     let sni: String
     let md5Fingerprint: String
     let logLevel: String
@@ -124,12 +125,15 @@ private struct TunnelConfiguration {
         let reconnectEnabled = providerConfiguration["reconnectEnabled"] as? Bool ?? true
         let maxReconnectAttempts = providerConfiguration["maxReconnectAttempts"] as? Int ?? 5
         let reconnectDelaySeconds = providerConfiguration["reconnectDelaySeconds"] as? Int ?? 2
+        let customDns = providerConfiguration["customDnsIPv4"] as? String
+        let customDnsIPv4 = (customDns?.isEmpty == false) ? customDns : nil
 
         self.serverIP = serverIP
         self.serverPort = serverPort
         self.accessToken = accessToken
         self.dnsIPv4 = dnsIPv4
         self.dnsIPv6 = dnsIPv6
+        self.customDnsIPv4 = customDnsIPv4
         self.sni = sni
         self.md5Fingerprint = md5Fingerprint
         self.logLevel = logLevel
@@ -847,7 +851,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
-        let dnsServers = [configuration.dnsIPv4] + (configuration.dnsIPv6.map { [$0] } ?? [])
+        var dnsServers = [configuration.dnsIPv4] + (configuration.dnsIPv6.map { [$0] } ?? [])
+        if let custom = configuration.customDnsIPv4 {
+            dnsServers = [custom] + dnsServers
+            logger.info("Custom DNS configured [ipv4=\(custom)]")
+        }
         let dns = NEDNSSettings(servers: dnsServers)
         dns.matchDomains = [""]
         settings.dnsSettings = dns

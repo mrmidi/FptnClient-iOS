@@ -50,6 +50,8 @@ final class VPNService: ObservableObject {
     private var speedTimer: Timer?
     private var packetTunnelProvider: NETunnelProviderManager?
     private var tunnelStatusObserver: NSObjectProtocol?
+    private var lastExpectedConnectedAt: Date?
+    private var conflictDisconnects: Int = 0
 
     private let tokenService = TokenService.shared
     private let serverSelectionService = ServerSelectionService.shared
@@ -137,6 +139,7 @@ final class VPNService: ObservableObject {
     private func performConnect() async {
         connection.isConnecting = true
         connection.isReconnecting = false
+        connection.isWaitingForNetwork = false
         connection.errorMessage = nil
         connection.runtimeState = .starting
         defer {
@@ -144,6 +147,21 @@ final class VPNService: ObservableObject {
             if !connection.isConnected && !connection.isReconnecting {
                 connection.runtimeState = nil
             }
+        }
+
+        if !NetworkMonitor.shared.isConnected {
+            connection.isWaitingForNetwork = true
+            logger.info("No network available — waiting for connectivity")
+            do {
+                try await NetworkMonitor.shared.waitForConnectivity(timeout: 30)
+                logger.info("Network ready, proceeding with connection")
+            } catch {
+                connection.isWaitingForNetwork = false
+                connection.errorMessage = "No network connection"
+                logger.warning("Network wait timeout — aborting connection")
+                return
+            }
+            connection.isWaitingForNetwork = false
         }
 
         let server: VPNServer
@@ -408,6 +426,9 @@ final class VPNService: ObservableObject {
                 if let dnsIPv6 {
                     providerConfiguration["dnsIPv6"] = dnsIPv6
                 }
+                if SettingsService.shared.customDnsEnabled && !SettingsService.shared.customDnsIPv4.isEmpty {
+                    providerConfiguration["customDnsIPv4"] = SettingsService.shared.customDnsIPv4
+                }
                 config.providerConfiguration = providerConfiguration
 
                 // Force APNs (push) traffic through the tunnel. excludeAPNs is only
@@ -492,6 +513,9 @@ final class VPNService: ObservableObject {
             connection.isConnected = true
             connection.isConnecting = false
             connection.isReconnecting = false
+            connection.vpnConflictDetected = false
+            lastExpectedConnectedAt = Date()
+            conflictDisconnects = 0
             startTimer()
             startRealSpeedMonitoring()
         case .reasserting:
@@ -516,13 +540,37 @@ final class VPNService: ObservableObject {
             connection.runtimeState = .stopping
             stopSpeedMonitoring()
         case .disconnected, .invalid:
-            clearConnectionState(resetErrors: false)
             if status == .disconnected {
                 logLastDisconnectError(from: tunnelConnection)
+                detectConflictAfterDisconnect()
             }
+            clearConnectionState(resetErrors: false)
         @unknown default:
             break
         }
+    }
+
+    /// Detects potential VPN conflicts by monitoring rapid disconnects
+    /// after a connection attempt (another VPN may have stolen priority).
+    private func detectConflictAfterDisconnect() {
+        guard let connectedAt = lastExpectedConnectedAt else { return }
+        let connectedDuration = Date().timeIntervalSince(connectedAt)
+
+        // If we connected but dropped within 3 seconds, likely a conflict
+        if connectedDuration < 3.0 && conflictDisconnects >= 2 {
+            logger.warning("VPN conflict detected — rapid disconnects after connection (\(conflictDisconnects) times)")
+            connection.vpnConflictDetected = true
+            conflictDisconnects = 0
+            return
+        }
+
+        // Track rapid disconnect-reconnect cycles
+        if connectedDuration < 5.0 {
+            conflictDisconnects += 1
+        } else {
+            conflictDisconnects = 0
+        }
+        lastExpectedConnectedAt = nil
     }
 
     private func refreshTunnelRuntimeSnapshot() async {
@@ -611,7 +659,20 @@ final class VPNService: ObservableObject {
                 guard let self, self.connection.isConnected, !self.connection.isReconnecting else { return }
                 self.connection.downloadSpeed = Double.random(in: 5...15)
                 self.connection.uploadSpeed = Double.random(in: 2...8)
+                self.appendSpeedSample()
             }
+        }
+    }
+
+    private func appendSpeedSample() {
+        let sample = SpeedSample(
+            timestamp: Date(),
+            downloadMbps: connection.downloadSpeed / 1_000_000,
+            uploadMbps: connection.uploadSpeed / 1_000_000
+        )
+        connection.speedHistory.append(sample)
+        if connection.speedHistory.count > 300 {
+            connection.speedHistory.removeFirst(connection.speedHistory.count - 300)
         }
     }
 

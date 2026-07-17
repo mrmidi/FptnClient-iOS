@@ -88,8 +88,8 @@ struct AppLogHandler: Logging.LogHandler {
         let osType = level.osLogType
         os_log("%{public}@", log: osLog, type: osType, text)
 
-        // 2. Shared file sink
-        SharedLogSink.app.write(text)
+        // 2. Ring buffer → background flush to shared file
+        RingLogSink.app.write(text)
     }
 
     private func format(

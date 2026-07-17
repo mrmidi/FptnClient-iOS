@@ -46,7 +46,16 @@ struct HomeView: View {
             .disabled(viewModel.isConnecting)
 
             // Status
-            if viewModel.isConnecting || viewModel.isReconnecting {
+            if viewModel.isWaitingForNetwork {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .tint(Color.appAccent)
+                    Text("Waiting for network...")
+                        .foregroundStyle(Color.appPrimaryText)
+                        .font(.headline)
+                }
+                .padding(.bottom, 4)
+            } else if viewModel.isConnecting || viewModel.isReconnecting {
                 HStack(spacing: 8) {
                     ProgressView()
                         .tint(Color.appAccent)
@@ -83,6 +92,27 @@ struct HomeView: View {
                     .padding(.horizontal)
             }
 
+            if viewModel.vpnConflictDetected {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.shield.fill")
+                    Text("Another VPN may be active. Disable it to connect.")
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                    Button("Settings") {
+                        if let url = URL(string: "App-Prefs:root=General") {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .foregroundStyle(Color.appError)
+                .font(.caption)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+
             if let warningMessage = viewModel.warningMessage, !viewModel.isConnected {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -103,16 +133,22 @@ struct HomeView: View {
                     .padding(.bottom, 20)
             }
 
-            // Speed
+            // Speed chart + numeric
             if viewModel.isConnected {
-                HStack {
-                    Image(systemName: "arrow.down.to.line.alt")
-                    Text(viewModel.downloadSpeedString)
-                    Spacer()
-                    Text(viewModel.uploadSpeedString)
-                    Image(systemName: "arrow.up.to.line.alt")
+                VStack(spacing: 8) {
+                    SpeedChartView(samples: viewModel.speedHistory)
+                        .padding(.horizontal)
+
+                    HStack {
+                        Image(systemName: "arrow.down.to.line.alt")
+                        Text(viewModel.downloadSpeedString)
+                        Spacer()
+                        Text(viewModel.uploadSpeedString)
+                        Image(systemName: "arrow.up.to.line.alt")
+                    }
+                    .foregroundStyle(Color.appPrimaryText)
+                    .font(.caption)
                 }
-                .foregroundStyle(Color.appPrimaryText)
                 .padding()
                 .background(Color.appElevatedSurface)
                 .cornerRadius(20)

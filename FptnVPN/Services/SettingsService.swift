@@ -19,6 +19,8 @@ actor SettingsService {
     private static let colorSchemeKey        = "fptn.settings.colorScheme"
     private static let logLevelKey           = "fptn.settings.logLevel"
     private static let routePushThroughTunnelKey = "fptn.settings.routePushThroughTunnel"
+    private static let customDnsEnabledKey  = "fptn.settings.customDnsEnabled"
+    private static let customDnsIPv4Key     = "fptn.settings.customDnsIPv4"
 
     // MARK: - Nonisolated reads (UserDefaults is thread-safe)
 
@@ -80,6 +82,14 @@ actor SettingsService {
         return stored == nil ? true : UserDefaults.standard.bool(forKey: Self.routePushThroughTunnelKey)
     }
 
+    nonisolated var customDnsEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.customDnsEnabledKey)
+    }
+
+    nonisolated var customDnsIPv4: String {
+        UserDefaults.standard.string(forKey: Self.customDnsIPv4Key) ?? ""
+    }
+
     // MARK: - Setters
 
     func setSni(_ value: String) {
@@ -124,6 +134,14 @@ actor SettingsService {
 
     func setRoutePushThroughTunnel(_ value: Bool) {
         UserDefaults.standard.set(value, forKey: Self.routePushThroughTunnelKey)
+    }
+
+    func setCustomDnsEnabled(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: Self.customDnsEnabledKey)
+    }
+
+    func setCustomDnsIPv4(_ value: String) {
+        UserDefaults.standard.set(value, forKey: Self.customDnsIPv4Key)
     }
 
     // MARK: - SNI sanitization

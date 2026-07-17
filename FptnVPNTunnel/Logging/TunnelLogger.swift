@@ -141,8 +141,8 @@ struct TunnelLogHandler: Logging.LogHandler {
         }
         os_log("%{public}@", log: osLog, type: osType, text)
 
-        // 2. Shared App Group file — readable by the main app's DebugLogView
-        SharedLogSink.tunnel.write(text)
+        // 2. Ring buffer → background flush to shared file
+        RingLogSink.tunnel.write(text)
     }
 
     private func format(

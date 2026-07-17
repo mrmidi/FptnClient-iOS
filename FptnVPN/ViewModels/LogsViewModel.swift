@@ -83,8 +83,8 @@ final class LogsViewModel: ObservableObject {
     }
 
     func clear() {
-        SharedLogSink.app.clear()
-        SharedLogSink.tunnel.clear()
+        RingLogSink.app.clear()
+        RingLogSink.tunnel.clear()
         TunnelDiagnosticsStore.shared.clear()
         entries.removeAll()
         lastAppOffset = 0
@@ -110,7 +110,7 @@ final class LogsViewModel: ObservableObject {
         var newEntries: [LogEntry] = []
 
         // 1. Read new App logs
-        if let (appData, nextAppOffset) = SharedLogSink.app.readNewBytes(from: lastAppOffset) {
+        if let (appData, nextAppOffset) = RingLogSink.app.readNewBytes(from: lastAppOffset) {
             if nextAppOffset < lastAppOffset {
                 entries.removeAll()
                 nextEntryId = 0
@@ -134,7 +134,7 @@ final class LogsViewModel: ObservableObject {
         }
 
         // 2. Read new Tunnel logs
-        if let (tunnelData, nextTunnelOffset) = SharedLogSink.tunnel.readNewBytes(from: lastTunnelOffset) {
+        if let (tunnelData, nextTunnelOffset) = RingLogSink.tunnel.readNewBytes(from: lastTunnelOffset) {
             if nextTunnelOffset < lastTunnelOffset {
                 entries.removeAll()
                 nextEntryId = 0

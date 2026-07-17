@@ -290,6 +290,8 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
             fptn::protocol::https::WebsocketClient::Config client_config;
             client_config.server_ip = fptn::common::network::IPv4Address::Create(wrapper->server_ip);
             client_config.server_port = wrapper->server_port;
+            client_config.tun_interface_address_ipv4 = fptn::common::network::IPv4Address::Create(wrapper->tun_ipv4);
+            client_config.tun_interface_address_ipv6 = fptn::common::network::IPv6Address::Create(wrapper->tun_ipv6);
             client_config.sni = wrapper->sni;
             client_config.access_token = wrapper->access_token;
             client_config.expected_md5_fingerprint = wrapper->md5_fingerprint;
@@ -299,13 +301,6 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
             };
             client_config.new_ip_pkt_callback = [wrapper](auto packet) {
                 packet_callback_adapter(std::move(packet), wrapper);
-            };
-            client_config.on_ip_assigned_callback = [wrapper](const auto& ipv4, const auto& ipv6) {
-                if (wrapper->ip_assigned_callback) {
-                    std::string ipv4_str = ipv4.ToString();
-                    std::string ipv6_str = ipv6.ToString();
-                    wrapper->ip_assigned_callback(ipv4_str.c_str(), ipv6_str.c_str(), wrapper->context);
-                }
             };
 
             wrapper->client = std::make_shared<fptn::protocol::https::WebsocketClient>(
@@ -497,7 +492,5 @@ WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
 }
 
 void WebsocketSwiftBridge::registerIPAssignedCallback(IPAssignedCallback callback) {
-    if (wrapper_) {
-        wrapper_->ip_assigned_callback = callback;
-    }
+    (void)callback;
 }

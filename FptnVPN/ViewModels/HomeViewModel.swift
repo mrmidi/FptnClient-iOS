@@ -20,6 +20,9 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var connectionMode: VPNConnection.ConnectionMode = .auto
     @Published private(set) var isConnecting = false
     @Published private(set) var isReconnecting = false
+    @Published private(set) var isWaitingForNetwork = false
+    @Published private(set) var vpnConflictDetected = false
+    @Published private(set) var speedHistory: [SpeedSample] = []
     @Published private(set) var errorMessage: String? = nil
     @Published private(set) var warningMessage: String? = nil
     @Published private(set) var runtimeStatusMessage: String? = nil
@@ -97,6 +100,9 @@ final class HomeViewModel: ObservableObject {
         uploadSpeedString = vpnService.formatSpeed(conn.uploadSpeed)
         isConnecting = conn.isConnecting
         isReconnecting = conn.isReconnecting
+        isWaitingForNetwork = conn.isWaitingForNetwork
+        vpnConflictDetected = conn.vpnConflictDetected
+        speedHistory = conn.speedHistory
         errorMessage = conn.errorMessage
         warningMessage = conn.warningMessage
         if conn.isReconnecting {

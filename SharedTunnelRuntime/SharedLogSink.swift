@@ -18,7 +18,7 @@ final class SharedLogSink: @unchecked Sendable {
     private let queue: DispatchQueue
     private var fileURL: URL?
 
-    private init(fileName: String) {
+    init(fileName: String) {
         self.queue = DispatchQueue(label: "org.fptn.logsink.\(fileName)", qos: .utility)
         guard let container = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: appGroup) else {

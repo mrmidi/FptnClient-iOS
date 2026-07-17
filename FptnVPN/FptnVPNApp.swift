@@ -14,8 +14,8 @@ struct FptnVPNApp: App {
         // Bootstrap logging before any other code runs.
         // All subsequent logger.* calls go to os_log + shared log file.
         bootstrapLogging()
-        SharedLogSink.app.clear()
-        SharedLogSink.tunnel.clear()
+        RingLogSink.app.clear()
+        RingLogSink.tunnel.clear()
         logger.info("FptnVPN app started")
 
         // Start collecting crash/hang diagnostics via MetricKit.
