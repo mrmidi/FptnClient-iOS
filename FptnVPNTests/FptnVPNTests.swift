@@ -6,6 +6,8 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 import Testing
+import FptnSharedCore
+import FptnServerSelection
 @testable import FptnVPN
 
 struct FptnVPNTests {
@@ -322,77 +324,103 @@ struct FptnVPNTests {
         #expect(selected.count == 4)
     }
 
-    @Test func raceServerLoginsSelectsFastestServer() async {
-        let serverA = VPNServer(name: "Premium A (Unreachable)", host: "1.1.1.1", md5_fingerprint: "a", port: 443)
-        let serverB = VPNServer(name: "Premium B (Slow)", host: "2.2.2.2", md5_fingerprint: "b", port: 443)
-        let serverC = VPNServer(name: "Premium C (Fast)", host: "3.3.3.3", md5_fingerprint: "c", port: 443)
-        
-        class RaceCoordinator: @unchecked Sendable {
+    // Tests that SlidingWindowRace selects the fastest responding server.
+    // Uses a local StubServerBootstrapProbe to simulate server timing without
+    // requiring the native C++ bridge or network access. Replaces the old
+    // loginBlock:-based test removed when we migrated to the protocol-based API.
+    @Test func slidingWindowRaceSelectsFastestServer() async {
+        let serverA = VPNServer(name: "Server A (Unreachable)", host: "1.1.1.1", md5_fingerprint: "a", port: 443)
+        let serverB = VPNServer(name: "Server B (Slow)", host: "2.2.2.2", md5_fingerprint: "b", port: 443)
+        let serverC = VPNServer(name: "Server C (Fast)", host: "3.3.3.3", md5_fingerprint: "c", port: 443)
+
+        // Shared flag: set when C finishes so B can bail out
+        final class Flag: @unchecked Sendable {
             private let lock = NSLock()
-            private var _cFinished = false
-            
-            var cFinished: Bool {
-                lock.lock()
-                defer { lock.unlock() }
-                return _cFinished
-            }
-            
-            func markCFinished() {
-                lock.lock()
-                _cFinished = true
-                lock.unlock()
-            }
+            private var _value = false
+            var value: Bool { lock.withLock { _value } }
+            func set() { lock.withLock { _value = true } }
         }
-        
-        let coordinator = RaceCoordinator()
-        let service = ServerLatencyProbeService()
-        let tokenData = FPTNToken(version: 1, service_name: "test", username: "user", password: "pwd", servers: [])
-        
-        let result = await service.raceServerLogins(
-            servers: [serverA, serverB, serverC],
-            tokenData: tokenData,
-            loginBlock: { server, token in
-                if server.name == "Premium A (Unreachable)" {
-                    return nil
-                } else if server.name == "Premium B (Slow)" {
-                    // Loop and sleep until C is finished or we are cancelled
+        let cDone = Flag()
+
+        // Inline stub that simulates configurable delays/outcomes per server
+        final class StubProbe: ServerBootstrapProbing, @unchecked Sendable {
+            let cDone: Flag
+            init(_ flag: Flag) { self.cDone = flag }
+
+            func probe(
+                server: VPNServer,
+                credentials: Credentials,
+                context: ProbeContext,
+                timeout: Duration,
+                queuePosition: Int
+            ) async -> ServerBootstrapAttempt {
+                let t0 = Int64(Date().timeIntervalSince1970 * 1000)
+                func metrics(_ outcome: ProbeMetricOutcome) -> ProbeMetrics {
+                    let t1 = Int64(Date().timeIntervalSince1970 * 1000)
+                    return ProbeMetrics(
+                        serverID: server.id, queuePosition: queuePosition,
+                        queuedAtMs: t0, startedAtMs: t0, completedAtMs: t1,
+                        dnsMs: 5, tcpConnectMs: 10,
+                        fakeHandshakeMs: nil, tlsHandshakeMs: nil,
+                        loginHTTPMs: nil, bootstrapHTTPMs: nil,
+                        totalMs: Int(t1 - t0),
+                        cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
+                        outcome: outcome
+                    )
+                }
+
+                switch server.host {
+                case "1.1.1.1": // A — instant failure
+                    return .failure(ServerProbeFailure(
+                        server: server, kind: .connectionTimeout,
+                        metrics: metrics(.failure), safeDiagnostic: "unreachable"))
+
+                case "2.2.2.2": // B — slow; waits until C signals or is cancelled
                     for _ in 0..<200 {
-                        if coordinator.cFinished {
-                            return nil
-                        }
-                        do {
-                            try await Task.sleep(for: .milliseconds(50))
-                        } catch {
-                            return nil
+                        if cDone.value { break }
+                        do { try await Task.sleep(for: .milliseconds(20)) }
+                        catch {
+                            return .failure(ServerProbeFailure(
+                                server: server, kind: .cancelled,
+                                metrics: metrics(.cancelled), safeDiagnostic: "cancelled"))
                         }
                     }
-                    let probe = ServerLatencyProbeResult(
-                        server: server,
-                        state: .reachable,
-                        latencyMs: 1000,
-                        detail: "verified_login_200",
-                        checkedAt: Date().timeIntervalSince1970
-                    )
-                    return ServerLoginRaceResult(probeResult: probe, accessToken: "token-b")
-                } else if server.name == "Premium C (Fast)" {
+                    return .success(ServerBootstrapResult(
+                        server: server, accessToken: "token-b",
+                        dnsIPv4: "10.0.0.1", dnsIPv6: nil, metrics: metrics(.success)))
+
+                default: // C — fast winner
                     try? await Task.sleep(for: .milliseconds(10))
-                    coordinator.markCFinished()
-                    let probe = ServerLatencyProbeResult(
-                        server: server,
-                        state: .reachable,
-                        latencyMs: 50,
-                        detail: "verified_login_200",
-                        checkedAt: Date().timeIntervalSince1970
-                    )
-                    return ServerLoginRaceResult(probeResult: probe, accessToken: "token-c")
+                    cDone.set()
+                    return .success(ServerBootstrapResult(
+                        server: server, accessToken: "token-c",
+                        dnsIPv4: "10.0.0.1", dnsIPv6: nil, metrics: metrics(.success)))
                 }
-                return nil
             }
+        }
+
+        let credentials = Credentials(username: "user", password: "pwd")
+        let context = ProbeContext(
+            networkClass: .wifi,
+            sni: "test.example.com",
+            censorshipStrategy: CensorshipStrategy(storedValue: ""),
+            ipv6Available: false,
+            tokenConfigurationID: "test"
         )
-        
-        #expect(result?.probeResult.server.name == "Premium C (Fast)")
-        #expect(result?.probeResult.latencyMs == 50)
-        #expect(result?.accessToken == "token-c")
+
+        let result = await SlidingWindowRace().run(
+            candidates: [serverA, serverB, serverC],
+            credentials: credentials,
+            context: context,
+            probe: StubProbe(cDone)
+        )
+
+        guard case .success(let winner) = result else {
+            #expect(false, "Expected .success but got \(String(describing: result))")
+            return
+        }
+        #expect(winner.server.name == "Server C (Fast)")
+        #expect(winner.accessToken == "token-c")
     }
 
     private func temporaryDiagnosticsDirectory() throws -> URL {

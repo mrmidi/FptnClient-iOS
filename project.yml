@@ -365,6 +365,10 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FptnVPN
+      - package: FptnShared
+        product: FptnSharedCore
+      - package: FptnShared
+        product: FptnServerSelection
 
   Fptn-macOSTests:
     type: bundle.unit-test
