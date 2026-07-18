@@ -35,7 +35,8 @@ configs:
 
 packages:
   FptnShared:
-    path: ../FptnShared
+    url: https://github.com/mrmidi/FptnShared.git
+    from: "0.2.0"
   swift-log:
     url: https://github.com/apple/swift-log.git
     from: "1.6.0"
