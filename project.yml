@@ -35,8 +35,7 @@ configs:
 
 packages:
   FptnShared:
-    url: https://github.com/mrmidi/FptnShared.git
-    from: "0.1.2"
+    path: ../FptnShared
   swift-log:
     url: https://github.com/apple/swift-log.git
     from: "1.6.0"
@@ -133,6 +132,8 @@ targets:
         embed: true
       - package: FptnShared
         product: FptnSharedCore
+      - package: FptnShared
+        product: FptnServerSelection
       - package: swift-log
         product: Logging
       - package: swift-collections

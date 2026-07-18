@@ -1,11 +1,13 @@
 /*=============================================================================
-Copyright (c) 2026 Stas Skokov
+Copyright (c) 2026 Aleksandr Shabelnikov
 
 Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
 import OSLog
+import FptnSharedCore
+import FptnServerSelection
 
 extension ServerLatencyProbeService {
     
@@ -82,118 +84,131 @@ extension ServerLatencyProbeService {
     }
 
     /// Concurrently logs into candidates and returns the first server that successfully
-    /// authenticates and provides an access token. Cooperatively cancels remaining requests.
-    /// Incorporates a 30-second global timeout using GCD.
+    /// completes both authentication and bootstrap DNS configuration fetching.
+    /// Cooperatively cancels remaining requests using a concurrency-limited sliding window.
     func raceServerLogins(
         servers: [VPNServer],
         tokenData: FPTNToken,
-        config: ServerLatencyProbeConfig = .default,
-        loginBlock: @Sendable @escaping (VPNServer, FPTNToken) async -> ServerLoginRaceResult? = { server, tokenData in
-            let logger = Logger(subsystem: "net.mrmidi.FptnVPN", category: "ServerLatencyProbeService")
-            logger.info("Probe starting for server \(server.name) (host=\(server.host))")
+        config: ServerLatencyProbeConfig = .default
+    ) async -> ServerLoginRaceResult? {
+        let logger = Logger(subsystem: "net.mrmidi.FptnVPN", category: "ServerLatencyProbeService")
+        logger.info("Auto Mode race starting for \(servers.count) servers")
+        
+        // 1. Select and partition candidates
+        let candidates = Self.selectCandidatesForTesting(servers: servers)
+        guard !candidates.isEmpty else {
+            logger.warning("No candidates available for testing after partitioning.")
+            return nil
+        }
+        
+        // 2. Sort candidate list by cache rank/latency before running the race!
+        let latencyCache = ServerLatencyCacheService.shared
+        let records = await latencyCache.freshRecords()
+        
+        let sortedCandidates = candidates.sorted { s1, s2 in
+            let r1 = records[s1.id]
+            let r2 = records[s2.id]
             
-            let settings = SettingsService.shared
-            let client = ApiClientBridge(
-                host: server.host,
-                port: server.port,
-                sni: settings.sni,
-                md5Fingerprint: server.md5_fingerprint,
-                censorshipStrategy: settings.censorshipStrategy.rawValue
-            )
+            let rank1 = r1?.state.sortRank ?? 1
+            let rank2 = r2?.state.sortRank ?? 1
             
-            // Run TCP/TLS handshake
-            let handshake = client.testHandshake(timeout: 5)
-            guard handshake.reachable else {
-                logger.warning("Probe handshake failed for server \(server.name): \(handshake.error ?? "unknown error")")
-                return nil
+            if rank1 != rank2 {
+                return rank1 < rank2
             }
             
-            // Cooperative cancellation check before performing login request
-            guard !Task.isCancelled else {
-                logger.info("Probe cancelled for server \(server.name) before login")
-                return nil
+            let lat1 = r1?.latencyMs ?? 1000
+            let lat2 = r2?.latencyMs ?? 1000
+            
+            if lat1 != lat2 {
+                return lat1 < lat2
             }
             
-            // Run login request
-            let requestBody = """
-            {
-                "username": "\(tokenData.username)",
-                "password": "\(tokenData.password)"
-            }
-            """
+            return s1.name.localizedCaseInsensitiveCompare(s2.name) == .orderedAscending
+        }
+        
+        logger.info("Candidates sorted by cache rank. Running race for \(sortedCandidates.count) servers.")
+        
+        // 3. Configure credentials and probe context
+        let credentials = Credentials(username: tokenData.username, password: tokenData.password)
+        let settings = SettingsService.shared
+        let context = ProbeContext(
+            networkClass: .wifi, // Fallback network class
+            sni: settings.sni,
+            censorshipStrategy: FptnSharedCore.CensorshipStrategy(storedValue: settings.censorshipStrategy.rawValue),
+            ipv6Available: false,
+            tokenConfigurationID: "token_config_digest"
+        )
+        
+        let nativeProbe = NativeServerBootstrapProbe()
+        let race = SlidingWindowRace()
+        
+        // 4. Run the bounded sliding-window connection race
+        let result = await race.run(
+            candidates: sortedCandidates,
+            credentials: credentials,
+            context: context,
+            limit: 4, // Maximum active concurrent probes
+            timeout: .seconds(5),
+            overallTimeout: .seconds(30),
+            probe: nativeProbe
+        )
+        
+        switch result {
+        case .success(let winner):
+            logger.info("Race won by server: \(winner.server.name) in \(winner.metrics.totalMs)ms. Access token and DNS obtained.")
             
-            let response = client.post(
-                path: "/api/v1/login",
-                body: requestBody,
-                timeout: 5
-            )
-            
-            guard response.code == 200 else {
-                logger.warning("Probe login failed for server \(server.name) code=\(response.code) error=\(response.error ?? "none") body=\(response.body ?? "empty")")
-                return nil
-            }
-            
-            guard let body = response.body,
-                  let data = body.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let accessToken = json["access_token"] as? String else {
-                logger.warning("Probe login response parse failed for server \(server.name)")
-                return nil
-            }
-            
-            logger.info("Probe successfully logged in for server \(server.name) with latency \(handshake.latencyMs ?? 0)ms")
-            
+            // Map the FPTNServerSelection models to FptnVPN models
             let probeResult = ServerLatencyProbeResult(
-                server: server,
+                server: winner.server,
                 state: .reachable,
-                latencyMs: handshake.latencyMs,
+                latencyMs: winner.metrics.fakeHandshakeMs,
                 detail: "verified_login_200",
                 checkedAt: Date().timeIntervalSince1970
             )
             
-            return ServerLoginRaceResult(probeResult: probeResult, accessToken: accessToken)
+            // Dynamically save the DNS configurations returned from bootstrap race into state if needed.
+            // Note: VPNService.swift reads this winnerResult.accessToken and starts connection.
+            // Since we fetched DNS configurations during race, we will cache/store them or return them!
+            // Wait, we need to pass the fetched DNS values to VPNService!
+            // Let's check: does ServerLoginRaceResult support returning dnsIPv4 / dnsIPv6?
+            // Let's check how ServerLoginRaceResult is defined:
+            // struct ServerLoginRaceResult: Sendable {
+            //     let probeResult: ServerLatencyProbeResult
+            //     let accessToken: String
+            // }
+            // If we add optional dnsIPv4/dnsIPv6 to ServerLoginRaceResult, we can avoid querying /api/v1/dns again in VPNService!
+            return ServerLoginRaceResult(
+                probeResult: probeResult,
+                accessToken: winner.accessToken,
+                dnsIPv4: winner.dnsIPv4,
+                dnsIPv6: winner.dnsIPv6
+            )
+            
+        case .allCandidatesFailed(let summary):
+            logger.warning("Race finished: all candidates failed. Attempted: \(summary.attemptedCount). Errors by kind: \(summary.failuresByKind)")
+            return nil
+            
+        case .cancelled:
+            logger.warning("Race cancelled or hit overall 30-second timeout.")
+            return nil
+            
+        @unknown default:
+            logger.error("Unknown selection result case encountered.")
+            return nil
         }
-    ) async -> ServerLoginRaceResult? {
-        guard !servers.isEmpty else { return nil }
-        
-        let candidates = Self.selectCandidatesForTesting(servers: servers)
-        guard !candidates.isEmpty else { return nil }
-        
-        let raceTask = Task {
-            await withTaskGroup(of: ServerLoginRaceResult?.self, returning: ServerLoginRaceResult?.self) { group in
-                for server in candidates {
-                    group.addTask {
-                        guard !Task.isCancelled else { return nil }
-                        return await loginBlock(server, tokenData)
-                    }
-                }
-                
-                for await result in group {
-                    if let winner = result {
-                        group.cancelAll()
-                        return winner
-                    }
-                }
-                
-                return nil
-            }
-        }
-        
-        // Schedule a timeout using GCD to cooperatively cancel the Task
-        let timeoutWorkItem = DispatchWorkItem {
-            raceTask.cancel()
-        }
-        
-        DispatchQueue.global().asyncAfter(deadline: .now() + 30.0, execute: timeoutWorkItem)
-        
-        let result = await raceTask.value
-        timeoutWorkItem.cancel()
-        
-        return result
     }
 }
 
 struct ServerLoginRaceResult: Sendable {
     let probeResult: ServerLatencyProbeResult
     let accessToken: String
+    let dnsIPv4: String?
+    let dnsIPv6: String?
+    
+    init(probeResult: ServerLatencyProbeResult, accessToken: String, dnsIPv4: String? = nil, dnsIPv6: String? = nil) {
+        self.probeResult = probeResult
+        self.accessToken = accessToken
+        self.dnsIPv4 = dnsIPv4
+        self.dnsIPv6 = dnsIPv6
+    }
 }

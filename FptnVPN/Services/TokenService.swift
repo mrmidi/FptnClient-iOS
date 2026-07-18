@@ -55,9 +55,6 @@ actor TokenService {
 
         // -- iCloud KVS (non-secret metadata syncs across devices) --
         // Token without password — we never put the password in KVS.
-        // Exception: we also store the password in KVS as a fallback for tvOS/macOS
-        // where iCloud Keychain sync may be delayed or unreliable.
-        Self.cloud.set(tokenData.password, forKey: Self.cloudPasswordKey)
         let tokenForCloud = FPTNToken(
             version: tokenData.version,
             service_name: tokenData.service_name,
@@ -73,6 +70,9 @@ actor TokenService {
         }
         Self.cloud.set(tokenData.username, forKey: Self.cloudUsernameKey)
         Self.cloud.set(tokenData.service_name, forKey: Self.cloudServiceNameKey)
+        
+        // Ensure KVS password key is cleared if it was set previously
+        Self.cloud.removeObject(forKey: Self.cloudPasswordKey)
         Self.cloud.synchronize()
     }
 
@@ -167,6 +167,7 @@ actor TokenService {
         Self.cloud.removeObject(forKey: Self.cloudServersKey)
         Self.cloud.removeObject(forKey: Self.cloudUsernameKey)
         Self.cloud.removeObject(forKey: Self.cloudServiceNameKey)
+        Self.cloud.removeObject(forKey: Self.cloudPasswordKey) // Secure cleanup
         Self.cloud.synchronize()
     }
 
@@ -229,16 +230,16 @@ actor TokenService {
             ?? UserDefaults.standard.string(forKey: Self.usernameKey)
             ?? Self.cloud.string(forKey: Self.cloudUsernameKey)
 
-        tsLog.info("repairKeychain: username=\(username ?? "nil", privacy: .public) cachedTokenPassword=\(cachedToken?.password ?? "nil", privacy: .public)")
+        tsLog.info("repairKeychain: username=\(username ?? "nil", privacy: .public) cachedTokenPassword=\(cachedToken?.password != nil ? "[REDACTED]" : "nil", privacy: .public)")
 
         guard let username, !username.isEmpty else { return }
 
         let existing = KeychainHelper.loadPassword(account: username)
         tsLog.info("repairKeychain: existingKeychainItem=\(existing != nil, privacy: .public) len=\(existing?.count ?? -1, privacy: .public)")
 
-        // Regardless of Keychain state, also backfill KVS so tvOS can find the password.
-        let kvsPassword = Self.cloud.string(forKey: Self.cloudPasswordKey)
-        tsLog.info("repairKeychain: kvsPasswordPresent=\(kvsPassword != nil, privacy: .public)")
+        // Clean up legacy KVS password if it exists
+        Self.cloud.removeObject(forKey: Self.cloudPasswordKey)
+        Self.cloud.synchronize()
 
         if existing == nil {
             // Prefer password from decoded local token.
@@ -247,7 +248,6 @@ actor TokenService {
                let data = password.data(using: .utf8) {
                 tsLog.info("repairKeychain: writing from local token password len=\(data.count, privacy: .public)")
                 KeychainHelper.savePassword(data, account: username)
-                if kvsPassword == nil { Self.cloud.set(password, forKey: Self.cloudPasswordKey) }
                 return
             }
 
@@ -257,21 +257,11 @@ actor TokenService {
                let data = legacyPassword.data(using: .utf8) {
                 tsLog.info("repairKeychain: writing from legacy UserDefaults password len=\(data.count, privacy: .public)")
                 KeychainHelper.savePassword(data, account: username)
-                if kvsPassword == nil { Self.cloud.set(legacyPassword, forKey: Self.cloudPasswordKey) }
                 return
             }
 
             tsLog.warning("repairKeychain: no non-empty password found anywhere — token has empty password")
             return
-        }
-
-        // Keychain has the password — backfill KVS if it's missing.
-        if kvsPassword == nil,
-           let data = existing,
-           let password = String(data: data, encoding: .utf8),
-           !password.isEmpty {
-            tsLog.info("repairKeychain: backfilling KVS from existing Keychain item")
-            Self.cloud.set(password, forKey: Self.cloudPasswordKey)
         }
     }
 }

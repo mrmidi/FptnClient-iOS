@@ -76,7 +76,9 @@ actor ServerSelectionService {
             return AutoServerSelection(
                 selectedServer: winnerResult.probeResult.server,
                 accessToken: winnerResult.accessToken,
-                rows: rows
+                rows: rows,
+                dnsIPv4: winnerResult.dnsIPv4,
+                dnsIPv6: winnerResult.dnsIPv6
             )
         } else {
             // If racing fails entirely (all unreachable), do a compose with existing cache

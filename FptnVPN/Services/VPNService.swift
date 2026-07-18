@@ -174,6 +174,8 @@ final class VPNService: ObservableObject {
 
         let server: VPNServer
         var prefetchedAccessToken: String? = nil
+        var prefetchedDnsIPv4: String? = nil
+        var prefetchedDnsIPv6: String? = nil
         
         switch connection.connectionMode {
         case .manual(let chosen):
@@ -196,6 +198,8 @@ final class VPNService: ObservableObject {
             }
             server = best
             prefetchedAccessToken = selection.accessToken
+            prefetchedDnsIPv4 = selection.dnsIPv4
+            prefetchedDnsIPv6 = selection.dnsIPv6
         }
 
         connection.selectedServer = server
@@ -232,18 +236,28 @@ final class VPNService: ObservableObject {
             accessToken = token
         }
 
-        let dnsResult = await getDNSInfo(
-            server: server,
-            accessToken: accessToken,
-            sni: sni,
-            censorshipStrategy: strategy
-        )
-        guard case .success(let (dnsIPv4, dnsIPv6)) = dnsResult else {
-            if case .failure(let error) = dnsResult {
-                connection.errorMessage = "DNS lookup failed: \(error.localizedDescription)"
-                logger.error("DNS info error: \(error.localizedDescription)")
+        let dnsIPv4: String
+        let dnsIPv6: String?
+        if let preIPv4 = prefetchedDnsIPv4 {
+            logger.info("Using pre-fetched DNS info from server selection race")
+            dnsIPv4 = preIPv4
+            dnsIPv6 = prefetchedDnsIPv6
+        } else {
+            let dnsResult = await getDNSInfo(
+                server: server,
+                accessToken: accessToken,
+                sni: sni,
+                censorshipStrategy: strategy
+            )
+            guard case .success(let (ipv4, ipv6)) = dnsResult else {
+                if case .failure(let error) = dnsResult {
+                    connection.errorMessage = "DNS lookup failed: \(error.localizedDescription)"
+                    logger.error("DNS info error: \(error.localizedDescription)")
+                }
+                return
             }
-            return
+            dnsIPv4 = ipv4
+            dnsIPv6 = ipv6
         }
 
         let vpnResult = await configureAndStartVPN(

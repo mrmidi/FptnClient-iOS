@@ -121,4 +121,14 @@ struct AutoServerSelection: Sendable {
     let selectedServer: VPNServer?
     let accessToken: String?
     let rows: [ServerListRow]
+    let dnsIPv4: String?
+    let dnsIPv6: String?
+    
+    init(selectedServer: VPNServer?, accessToken: String?, rows: [ServerListRow], dnsIPv4: String? = nil, dnsIPv6: String? = nil) {
+        self.selectedServer = selectedServer
+        self.accessToken = accessToken
+        self.rows = rows
+        self.dnsIPv4 = dnsIPv4
+        self.dnsIPv6 = dnsIPv6
+    }
 }
