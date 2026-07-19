@@ -1,0 +1,119 @@
+name: FptnCLI CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-cli:
+    name: Build & Test FptnCLI
+    runs-on: macos-26
+
+    env:
+      DERIVED_DATA: ${{ github.workspace }}/.build/FptnCLI
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build prerequisites
+        run: |
+          set -euo pipefail
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+          if ! command -v cmake >/dev/null 2>&1; then
+            brew install cmake
+          fi
+          if ! command -v conan >/dev/null 2>&1; then
+            brew install conan
+          fi
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          if ! command -v xcbeautify >/dev/null 2>&1; then
+            brew install xcbeautify
+          fi
+
+          cmake --version
+          conan --version
+          xcodegen --version
+
+      - name: Cache Conan
+        id: cache-conan
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.conan2
+          key: ${{ runner.os }}-conan-${{ hashFiles('FptnLib/conanfile.py', 'FptnLib/**/conan-*-profile') }}
+
+      - name: Build native macOS framework
+        run: |
+          set -euo pipefail
+          conan profile detect --force
+          ./build_fptn_lib.sh macos
+
+      - name: Save Conan cache
+        if: always() && steps.cache-conan.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ~/.conan2
+          key: ${{ runner.os }}-conan-${{ hashFiles('FptnLib/conanfile.py', 'FptnLib/**/conan-*-profile') }}
+
+      - name: Generate CLI Xcode Project
+        run: |
+          cd Tools/FptnCLI
+          xcodegen generate
+
+      - name: Build CLI Tool
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Tools/FptnCLI/FptnCLI.xcodeproj \
+            -scheme FptnSelectionCLI \
+            -configuration Debug \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build | xcbeautify
+
+      - name: Run CLI Smoke Tests (soak-sim)
+        run: |
+          CLI_PATH="$DERIVED_DATA/Build/Products/Debug/FptnSelectionCLI"
+          echo "Verifying CLI exists at: $CLI_PATH"
+          ls -l "$CLI_PATH"
+          
+          echo "Running soak-sim test..."
+          "$CLI_PATH" soak-sim --iterations 50
+
+      - name: Run CLI Smoke Tests (simulate)
+        run: |
+          CLI_PATH="$DERIVED_DATA/Build/Products/Debug/FptnSelectionCLI"
+          SCENARIO_PATH="$GITHUB_WORKSPACE/Tools/FptnCLI/Scenarios/scenario.json"
+          
+          mkdir -p "$GITHUB_WORKSPACE/Tools/FptnCLI/Scenarios"
+          cat << 'EOF' > "$SCENARIO_PATH"
+          {
+            "servers": [
+              {
+                "name": "SimulatedServerA",
+                "host": "127.0.0.1",
+                "port": 443,
+                "md5Fingerprint": "fake-md5",
+                "latencyMs": 80,
+                "shouldSucceed": true
+              }
+            ],
+            "maximumActiveProbes": 2,
+            "selectionDeadlineSeconds": 10
+          }
+          EOF
+          
+          echo "Running simulate test..."
+          "$CLI_PATH" simulate --scenario "$SCENARIO_PATH"
