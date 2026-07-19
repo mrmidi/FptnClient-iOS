@@ -1,0 +1,14 @@
+{
+  "servers": [
+    {
+      "name": "SimulatedServerA",
+      "host": "127.0.0.1",
+      "port": 443,
+      "md5Fingerprint": "fake-md5",
+      "latencyMs": 80,
+      "shouldSucceed": true
+    }
+  ],
+  "maximumActiveProbes": 2,
+  "selectionDeadlineSeconds": 10
+}

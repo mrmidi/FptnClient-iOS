@@ -65,22 +65,24 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
             ))
         }
 
-        let loginResponse = await executor.run {
+        let startTime = Date()
+
+        let loginResponse = try! await executor.run {
             client.post(std.string("/api/v1/login"), std.string(loginPayload), timeoutSeconds)
         }
 
-        let loginMs = Int(Int64(Date().timeIntervalSince1970 * 1000))
+        let loginElapsedMs = Int(Date().timeIntervalSince(startTime) * 1000)
 
         guard loginResponse.code == 200 else {
             let errorMsg = loginResponse.errmsg.empty() ? nil : String(loginResponse.errmsg)
-            let failKind = mapFailureKind(loginResponse.code)
+            let failKind = mapFailureKind(Int(loginResponse.code))
             return .failure(ServerProbeFailure(
                 server: server, kind: failKind,
                 metrics: ProbeMetrics(serverID: server.id, queuePosition: attempt.queuePosition,
                     queuedAtMs: 0, startedAtMs: 0, completedAtMs: 0,
                     dnsMs: nil, tcpConnectMs: nil, fakeHandshakeMs: nil,
-                    tlsHandshakeMs: nil, loginHTTPMs: loginMs, bootstrapHTTPMs: nil,
-                    totalMs: loginMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
+                    tlsHandshakeMs: nil, loginHTTPMs: loginElapsedMs, bootstrapHTTPMs: nil,
+                    totalMs: loginElapsedMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
                     outcome: .failure),
                 safeDiagnostic: errorMsg ?? "HTTP Login Failed with code \(loginResponse.code)"
             ))
@@ -94,16 +96,19 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
                 metrics: ProbeMetrics(serverID: server.id, queuePosition: attempt.queuePosition,
                     queuedAtMs: 0, startedAtMs: 0, completedAtMs: 0,
                     dnsMs: nil, tcpConnectMs: nil, fakeHandshakeMs: nil,
-                    tlsHandshakeMs: nil, loginHTTPMs: loginMs, bootstrapHTTPMs: nil,
-                    totalMs: loginMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
+                    tlsHandshakeMs: nil, loginHTTPMs: loginElapsedMs, bootstrapHTTPMs: nil,
+                    totalMs: loginElapsedMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
                     outcome: .failure),
                 safeDiagnostic: "Failed to parse access_token from login response."
             ))
         }
 
-        let dnsResponse = await executor.run {
+        let dnsResponse = try! await executor.run {
             client.get(std.string("/api/v1/dns"), timeoutSeconds)
         }
+
+        let totalElapsedMs = Int(Date().timeIntervalSince(startTime) * 1000)
+        let dnsElapsedMs = totalElapsedMs - loginElapsedMs
 
         guard dnsResponse.code == 200 else {
             let errorMsg = dnsResponse.errmsg.empty() ? nil : String(dnsResponse.errmsg)
@@ -112,8 +117,8 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
                 metrics: ProbeMetrics(serverID: server.id, queuePosition: attempt.queuePosition,
                     queuedAtMs: 0, startedAtMs: 0, completedAtMs: 0,
                     dnsMs: nil, tcpConnectMs: nil, fakeHandshakeMs: nil,
-                    tlsHandshakeMs: nil, loginHTTPMs: loginMs, bootstrapHTTPMs: 0,
-                    totalMs: loginMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
+                    tlsHandshakeMs: nil, loginHTTPMs: loginElapsedMs, bootstrapHTTPMs: dnsElapsedMs,
+                    totalMs: totalElapsedMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
                     outcome: .failure),
                 safeDiagnostic: errorMsg ?? "DNS GET Failed with code \(dnsResponse.code)"
             ))
@@ -127,8 +132,8 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
                 metrics: ProbeMetrics(serverID: server.id, queuePosition: attempt.queuePosition,
                     queuedAtMs: 0, startedAtMs: 0, completedAtMs: 0,
                     dnsMs: nil, tcpConnectMs: nil, fakeHandshakeMs: nil,
-                    tlsHandshakeMs: nil, loginHTTPMs: loginMs, bootstrapHTTPMs: 0,
-                    totalMs: loginMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
+                    tlsHandshakeMs: nil, loginHTTPMs: loginElapsedMs, bootstrapHTTPMs: dnsElapsedMs,
+                    totalMs: totalElapsedMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
                     outcome: .failure),
                 safeDiagnostic: "Failed to parse DNS values from response."
             ))
@@ -142,8 +147,8 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
             metrics: ProbeMetrics(serverID: server.id, queuePosition: attempt.queuePosition,
                 queuedAtMs: 0, startedAtMs: 0, completedAtMs: 0,
                 dnsMs: nil, tcpConnectMs: nil, fakeHandshakeMs: nil,
-                tlsHandshakeMs: nil, loginHTTPMs: loginMs, bootstrapHTTPMs: 0,
-                totalMs: loginMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
+                tlsHandshakeMs: nil, loginHTTPMs: loginElapsedMs, bootstrapHTTPMs: dnsElapsedMs,
+                totalMs: totalElapsedMs, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
                 outcome: .success)
         ))
     }

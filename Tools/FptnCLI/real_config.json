@@ -1,0 +1,204 @@
+{
+  "servers": [
+    {
+      "name": "United Kingdom-1",
+      "host": "193.32.176.253",
+      "md5_fingerprint": "e8599c1da2eefbc81a51da89b136f532",
+      "port": 443
+    },
+    {
+      "name": "United Kingdom-2",
+      "host": "193.32.176.39",
+      "md5_fingerprint": "344a6a9b8a891a8005e2f1f09f6ff835",
+      "port": 443
+    },
+    {
+      "name": "France-1",
+      "host": "62.60.157.120",
+      "md5_fingerprint": "e79d7e7d891fa9038b75e2adb052bff8",
+      "port": 443
+    },
+    {
+      "name": "France-2",
+      "host": "77.221.153.206",
+      "md5_fingerprint": "04383952db573d79de5fcceb9fe01178",
+      "port": 443
+    },
+    {
+      "name": "France-3",
+      "host": "193.233.133.39",
+      "md5_fingerprint": "1140c03b6c540b781ab37b4c4b7cd748",
+      "port": 443
+    },
+    {
+      "name": "France-4",
+      "host": "147.45.42.173",
+      "md5_fingerprint": "ce69a7d9d70b02fe332f3fb0ae4c98c4",
+      "port": 443
+    },
+    {
+      "name": "France-5",
+      "host": "147.45.42.0",
+      "md5_fingerprint": "86fc672f67b451a523065992968feac2",
+      "port": 443
+    },
+    {
+      "name": "Hong Kong",
+      "host": "85.11.161.9",
+      "md5_fingerprint": "b6a1351f806c915f70d9f213c1a2638d",
+      "port": 443
+    },
+    {
+      "name": "Latvia-1",
+      "host": "72.56.53.45",
+      "md5_fingerprint": "7d115a426cf2ba2aac611868ebf4d03e",
+      "port": 443
+    },
+    {
+      "name": "Latvia-2",
+      "host": "72.56.53.46",
+      "md5_fingerprint": "dd6b44a281a5a5c3dd7bb58fc5426882",
+      "port": 443
+    },
+    {
+      "name": "Netherlands-1",
+      "host": "108.165.250.18",
+      "md5_fingerprint": "75b6e55003b848cc11d85af10e1a536b",
+      "port": 443
+    },
+    {
+      "name": "Netherlands-2",
+      "host": "95.85.240.228",
+      "md5_fingerprint": "75b6e55003b848cc11d85af10e1a536b",
+      "port": 443
+    },
+    {
+      "name": "Estonia-1",
+      "host": "193.124.44.95",
+      "md5_fingerprint": "d009fd9ceb283526832e5ad3cd50234a",
+      "port": 443
+    },
+    {
+      "name": "Estonia-2",
+      "host": "89.125.55.68",
+      "md5_fingerprint": "d009fd9ceb283526832e5ad3cd50234a",
+      "port": 443
+    },
+    {
+      "name": "Estonia-3",
+      "host": "89.125.55.69",
+      "md5_fingerprint": "d009fd9ceb283526832e5ad3cd50234a",
+      "port": 443
+    },
+    {
+      "name": "Germany-1",
+      "host": "130.49.129.153",
+      "md5_fingerprint": "e73e463852ec682d7a85efdf7bf10972",
+      "port": 443
+    },
+    {
+      "name": "Germany-2",
+      "host": "45.131.43.17",
+      "md5_fingerprint": "e73e463852ec682d7a85efdf7bf10972",
+      "port": 443
+    },
+    {
+      "name": "USA-1",
+      "host": "178.236.240.227",
+      "md5_fingerprint": "12d28a8c2fce9c93afe5365d8053df7b",
+      "port": 443
+    },
+    {
+      "name": "USA-2",
+      "host": "45.131.41.108",
+      "md5_fingerprint": "12d28a8c2fce9c93afe5365d8053df7b",
+      "port": 443
+    },
+    {
+      "name": "Finland-1",
+      "host": "89.19.220.35",
+      "md5_fingerprint": "511954ee4aba3b168e5e1514ba9b3418",
+      "port": 443
+    },
+    {
+      "name": "Finland-2",
+      "host": "78.153.136.23",
+      "md5_fingerprint": "511954ee4aba3b168e5e1514ba9b3418",
+      "port": 443
+    },
+    {
+      "name": "Finland-3",
+      "host": "78.153.136.19",
+      "md5_fingerprint": "511954ee4aba3b168e5e1514ba9b3418",
+      "port": 443
+    },
+    {
+      "name": "Poland-1",
+      "host": "51.38.137.150",
+      "md5_fingerprint": "ce87a11bf8e1a7d3c58edc74e28fca10",
+      "port": 443
+    },
+    {
+      "name": "Poland-2",
+      "host": "144.31.102.30",
+      "md5_fingerprint": "4365387e13453c7baeb84fab25ea9e08",
+      "port": 443
+    },
+    {
+      "name": "Sweden-1",
+      "host": "78.40.117.254",
+      "md5_fingerprint": "0941ab80bac143bfb60bfa79b71dd063",
+      "port": 443
+    },
+    {
+      "name": "Sweden-2",
+      "host": "81.177.212.79",
+      "md5_fingerprint": "24f1f75b592da122835353b08e130634",
+      "port": 443
+    },
+    {
+      "name": "Sweden-3",
+      "host": "81.177.212.161",
+      "md5_fingerprint": "1e99b67cb688fc47106faf86ffb3bafd",
+      "port": 443
+    },
+    {
+      "name": "Czechia-1",
+      "host": "188.130.208.129",
+      "md5_fingerprint": "e08ed2f402da8dafbe891e1dc7779cc6",
+      "port": 443
+    },
+    {
+      "name": "Czechia-2",
+      "host": "46.8.113.146",
+      "md5_fingerprint": "f05b5a611476d5dd313568732dfed830",
+      "port": 443
+    },
+    {
+      "name": "Czechia-3",
+      "host": "188.130.208.70",
+      "md5_fingerprint": "b8040e55e00188885fe21baf3e44bac3",
+      "port": 443
+    },
+    {
+      "name": "Philippine-1",
+      "host": "61.245.11.79",
+      "md5_fingerprint": "a12883a61dbab7efe3aaa7bc2bfe267d",
+      "port": 443
+    },
+    {
+      "name": "Vietnam-1",
+      "host": "103.153.69.157",
+      "md5_fingerprint": "eb7e5c1a783df66e4f6b04021fa2c7f1",
+      "port": 443
+    }
+  ],
+  "censorship_strategy": "SNI",
+  "sni": "google.com",
+  "ipv6_available": false,
+  "token_configuration_id": "working-token-new",
+  "selection_policy": {
+    "maximum_active_probes": 4,
+    "selection_deadline_seconds": 15.0
+  }
+}

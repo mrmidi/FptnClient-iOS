@@ -5,11 +5,10 @@ options:
   deploymentTarget:
     macOS: "13.0"
 
-    settings:
-      base:
-        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp
-        SWIFT_CXX_INTEROPERABILITY_MODE: default
-        HEADER_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp/fptn_native_lib.framework/Versions/1.0.0/Headers
+settings:
+  base:
+    SWIFT_CXX_INTEROPERABILITY_MODE: default
+    SWIFT_OBJC_INTEROP_MODE: objcxx
     CLANG_CXX_LANGUAGE_STANDARD: c++20
 
 configs:
@@ -18,36 +17,18 @@ configs:
 
 packages:
   FptnShared:
-    url: https://github.com/mrmidi/FptnShared.git
-    exactVersion: "0.3.0-alpha.1"
+    path: ../../../FptnShared
 
 targets:
-
-  FptnNativeTransport_macOS:
-    type: framework.static
-    platform: macOS
-    sources:
-      - Targets/FptnNativeTransport/Sources
-    dependencies:
-      - package: FptnShared
-        product: FptnSharedCore
-      - package: FptnShared
-        product: FptnServerSelection
-      - framework: ../Fptn-macOS/Cpp/fptn_native_lib.framework
-    settings:
-      base:
-        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp
-        SWIFT_CXX_INTEROPERABILITY_MODE: default
-        CLANG_CXX_LANGUAGE_STANDARD: c++20
-        HEADER_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp/fptn_native_lib.framework/Versions/1.0.0/Headers
 
   FptnSelectionCLI:
     type: tool
     platform: macOS
     sources:
-      - Targets/FptnSelectionCLI/Sources
+      - path: Targets/FptnSelectionCLI
+        excludes:
+          - Cpp/*.h
     dependencies:
-      - target: FptnNativeTransport_macOS
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
@@ -59,8 +40,9 @@ targets:
       - framework: ../Fptn-macOS/Cpp/fptn_native_lib.framework
     settings:
       base:
+        SWIFT_OBJC_BRIDGING_HEADER: Targets/FptnSelectionCLI/Cpp/FptnSelectionCLI-Bridging-Header.h
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp
-        SWIFT_CXX_INTEROPERABILITY_MODE: default
+        LD_RUNPATH_SEARCH_PATHS: "@loader_path/../../../../../../Fptn-macOS/Cpp"
 
 schemes:
   FptnSelectionCLI:

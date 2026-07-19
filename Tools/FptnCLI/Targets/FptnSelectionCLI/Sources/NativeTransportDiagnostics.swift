@@ -44,7 +44,7 @@ public final class NativeTransportDiagnostics: ServerDiagnosticProbing, @uncheck
             std.string(context.censorshipStrategy.rawValue)
         )
         let start = Date()
-        let result = await executor.run {
+        let result = try! await executor.run {
             client.testHandshake(timeoutSeconds)
         }
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
