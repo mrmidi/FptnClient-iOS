@@ -149,7 +149,7 @@ extension ServerLatencyProbeService {
             context: context,
             limit: 4, // Maximum active concurrent probes
             timeout: .seconds(5),
-            overallTimeout: .seconds(30),
+            overallTimeout: .seconds(15),
             probe: nativeProbe
         )
         

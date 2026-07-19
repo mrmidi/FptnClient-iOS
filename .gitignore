@@ -22,12 +22,16 @@ DerivedData/
 
 # XcodeGen — generated artifacts, source of truth is project.yml
 FptnVPN.xcodeproj/
+Tools/FptnCLI/FptnCLI.xcodeproj/
 FptnVPN/Info.plist
 FptnVPN/FptnVPN.entitlements
 FptnVPNTunnel/Info.plist
 FptnVPNTunnel/FptnVPNTunnel.entitlements
 Fptn-macOS/Info.plist
 Fptn-macOS/Fptn_macOS.entitlements
+Tools/FptnCLI/.build/
+Tools/FptnCLI/health.json
+Tools/FptnCLI/*_report.jsonl
 Fptn-macOS-Tunnel/Info.plist
 Fptn-macOS-Tunnel/Fptn_macOS_Tunnel.entitlements
 Fptn-tvOS/Info.plist
