@@ -1,11 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 project(fptn_native_lib VERSION 1.0.0 LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-# Ensure C++20 even if Conan's toolchain tries to override
-add_compile_options(-std=c++20)
+# PR0: C++23 across the stack. Aligned with Conan profiles
+# (compiler.cppstd=23) and the fptn submodule (C++23 + YAFF patch).
+add_compile_options(-std=c++23)
 
 # Platform-specific deployment target defaults
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -29,19 +30,22 @@ add_compile_definitions(FPTN_IP_ADDRESS_WITHOUT_PCAP)
 
 # include(${CMAKE_BINARY_DIR}/build/generators/conan_toolchain.cmake)
 
-# Dependencies and compile options
-add_definitions(
-    -DNDEBUG
-    -DO3
-    -DWSP_GGML_USE_CPU
-    -DWSP_GGML_USE_ACCELERATE
-    -DWSP_GGML_USE_METAL
-    -DWSP_GGML_METAL_USE_BF16
-)
+# PR0: removed -DO3 (was a preprocessor macro, not an optimization flag),
+# all WSP_GGML_* defines (zero references in any source file — vestigial
+# from an unrelated whisper project), and the arm64 WSP_GGML_CPU_GENERIC.
+# -DNDEBUG is now configuration-specific: disabled in Debug so assertions
+# remain active during development.
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-DNDEBUG)
+endif()
 
-if (CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
-    add_definitions(-DWSP_GGML_CPU_GENERIC)
-endif ()
+# PR0: size-oriented flags for MinSizeRel/Release iOS builds.
+# -Oz minimises code size; -ffunction-sections/-fdata-sections +
+# -Wl,-dead_strip let the linker discard unreferenced code and data.
+if(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel" OR CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-Oz -ffunction-sections -fdata-sections)
+    add_link_options(-Wl,-dead_strip)
+endif()
 
 # Find packages
 find_package(fptn REQUIRED)
@@ -58,24 +62,21 @@ add_library(fptn_native_lib SHARED
     src/websocket/WrapperWebsocketClientBridge.cpp src/websocket/WrapperWebsocketClientBridge.h
 )
 
-target_compile_features(fptn_native_lib PRIVATE cxx_std_20)
+target_compile_features(fptn_native_lib PRIVATE cxx_std_23)
 target_compile_definitions(fptn_native_lib PRIVATE
     BOOST_ASIO_HAS_CO_AWAIT
     BOOST_ASIO_HAS_CO_SPAWN
     BOOST_ASIO_HAS_COROUTINES
 )
 
-# Link required frameworks
+# PR0: removed -framework Accelerate, Metal, MetalKit (zero references
+# in any source file) and duplicate raw -lssl/-lcrypto (OpenSSL::SSL and
+# OpenSSL::Crypto already resolve to BoringSSL via Conan).
 target_link_libraries(fptn_native_lib PRIVATE
-    "-framework Accelerate"
     "-framework Foundation"
-    "-framework Metal"
-    "-framework MetalKit"
     fptn::fptn
     OpenSSL::SSL
     OpenSSL::Crypto
-    "-lssl"
-    "-lcrypto"
 )
 
 file(GLOB_RECURSE ALL_HEADERS 

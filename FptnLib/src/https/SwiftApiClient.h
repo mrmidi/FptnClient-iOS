@@ -9,10 +9,13 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #include <string>
 #include <cstdint>
 #include <stdbool.h>
+#include <swift/bridging>
 
 namespace fptn::protocol::https { class ApiClient; }
 
-class SwiftApiClient {
+// PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,
+// removing the implicitly-unwrapped-optional workaround in Swift wrappers.
+class SWIFT_NONCOPYABLE SwiftApiClient {
 public:
     struct Response {
         std::string body;
