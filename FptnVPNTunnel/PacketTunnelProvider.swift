@@ -202,7 +202,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var lastStopReasonRawValue: Int?
     private var counters = PacketCounters()
     private var lastMemoryWarningAt: Date?
-    private var memoryEmergencyReconnectInProgress = false
     private var readBackpressureUntil: Date?
     private var readBackpressureWorkItem: DispatchWorkItem?
     private var consecutiveSendFailureBatches = 0
@@ -267,7 +266,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         lastNetworkPathSummary = "unknown"
         counters = PacketCounters()
         lastMemoryWarningAt = nil
-        memoryEmergencyReconnectInProgress = false
         readBackpressureUntil = nil
         readBackpressureWorkItem = nil
         consecutiveSendFailureBatches = 0
@@ -540,7 +538,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     self.isReadLoopActive = true
                     self.reconnectAttempt = 0
                     self.lastTransportError = nil
-                    self.memoryEmergencyReconnectInProgress = false
                     self.stateLock.unlock()
 
                     self.updateRuntimeState(.connected, reason: "websocket connected and settings applied")
@@ -557,7 +554,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.lock()
         reconnectAttempt = 0
         lastTransportError = nil
-        memoryEmergencyReconnectInProgress = false
         stateLock.unlock()
 
         updateRuntimeState(.connected, reason: "transport recovered")
@@ -1392,13 +1388,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     private func emitTelemetry() {
+        #if FPTN_MEASUREMENT_BUILD
+        // PR-1 (Measurement Safety): sample only Mach memory counters.
+        // Avoids constructing the full TunnelRuntimeSnapshot (native
+        // status query, ISO-8601 dates, string copies, packet counters)
+        // on every 15-second tick during memory profiling.
+        let memory = TunnelMemoryPressureSnapshot(
+            residentBytes: residentMemoryBytes(),
+            physFootprintBytes: physFootprintBytes()
+        )
+        evaluateMemoryPressure(memory: memory)
+        #else
         let snapshot = currentSnapshot()
         let memory = TunnelMemoryPressureSnapshot(
             residentBytes: snapshot.memoryResidentBytes,
             physFootprintBytes: snapshot.memoryPhysFootprintBytes
         )
         updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "telemetry")
-        evaluateMemoryPressure(snapshot: snapshot, memory: memory)
+        evaluateMemoryPressure(memory: memory)
+        #endif
     }
 
     // MARK: - State helpers
@@ -1486,29 +1494,49 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         )
     }
 
+    // PR-1 (Measurement Safety): @autoclosure prevents the interpolated
+    // message string from being constructed in Measurement builds.
+    // The #if gate eliminates the entire call (including category string
+    // literals) at compile time rather than relying on a runtime guard
+    // inside TunnelDiagnosticsStore.
     private func recordProviderEvent(
         category: String,
-        message: String,
+        message: @autoclosure () -> String,
         runtimeState: String? = nil,
         generation: Int? = nil,
         reconnectAttempt: Int? = nil,
         pathSatisfied: Bool? = nil
     ) {
+        #if FPTN_MEASUREMENT_BUILD
+        return
+        #else
         TunnelDiagnosticsStore.shared.recordProviderEvent(
             category: category,
-            message: message,
+            message: message(),
             runtimeState: runtimeState,
             generation: generation,
             reconnectAttempt: reconnectAttempt,
             pathSatisfied: pathSatisfied
         )
+        #endif
     }
 
-    private func updateDiagnosticsHeartbeat(lastEvent: String) {
-        updateDiagnosticsHeartbeat(snapshot: currentSnapshot(), lastEvent: lastEvent)
+    // PR-1 (Measurement Safety): @autoclosure prevents interpolated
+    // lastEvent strings (e.g. "state=\(state.rawValue)") from being
+    // constructed in Measurement builds.
+    private func updateDiagnosticsHeartbeat(lastEvent: @autoclosure () -> String) {
+        #if FPTN_MEASUREMENT_BUILD
+        return
+        #else
+        updateDiagnosticsHeartbeat(snapshot: currentSnapshot(), lastEvent: lastEvent())
+        #endif
     }
 
-    private func updateDiagnosticsHeartbeat(snapshot: TunnelRuntimeSnapshot, lastEvent: String) {
+    private func updateDiagnosticsHeartbeat(snapshot: TunnelRuntimeSnapshot, lastEvent: @autoclosure () -> String) {
+        #if FPTN_MEASUREMENT_BUILD
+        return
+        #endif
+        let event = lastEvent()
         let generation: Int
         let pathSatisfied: Bool
         stateLock.lock()
@@ -1529,7 +1557,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 websocketRunning: snapshot.websocketRunning,
                 lastTransportError: snapshot.lastTransportError ?? snapshot.websocketLastError,
                 lastStopReason: snapshot.lastStopReason,
-                lastEvent: lastEvent,
+                lastEvent: event,
                 lastInboundActivityAt: snapshot.lastInboundActivityAt,
                 lastOutboundActivityAt: snapshot.lastOutboundActivityAt,
                 packetFlowReadPackets: snapshot.packetFlowReadPackets,
@@ -1580,14 +1608,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         return UInt64(info.phys_footprint)
     }
 
+    // PR-1 (Measurement Safety): memory pressure is now telemetry-only.
+    // The previous implementation destroyed the native WebSocket bridge and
+    // scheduled a full reconnect at the emergency threshold (42 MiB).
+    // Recreating TLS, WebSocket, queues and buffers near the memory ceiling
+    // increased peak usage and obscured the original source of memory growth.
+    // Both warning and emergency levels now emit a throttled OSLog entry only.
+    // No bridge stop, bridge creation, reconnect scheduling, JSONL event
+    // recording, or heartbeat rewrite originates from this method.
     private func evaluateMemoryPressure(
-        snapshot: TunnelRuntimeSnapshot,
         memory: TunnelMemoryPressureSnapshot
     ) {
         switch memory.level {
         case .normal:
             return
-        case .warning:
+        case .warning, .emergency:
             let now = Date()
             var shouldLog = false
             stateLock.lock()
@@ -1598,47 +1633,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }
             stateLock.unlock()
             guard shouldLog else { return }
-            logger.warning("Tunnel memory pressure warning \(memory.description)")
-            recordProviderEvent(category: "memory", message: "memory_pressure_warning \(memory.description)", runtimeState: snapshot.runtimeState.rawValue)
-            updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "memory_pressure_warning")
-        case .emergency:
-            triggerMemoryPressureReconnect(snapshot: snapshot, memory: memory)
-        }
-    }
-
-    private func triggerMemoryPressureReconnect(
-        snapshot: TunnelRuntimeSnapshot,
-        memory: TunnelMemoryPressureSnapshot
-    ) {
-        stateLock.lock()
-        guard !memoryEmergencyReconnectInProgress,
-              !shutdownRequested,
-              runtimeState == .connected || runtimeState == .reasserting || runtimeState == .waitingForNetwork else {
-            stateLock.unlock()
-            return
-        }
-        memoryEmergencyReconnectInProgress = true
-        websocketGeneration += 1
-        lastTransportError = "provider_memory_pressure"
-        stateLock.unlock()
-
-        logger.warning("Tunnel memory pressure emergency, reconnecting websocket \(memory.description)")
-        recordProviderEvent(
-            category: "memory",
-            message: "memory_pressure_emergency reconnect \(memory.description)",
-            runtimeState: snapshot.runtimeState.rawValue
-        )
-        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "memory_pressure_emergency")
-        cancelPendingReconnect()
-        replaceWebSocketClient(with: nil, stopCurrent: true)
-
-        switch scheduleReconnectIfPossible() {
-        case .scheduled:
-            updateRuntimeState(.reasserting, reason: "provider_memory_pressure")
-        case .waitingForNetwork:
-            updateRuntimeState(.waitingForNetwork, reason: "provider_memory_pressure")
-        case .unavailable:
-            failRuntimeTunnel(reason: "provider_memory_pressure")
+            logger.warning("Tunnel memory pressure \(memory.level.rawValue) \(memory.description)")
         }
     }
 

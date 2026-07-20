@@ -53,7 +53,16 @@ private final class TunnelLogLevelStore: @unchecked Sendable {
     static let shared = TunnelLogLevelStore()
 
     private let lock = NSLock()
-    private var current: TunnelRuntimeLogLevel = .info
+    // PR-1 (Measurement Safety): Measurement builds start at .warning so
+    // early startup messages (before setTunnelLogLevel is called) never
+    // reach the formatter, redactor, or os_log at info/debug level.
+    private var current: TunnelRuntimeLogLevel = {
+        #if FPTN_MEASUREMENT_BUILD
+        return .warning
+        #else
+        return .info
+        #endif
+    }()
 
     func get() -> TunnelRuntimeLogLevel {
         lock.lock()
@@ -68,7 +77,14 @@ private final class TunnelLogLevelStore: @unchecked Sendable {
 
     func set(_ level: TunnelRuntimeLogLevel) {
         lock.lock()
+        // PR-1 (Measurement Safety): Measurement builds are locked to
+        // warning-only so info/debug messages never reach the formatter,
+        // redactor, or os_log during memory profiling.
+        #if FPTN_MEASUREMENT_BUILD
+        current = .warning
+        #else
         current = level
+        #endif
         lock.unlock()
     }
 }
@@ -141,8 +157,14 @@ struct TunnelLogHandler: Logging.LogHandler {
         }
         os_log("%{public}@", log: osLog, type: osType, text)
 
-        // 2. Ring buffer → background flush to shared file
+        // PR-1 (Measurement Safety): the 1 MiB in-memory ring buffer and its
+        // 512 KiB file sink are compiled out of Release builds. Release
+        // builds do not retain provider text in the application-owned ring
+        // or shared log file; sparse messages continue through os_log.
+        // Debug/internal builds retain the ring for developer diagnostics.
+        #if DEBUG
         RingLogSink.tunnel.write(text)
+        #endif
     }
 
     private func format(

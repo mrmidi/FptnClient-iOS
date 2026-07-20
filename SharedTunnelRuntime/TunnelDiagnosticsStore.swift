@@ -41,6 +41,23 @@ enum TunnelMemoryPressureLevel: String, Codable, Sendable {
     case emergency
 }
 
+// PR-1 (Measurement Safety): the provider's response to memory pressure.
+// Both warning and emergency are log-only — no bridge stop, replacement,
+// or reconnect is ever triggered by memory thresholds.
+enum TunnelMemoryPressureAction: Equatable, Sendable {
+    case none
+    case logOnly
+
+    static func action(for level: TunnelMemoryPressureLevel) -> TunnelMemoryPressureAction {
+        switch level {
+        case .normal:
+            return .none
+        case .warning, .emergency:
+            return .logOnly
+        }
+    }
+}
+
 struct TunnelMemoryPressureSnapshot: Equatable, Sendable {
     static let warningThresholdBytes: UInt64 = 30 * 1024 * 1024
     static let emergencyThresholdBytes: UInt64 = 42 * 1024 * 1024
@@ -141,6 +158,18 @@ struct TunnelProviderFailureReport: Equatable, Sendable {
 final class TunnelDiagnosticsStore: @unchecked Sendable {
     static let shared = TunnelDiagnosticsStore()
 
+    // PR-1 (Measurement Safety): compile-time gate. In Measurement builds,
+    // recordProviderEvent and writeHeartbeat are no-ops. This is a computed
+    // property (not mutable state) so no cross-thread race is possible and
+    // no call can accidentally write diagnostics before startTunnel runs.
+    static var providerRecordingEnabled: Bool {
+        #if FPTN_MEASUREMENT_BUILD
+        return false
+        #else
+        return true
+        #endif
+    }
+
     private static let appGroup = "group.net.mrmidi.FptnVPN"
     private let queue = DispatchQueue(label: "org.fptn.diagnostics-store", qos: .utility)
     private let encoder = JSONEncoder()
@@ -170,6 +199,7 @@ final class TunnelDiagnosticsStore: @unchecked Sendable {
         reconnectAttempt: Int? = nil,
         pathSatisfied: Bool? = nil
     ) {
+        guard Self.providerRecordingEnabled else { return }
         let event = TunnelDiagnosticEvent(
             timestamp: Self.now(),
             source: "provider",
@@ -184,6 +214,7 @@ final class TunnelDiagnosticsStore: @unchecked Sendable {
     }
 
     func writeHeartbeat(_ heartbeat: TunnelProviderHeartbeat) {
+        guard Self.providerRecordingEnabled else { return }
         writeJSON(heartbeat, to: .providerHeartbeat)
     }
 
