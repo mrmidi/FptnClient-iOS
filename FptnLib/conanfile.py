@@ -25,6 +25,8 @@ class FptnLib(ConanFile):
         # libfptn options
         "fptn/*:build_only_fptn_lib": True,
         "fptn/*:with_gui_client": False,
+        # PR1A: iOS socket buffer experiment (0 = kernel default).
+        "fptn/*:ios_socket_buffer_bytes": 0,
     }
 
     def requirements(self):
