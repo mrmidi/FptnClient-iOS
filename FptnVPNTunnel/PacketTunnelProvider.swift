@@ -903,22 +903,48 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
             guard self.shouldReadOutboundPackets() else { return }
 
-            var totalBytes: Int64 = 0
-            var sendFailures: Int64 = 0
+            var queueFullPackets: Int64 = 0
+            var invalidPackets: Int64 = 0
+            var unknownResults: Int64 = 0
+            var transportStopped = false
             let client = self.currentWebSocketClient()
 
-            for packet in packets {
-                totalBytes += Int64(packet.count)
-                if client?.sendPacket(packet) != true {
-                    sendFailures += 1
+            // PR1B: compute total bytes for the complete read batch
+            // before sending, so packetFlowReadPackets/Bytes both
+            // describe what was read from NEPacketTunnelFlow.
+            let packetCount = Int64(packets.count)
+            let totalBytes = packets.reduce(into: Int64.zero) {
+                $0 += Int64($1.count)
+            }
+
+            // PR1B: use typed send result. Only .queueFull feeds
+            // backpressure. .transportStopped breaks the batch early.
+            // .invalidPacket/.unknown are counted separately.
+            packetLoop: for packet in packets {
+                switch client?.sendPacket(packet) ?? .transportStopped {
+                case .accepted:
+                    break
+                case .queueFull:
+                    queueFullPackets += 1
+                case .transportStopped:
+                    transportStopped = true
+                    break packetLoop
+                case .invalidPacket:
+                    invalidPackets += 1
+                case .unknown:
+                    unknownResults += 1
                 }
             }
 
             let backpressureDelay = self.recordPacketFlowRead(
-                packetCount: Int64(packets.count),
+                packetCount: packetCount,
                 byteCount: totalBytes,
-                sendFailures: sendFailures
+                sendFailures: queueFullPackets
             )
+
+            if transportStopped {
+                return
+            }
             if let backpressureDelay {
                 self.scheduleReadLoopAfterBackpressure(delay: backpressureDelay)
                 return

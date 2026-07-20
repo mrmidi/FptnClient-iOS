@@ -445,18 +445,28 @@ bool WebsocketSwiftBridge::stop() {
     return active_client != nullptr;
 }
 
-bool WebsocketSwiftBridge::sendPacket(const uint8_t* packet_data, uint32_t length) {
-    if (wrapper_ && wrapper_->client && wrapper_->running) {
-        try {
-            fptn::common::network::IPPacketData buffer(packet_data, packet_data + length);
-            auto packet = fptn::common::network::IPPacket::Parse(std::move(buffer));
-            if (packet) {
-                return wrapper_->client->Send(std::move(packet));
-            }
-        } catch (...) {
-        }
+// PR1B: returns typed send result as uint8_t.
+// 0=accepted, 1=queue_full, 2=transport_stopped, 3=invalid_packet.
+std::uint8_t WebsocketSwiftBridge::sendPacket(const uint8_t* packet_data, uint32_t length) {
+    if (!wrapper_ || !wrapper_->running) {
+        return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::transport_stopped);
     }
-    return false;
+    if (!wrapper_->client) {
+        return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::transport_stopped);
+    }
+    if (!packet_data || length == 0) {
+        return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::invalid_packet);
+    }
+    try {
+        fptn::common::network::IPPacketData buffer(packet_data, packet_data + length);
+        auto packet = fptn::common::network::IPPacket::Parse(std::move(buffer));
+        if (!packet) {
+            return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::invalid_packet);
+        }
+        return static_cast<std::uint8_t>(wrapper_->client->Send(std::move(packet)));
+    } catch (...) {
+        return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::invalid_packet);
+    }
 }
 
 bool WebsocketSwiftBridge::isStarted() const {
@@ -464,7 +474,7 @@ bool WebsocketSwiftBridge::isStarted() const {
 }
 
 WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
-    WebsocketClientBridgeStatus status = {false, false, 0, "", "", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0};
+    WebsocketClientBridgeStatus status = {false, false, 0, "", "", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     if (!wrapper_) {
         status.last_error = "Invalid handle";
         return status;
@@ -491,6 +501,10 @@ WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
             status.effective_rcvbuf_bytes = wrapper_->client->GetEffectiveRcvbufBytes();
             status.effective_sndbuf_bytes = wrapper_->client->GetEffectiveSndbufBytes();
             status.socket_buffer_set_error_count = wrapper_->client->GetSocketBufferSetErrorCount();
+            status.queued_packets = wrapper_->client->GetQueuedPackets();
+            status.queued_bytes = wrapper_->client->GetQueuedBytes();
+            status.queued_bytes_peak = wrapper_->client->GetQueuedBytesPeak();
+            status.queue_full_count = wrapper_->client->GetQueueFullCount();
         }
         status.live_clients = fptn::protocol::https::WebsocketClient::GetLiveClients();
         status.active_reader_coroutines = fptn::protocol::https::WebsocketClient::GetActiveReaderCoroutines();
