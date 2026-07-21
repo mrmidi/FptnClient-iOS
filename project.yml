@@ -65,9 +65,40 @@ targetTemplates:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
 
+  # PR3: shared diagnostics core static library
+  DiagnosticsCoreBase:
+    type: library.static
+    sources:
+      - path: TunnelDiagnosticsCore/src
+        headerVisibility: project
+      - path: TunnelDiagnosticsCore/include
+        headerVisibility: public
+        buildPhase: headers
+    settings:
+      base:
+        CLANG_CXX_LANGUAGE_STANDARD: "c++23"
+        GCC_ENABLE_CPP_EXCEPTIONS: NO
+        GCC_ENABLE_CPP_RTTI: NO
+        DEFINES_MODULE: YES
+        PRODUCT_MODULE_NAME: FptnTunnelDiagnosticsCore
+        PRODUCT_NAME: FptnTunnelDiagnosticsCore
+
 # ── Targets ────────────────────────────────────────────────────────────────────
 
 targets:
+
+  # ── PR3: Diagnostics Core static libraries ──────────────────────────────────
+  FptnTunnelDiagnosticsCore-iOS:
+    templates: [DiagnosticsCoreBase]
+    platform: iOS
+
+  FptnTunnelDiagnosticsCore-macOS:
+    templates: [DiagnosticsCoreBase]
+    platform: macOS
+
+  FptnTunnelDiagnosticsCore-tvOS:
+    templates: [DiagnosticsCoreBase]
+    platform: tvOS
 
   # ── iOS App ──────────────────────────────────────────────────────────────────
   FptnVPN:
@@ -92,6 +123,7 @@ targets:
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
         OTHER_LDFLAGS: [-ObjC]
         SWIFT_OBJC_BRIDGING_HEADER: FptnVPN/Cpp/FptnVPN-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/TunnelDiagnosticsCore/include
     info:
       path: FptnVPN/Info.plist
       properties:
@@ -132,6 +164,7 @@ targets:
     dependencies:
       - target: FptnVPNTunnel
         embed: true
+      - target: FptnTunnelDiagnosticsCore-iOS
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
@@ -173,6 +206,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN.FptnVPNTunnel
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
         SWIFT_OBJC_BRIDGING_HEADER: FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/TunnelDiagnosticsCore/include
       configs:
         # PR-1 (Measurement Safety): the Measurement configuration disables
         # legacy JSONL diagnostics, forces warning-only logging, and uses a
@@ -190,6 +224,7 @@ targets:
         com.apple.security.application-groups:
           - group.net.mrmidi.FptnVPN
     dependencies:
+      - target: FptnTunnelDiagnosticsCore-iOS
       - package: swift-log
         product: Logging
       - framework: FptnVPN/Cpp/fptn_native_lib.framework
