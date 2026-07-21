@@ -4,14 +4,18 @@
 
 namespace fptn::diag {
 
-// PR3: read and validate flight records from a ring file.
-// Returns the number of valid events written to output.
-// Events are ordered by sequence (ascending).
-std::size_t ReadValidEvents(const char* path, Event* output,
-                            std::size_t capacity) noexcept;
+enum class ReadStatus : int {
+  kOk = 0,
+  kFileNotFound = 1,
+  kInvalidHeader = 2,
+  kEmpty = 3,
+  kIoError = 4,
+};
 
-// PR3: read the latest valid snapshot from a double-buffered file.
-// Picks the valid slot with the highest write_sequence.
-bool ReadLatestSnapshot(const char* path, Snapshot& output) noexcept;
+ReadStatus ReadValidEvents(const char* path, Event* output,
+                           std::size_t capacity,
+                           std::size_t* output_count) noexcept;
+
+ReadStatus ReadLatestSnapshot(const char* path, Snapshot& output) noexcept;
 
 }  // namespace fptn::diag

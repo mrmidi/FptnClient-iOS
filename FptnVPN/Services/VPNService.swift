@@ -9,6 +9,8 @@ import Combine
 import Darwin
 @preconcurrency import NetworkExtension
 
+// Private IPC types — will migrate to FptnShared 0.3.0 once
+// ServerBootstrapProbing protocol alignment is resolved.
 private enum TunnelControlAction: String, Codable, Sendable {
     case setLogLevel = "set_log_level"
     case ping
@@ -21,11 +23,7 @@ private struct TunnelControlMessage: Codable, Sendable {
     let logLevel: String?
     let initiator: String?
 
-    init(
-        action: TunnelControlAction,
-        logLevel: String? = nil,
-        initiator: String? = nil
-    ) {
+    init(action: TunnelControlAction, logLevel: String? = nil, initiator: String? = nil) {
         self.action = action
         self.logLevel = logLevel
         self.initiator = initiator
@@ -703,8 +701,9 @@ final class VPNService: ObservableObject {
                 "Tunnel last disconnect error domain=\(nsError.domain) code=\(nsError.code) reason=\(reason) description=\(nsError.localizedDescription)"
             )
             if reason == "plugin_failed" {
-                let report = TunnelDiagnosticsStore.shared.makeProviderFailureReport(disconnectReason: reason)
-                logger.warning("\(report.summaryLine)")
+                // PR4b: use binary decoder failure report (filtered to failed session).
+                let report = TunnelDiagnosticsDecoder.production?.makeFailureReport(disconnectReason: reason) ?? "binary diagnostics unavailable"
+                logger.warning("plugin_failed:\n\(report)")
             }
         }
     }
@@ -722,28 +721,30 @@ final class VPNService: ObservableObject {
     }
 
     // PR2: evaluate whether to reconnect, defer, or suppress.
+    // PR4b: fallback decision using binary lifecycle snapshot.
     private func evaluateFallbackDecision() -> FallbackReconnectDecision {
         guard !isUserInitiatedDisconnect else { return .doNotReconnect }
         guard SettingsService.shared.reconnectEnabled else { return .doNotReconnect }
 
-        // Check provider heartbeat staleness.
-        let heartbeat = TunnelDiagnosticsStore.shared.readHeartbeat()
-        let heartbeatAge = heartbeat.flatMap {
-            TunnelDiagnosticsStore.ageSeconds(since: $0.timestamp)
+        guard let decoder = TunnelDiagnosticsDecoder.production,
+              let snapshot = decoder.readLifecycleSnapshot() else {
+            return .reconnectNow
         }
 
-        // Fresh heartbeat (< 45s): provider is alive and handling its
-        // own reconnect. Defer recheck until the heartbeat goes stale.
-        if let age = heartbeatAge, age < 45 {
-            return .recheckAfter(TimeInterval(45 - age))
-        }
+        let age = decoder.ageSeconds(of: snapshot)
+        let controlledStopTrustWindow: TimeInterval = 45
 
-        // PR2: use typed fields, not lastEvent strings.
-        // If the provider performed a controlled stop, don't restart.
-        // Raw values match LocalStopInitiator: "app_disconnect", "system_stop".
-        if let initiator = heartbeat?.localStopInitiator,
-           initiator == "app_disconnect" || initiator == "system_stop" {
+        // Controlled stop suppresses immediately, but only when the
+        // snapshot is recent enough to trust as belonging to this disconnect.
+        if snapshot.isControlledStop,
+           let age,
+           age < controlledStopTrustWindow {
             return .doNotReconnect
+        }
+
+        // Fresh snapshot: provider is alive and handling its own reconnect.
+        if let age, age < 45 {
+            return .recheckAfter(max(1, 45 - age))
         }
 
         return .reconnectNow

@@ -1,29 +1,75 @@
 #include "DiagnosticsReader.hpp"
+#include "DiskFormat.hpp"
 #include "PosixFile.hpp"
 
 #include <algorithm>
+#include <cerrno>
+#include <cstring>
+#include <sys/stat.h>
 
 namespace fptn::diag {
 
-std::size_t ReadValidEvents(const char* path, Event* output,
-                            std::size_t capacity) noexcept {
+namespace {
+
+std::uint32_t ReadU32LE(const std::byte* p) noexcept {
+  return static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[0])) |
+         (static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[1])) << 8) |
+         (static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[2])) << 16) |
+         (static_cast<std::uint32_t>(static_cast<std::uint8_t>(p[3])) << 24);
+}
+
+std::uint16_t ReadU16LE(const std::byte* p) noexcept {
+  return static_cast<std::uint16_t>(
+      static_cast<std::uint16_t>(static_cast<std::uint8_t>(p[0])) |
+      (static_cast<std::uint16_t>(static_cast<std::uint8_t>(p[1])) << 8));
+}
+
+}  // namespace
+
+ReadStatus ReadValidEvents(const char* path, Event* output,
+                           std::size_t capacity,
+                           std::size_t* output_count) noexcept {
+  *output_count = 0;
+
   const int fd = ::open(path, O_RDONLY);
-  if (fd < 0) return 0;
+  if (fd < 0) return errno == ENOENT ? ReadStatus::kFileNotFound : ReadStatus::kIoError;
   PosixFile file(fd);
 
-  // Validate header.
+  // Validate complete header.
   std::array<std::byte, kFlightRingHeaderSize> header_bytes{};
   if (!PreadAll(fd, header_bytes.data(), header_bytes.size(), 0)) {
-    return 0;
+    return ReadStatus::kIoError;
   }
 
-  const std::uint32_t magic =
-      static_cast<std::uint32_t>(static_cast<std::uint8_t>(header_bytes[0])) |
-      (static_cast<std::uint32_t>(static_cast<std::uint8_t>(header_bytes[1])) << 8) |
-      (static_cast<std::uint32_t>(static_cast<std::uint8_t>(header_bytes[2])) << 16) |
-      (static_cast<std::uint32_t>(static_cast<std::uint8_t>(header_bytes[3])) << 24);
+  const std::uint32_t magic = ReadU32LE(&header_bytes[0]);
   if (magic != kFlightRingMagic) {
-    return 0;
+    return ReadStatus::kInvalidHeader;
+  }
+
+  const std::uint16_t schema = ReadU16LE(&header_bytes[4]);
+  const std::uint16_t header_size = ReadU16LE(&header_bytes[6]);
+  const std::uint16_t record_size = ReadU16LE(&header_bytes[8]);
+  const std::uint16_t ring_capacity = ReadU16LE(&header_bytes[10]);
+  const std::uint32_t header_crc = ReadU32LE(&header_bytes[12]);
+
+  if (schema != kSchemaVersion || header_size != kFlightRingHeaderSize ||
+      record_size != kFlightRecordSize || ring_capacity != kFlightRingCapacity) {
+    return ReadStatus::kInvalidHeader;
+  }
+
+  // Validate header CRC (over bytes 0..11).
+  const std::uint32_t computed_crc = Crc32(header_bytes.data(), 12);
+  if (header_crc != computed_crc) {
+    return ReadStatus::kInvalidHeader;
+  }
+
+  // Validate file size.
+  const std::size_t expected_size =
+      kFlightRingHeaderSize + kFlightRingCapacity * kFlightRecordSize;
+  struct stat st;
+  if (::fstat(fd, &st) != 0 ||
+      static_cast<std::size_t>(st.st_size) < expected_size) {
+    return ReadStatus::kInvalidHeader;
   }
 
   // Read all slots, validate, collect.
@@ -44,18 +90,23 @@ std::size_t ReadValidEvents(const char* path, Event* output,
     }
   }
 
+  if (count == 0) {
+    return ReadStatus::kEmpty;
+  }
+
   // Sort by sequence.
   std::sort(output, output + count,
             [](const Event& a, const Event& b) {
               return a.sequence < b.sequence;
             });
 
-  return count;
+  *output_count = count;
+  return ReadStatus::kOk;
 }
 
-bool ReadLatestSnapshot(const char* path, Snapshot& output) noexcept {
+ReadStatus ReadLatestSnapshot(const char* path, Snapshot& output) noexcept {
   const int fd = ::open(path, O_RDONLY);
-  if (fd < 0) return false;
+  if (fd < 0) return errno == ENOENT ? ReadStatus::kFileNotFound : ReadStatus::kIoError;
   PosixFile file(fd);
 
   bool found = false;
@@ -80,7 +131,7 @@ bool ReadLatestSnapshot(const char* path, Snapshot& output) noexcept {
     }
   }
 
-  return found;
+  return found ? ReadStatus::kOk : ReadStatus::kEmpty;
 }
 
 }  // namespace fptn::diag

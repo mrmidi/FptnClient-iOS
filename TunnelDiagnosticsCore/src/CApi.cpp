@@ -3,8 +3,28 @@
 #include <new>
 
 #include "DiagnosticsReader.hpp"
+#include "DiskFormat.hpp"
 #include "FlightRecorder.hpp"
 #include "LifecycleStore.hpp"
+
+// ── Schema constants ─────────────────────────────────────────────────
+
+extern "C" uint16_t fptn_diagnostics_schema_version(void) {
+    return fptn::diag::kSchemaVersion;
+}
+
+extern "C" size_t fptn_flight_recorder_capacity(void) {
+    return fptn::diag::kFlightRingCapacity;
+}
+
+extern "C" size_t fptn_flight_recorder_record_size(void) {
+    return fptn::diag::kFlightRecordSize;
+}
+
+extern "C" size_t fptn_flight_ring_file_size(void) {
+    return fptn::diag::kFlightRingHeaderSize +
+           fptn::diag::kFlightRingCapacity * fptn::diag::kFlightRecordSize;
+}
 
 // ── Flight Recorder ──────────────────────────────────────────────────
 
@@ -64,20 +84,23 @@ fptn_flight_recorder_flush(void* handle) {
   return rec->recorder->Flush() ? 1 : 0;
 }
 
-extern "C" size_t
+extern "C" FptnReadStatus
 fptn_flight_recorder_read_valid(
     const char* path,
     FptnDecodedFlightEvent* output,
-    size_t output_capacity) {
-  if (!path || !output || output_capacity == 0) return 0;
+    size_t output_capacity,
+    size_t* output_count) {
+  if (!output_count) return FPTN_READ_IO_ERROR;
+  *output_count = 0;
+  if (!path || !output || output_capacity == 0) return FPTN_READ_IO_ERROR;
 
-  // Use a stack buffer for intermediate events.
   static constexpr size_t kMaxStackEvents = 256;
   fptn::diag::Event events[kMaxStackEvents];
   const size_t cap =
       output_capacity < kMaxStackEvents ? output_capacity : kMaxStackEvents;
 
-  const size_t count = fptn::diag::ReadValidEvents(path, events, cap);
+  size_t count = 0;
+  const auto status = fptn::diag::ReadValidEvents(path, events, cap, &count);
 
   for (size_t i = 0; i < count; ++i) {
     output[i].sequence = events[i].sequence;
@@ -92,7 +115,8 @@ fptn_flight_recorder_read_valid(
     output[i].value_2 = events[i].value_2;
   }
 
-  return count;
+  *output_count = count;
+  return static_cast<FptnReadStatus>(status);
 }
 
 // ── Lifecycle Snapshot Store ─────────────────────────────────────────
@@ -185,14 +209,17 @@ fptn_lifecycle_store_write(
   return st->store->Write(snap, synchronize != 0) ? 1 : 0;
 }
 
-extern "C" int
+extern "C" FptnReadStatus
 fptn_lifecycle_store_read_latest(
     const char* path,
     FptnDecodedLifecycleSnapshot* output) {
-  if (!path || !output) return false;
+  if (!path || !output) return FPTN_READ_IO_ERROR;
 
   fptn::diag::Snapshot snap;
-  if (!fptn::diag::ReadLatestSnapshot(path, snap)) return 0;
+  const auto status = fptn::diag::ReadLatestSnapshot(path, snap);
+  if (status != fptn::diag::ReadStatus::kOk) {
+    return static_cast<FptnReadStatus>(status);
+  }
 
   output->write_sequence = snap.write_sequence;
   output->pid = snap.pid;
@@ -224,5 +251,5 @@ fptn_lifecycle_store_read_latest(
   output->outbound_queued_bytes_peak = snap.outbound_queued_bytes_peak;
   output->latest_event_sequence = snap.latest_event_sequence;
 
-  return 1;
+  return FPTN_READ_OK;
 }

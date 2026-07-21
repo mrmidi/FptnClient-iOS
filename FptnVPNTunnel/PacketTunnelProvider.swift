@@ -280,6 +280,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var lastStopReasonRawValue: Int?
     private var counters = PacketCounters()
     private var lastMemoryWarningAt: Date?
+    // PR4b: track last recorded pressure level so warning→emergency
+    // transitions are always recorded even inside the log throttle.
+    private var lastRecordedMemoryLevel: TunnelMemoryPressureLevel = .normal
     private var readBackpressureUntil: Date?
     private var readBackpressureWorkItem: DispatchWorkItem?
     private var consecutiveSendFailureBatches = 0
@@ -776,18 +779,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         // PR2: read native status for numeric disconnect diagnostics.
         let nativeStatus = currentWebSocketClient()?.status
-        let disconnectCodeStr = nativeStatus.map { "\($0.disconnectCode)" } ?? "-"
-        let stopOriginStr = nativeStatus.map { "\($0.stopOrigin)" } ?? "-"
-        let activeOpsStr = nativeStatus.map { "\($0.activeOperations)" } ?? "-"
+        let disconnectCode = nativeStatus?.disconnectCode.rawValue ?? 0
+        let stopOrigin = nativeStatus?.stopOrigin.rawValue ?? 0
+        let activeOps = nativeStatus?.activeOperations ?? 0
 
         logger.warning(
-            "Tunnel websocket disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCodeStr) stop_origin=\(stopOriginStr) active_ops=\(activeOpsStr) \(activityDiagnosticsDescription())"
+            "Tunnel websocket disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCode) stop_origin=\(stopOrigin) active_ops=\(activeOps) \(activityDiagnosticsDescription())"
         )
         recordProviderEvent(
             category: "websocket",
-            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCodeStr) stop_origin=\(stopOriginStr) active_ops=\(activeOpsStr)\(pathHandoffHint)",
+            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCode) stop_origin=\(stopOrigin) active_ops=\(activeOps)\(pathHandoffHint)",
             generation: generation,
-            flightEvent: .transportDisconnected
+            flightEvent: .transportDisconnected,
+            flightFlags: wasConnected ? 1 : 0,
+            value0: UInt64(disconnectCode),
+            value1: UInt64(stopOrigin),
+            value2: UInt64(activeOps)
         )
         updateDiagnosticsHeartbeat(lastEvent: "transport_disconnected")
         #if FPTN_SIGNPOSTS
@@ -966,7 +973,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             generation: generation,
             reconnectAttempt: nextAttempt,
             pathSatisfied: true,
-            flightEvent: .reconnectScheduled
+            flightEvent: .reconnectScheduled,
+            flightFlags: 1,
+            value0: UInt64(nextAttempt),
+            value1: UInt64(delaySeconds)
         )
         updateDiagnosticsHeartbeat(lastEvent: "reconnect_scheduled")
 
@@ -1993,6 +2003,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     // inside TunnelDiagnosticsStore.
     // PR3: binary-only event recording. No JSONL, no string evaluation.
     // flightEvent is mandatory — explicit numeric codes are the contract.
+    // PR4b: value0/value1/value2 carry event-specific numeric payloads.
+    // flags bit 0 = wasConnected (transportDisconnected), pathSatisfied (reconnect).
     private func recordProviderEvent(
         category: String,
         message: @autoclosure () -> String,
@@ -2000,12 +2012,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         generation: Int? = nil,
         reconnectAttempt: Int? = nil,
         pathSatisfied: Bool? = nil,
-        flightEvent: TunnelFlightEventCode
+        flightEvent: TunnelFlightEventCode,
+        flightFlags: UInt16 = 0,
+        value0: UInt64 = 0,
+        value1: UInt64 = 0,
+        value2: UInt64 = 0
     ) {
         if let seq = flightRecorder?.recordForSession(
             flightEvent,
             sessionToken: tunnelSessionToken,
-            generation: UInt32(generation ?? 0)
+            generation: UInt32(generation ?? 0),
+            flags: flightFlags,
+            value0: value0,
+            value1: value1,
+            value2: value2
         ), seq > 0 {
             diagnosticsLock.lock()
             latestEventSequence = seq
@@ -2157,8 +2177,28 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     ) {
         switch memory.level {
         case .normal:
+            lastRecordedMemoryLevel = .normal
             return
         case .warning, .emergency:
+            // PR4b: record binary event on level change, independent
+            // of OSLog throttling. warning→emergency is always recorded.
+            if memory.level != lastRecordedMemoryLevel {
+                lastRecordedMemoryLevel = memory.level
+                let eventCode: TunnelFlightEventCode = memory.level == .emergency ? .memoryCritical : .memoryWarning
+                diagnosticsLock.lock()
+                let peak = physicalFootprintPeakBytes
+                diagnosticsLock.unlock()
+                recordProviderEvent(
+                    category: "memory",
+                    message: "memory_pressure \(memory.description)",
+                    flightEvent: eventCode,
+                    value0: memory.physFootprintBytes ?? 0,
+                    value1: memory.residentBytes ?? 0,
+                    value2: peak
+                )
+            }
+
+            // OSLog throttled separately.
             let now = Date()
             var shouldLog = false
             stateLock.lock()
@@ -2171,9 +2211,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             guard shouldLog else { return }
             logger.warning("Tunnel memory pressure \(memory.level.rawValue) \(memory.description)")
             #if FPTN_SIGNPOSTS
-            if memory.level == .warning || memory.level == .emergency {
-                signpostLock.lock(); TunnelSignposts.memoryWarning(); signpostLock.unlock()
-            }
+            signpostLock.lock(); TunnelSignposts.memoryWarning(); signpostLock.unlock()
             #endif
         }
     }
