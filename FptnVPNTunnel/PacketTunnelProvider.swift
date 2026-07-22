@@ -8,6 +8,8 @@ import Foundation
 import Darwin
 import Network
 import NetworkExtension
+import FptnSharedCore
+import FptnSharedTunnel
 #if FPTN_SIGNPOSTS
 import OSLog
 #endif
@@ -149,6 +151,38 @@ private struct TunnelConfiguration {
     let tunIPv6: String
 
     init?(providerConfiguration: [String: Any]) {
+        if let base64Str = providerConfiguration[TunnelProviderConfigurationKey.startupV1] as? String,
+           let payloadData = Data(base64Encoded: base64Str),
+           payloadData.count <= TunnelStartupConfigurationV1.maximumEncodedSize,
+           let startupV1 = try? JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: payloadData) {
+            self.serverIP = startupV1.serverHost
+            self.serverPort = startupV1.serverPort
+            self.accessToken = startupV1.accessToken
+            self.dnsIPv4 = startupV1.dnsIPv4
+            self.dnsIPv6 = startupV1.dnsIPv6
+            self.customDnsIPv4 = startupV1.customDnsIPv4
+            self.sni = startupV1.sni
+            self.md5Fingerprint = startupV1.md5Fingerprint
+            self.logLevel = startupV1.logLevel.rawValue
+            self.websocketIdleTimeoutSeconds = startupV1.websocketIdleTimeoutSeconds
+            
+            switch startupV1.recoveryPolicy {
+            case .none:
+                self.reconnectEnabled = false
+                self.maxReconnectAttempts = 0
+                self.reconnectDelaySeconds = 0
+            case .automatic(let autoPolicy):
+                self.reconnectEnabled = true
+                self.maxReconnectAttempts = autoPolicy.sameServerAttempts
+                self.reconnectDelaySeconds = autoPolicy.reconnectDelaySeconds
+            }
+            self.tunIPv4 = "10.8.0.2"
+            self.tunIPv4Gateway = "10.8.0.1"
+            self.tunIPv6 = "fd00::1"
+            self.websocketStrategy = "\(startupV1.censorshipStrategy.rawValue);idle_timeout=\(startupV1.websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
+            return
+        }
+
         guard
             let serverIP = providerConfiguration["server"] as? String,
             let serverPort = providerConfiguration["port"] as? Int,

@@ -39,8 +39,9 @@ configs:
 
 packages:
   FptnShared:
-    url: https://github.com/mrmidi/FptnShared.git
-    exactVersion: "0.2.0"
+    path: ../FptnShared
+  FptnNativeBootstrap:
+    path: Packages/FptnNativeBootstrap
   swift-log:
     url: https://github.com/apple/swift-log.git
     from: "1.6.0"
@@ -171,7 +172,13 @@ targets:
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
+        product: FptnSharedTunnel
+      - package: FptnShared
         product: FptnServerSelection
+      - package: FptnShared
+        product: FptnConnectionOrchestration
+      - package: FptnNativeBootstrap
+        product: FptnNativeBootstrap
       - package: swift-log
         product: Logging
       - package: swift-collections
@@ -211,10 +218,6 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h
         HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/TunnelDiagnosticsCore/include
       configs:
-        # PR-1 (Measurement Safety): the Measurement configuration disables
-        # legacy JSONL diagnostics, forces warning-only logging, and uses a
-        # memory-only telemetry path. Build with -configuration Measurement
-        # to produce a clean baseline for native memory profiling.
         Measurement:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_MEASUREMENT_BUILD FPTN_SIGNPOSTS
     info:
@@ -228,6 +231,10 @@ targets:
           - group.net.mrmidi.FptnVPN
     dependencies:
       - target: FptnTunnelDiagnosticsCore-iOS
+      - package: FptnShared
+        product: FptnSharedCore
+      - package: FptnShared
+        product: FptnSharedTunnel
       - package: swift-log
         product: Logging
       - framework: FptnVPN/Cpp/fptn_native_lib.framework
@@ -281,6 +288,8 @@ targets:
         embed: true
       - package: FptnShared
         product: FptnSharedCore
+      - package: FptnShared
+        product: FptnSharedTunnel
       - framework: Fptn-macOS/Cpp/fptn_native_lib.framework
         embed: true
         codeSign: true
@@ -414,7 +423,13 @@ targets:
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
+        product: FptnSharedTunnel
+      - package: FptnShared
         product: FptnServerSelection
+      - package: FptnShared
+        product: FptnConnectionOrchestration
+      - package: FptnNativeBootstrap
+        product: FptnNativeBootstrap
 
   Fptn-macOSTests:
     type: bundle.unit-test

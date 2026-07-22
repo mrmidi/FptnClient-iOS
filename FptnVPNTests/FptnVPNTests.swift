@@ -7,7 +7,10 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 import Foundation
 import Testing
 import FptnSharedCore
+import FptnSharedTunnel
 import FptnServerSelection
+import FptnConnectionOrchestration
+import FptnNativeBootstrap
 @testable import FptnVPN
 
 struct FptnVPNTests {
@@ -339,123 +342,6 @@ struct FptnVPNTests {
         #expect(report.summaryLine.contains("footprint=0MB"))
     }
 
-    @Test func selectCandidatesForTestingFiltersPremiumAndSamplesRegular() {
-        let servers = [
-            VPNServer(name: "Regular 1", host: "1.1.1.1", md5_fingerprint: "a", port: 443),
-            VPNServer(name: "Premium Alpha", host: "2.2.2.2", md5_fingerprint: "b", port: 443),
-            VPNServer(name: "Regular 2", host: "3.3.3.3", md5_fingerprint: "c", port: 443),
-            VPNServer(name: "Regular 3", host: "4.4.4.4", md5_fingerprint: "d", port: 443),
-            VPNServer(name: "Regular 4", host: "5.5.5.5", md5_fingerprint: "e", port: 443),
-            VPNServer(name: "Regular 5", host: "6.6.6.6", md5_fingerprint: "f", port: 443),
-        ]
-        
-        let selected = ServerLatencyProbeService.selectCandidatesForTesting(servers: servers)
-        
-        // Premium must always be included
-        #expect(selected.contains { $0.name == "Premium Alpha" })
-        // Total selected: 1 premium + ceil(5 * 0.5) = 1 + 3 = 4
-        #expect(selected.count == 4)
-    }
-
-    // Tests that SlidingWindowRace selects the fastest responding server.
-    // Uses a local StubServerBootstrapProbe to simulate server timing without
-    // requiring the native C++ bridge or network access. Replaces the old
-    // loginBlock:-based test removed when we migrated to the protocol-based API.
-    @Test func slidingWindowRaceSelectsFastestServer() async {
-        let serverA = VPNServer(name: "Server A (Unreachable)", host: "1.1.1.1", md5_fingerprint: "a", port: 443)
-        let serverB = VPNServer(name: "Server B (Slow)", host: "2.2.2.2", md5_fingerprint: "b", port: 443)
-        let serverC = VPNServer(name: "Server C (Fast)", host: "3.3.3.3", md5_fingerprint: "c", port: 443)
-
-        // Shared flag: set when C finishes so B can bail out
-        final class Flag: @unchecked Sendable {
-            private let lock = NSLock()
-            private var _value = false
-            var value: Bool { lock.withLock { _value } }
-            func set() { lock.withLock { _value = true } }
-        }
-        let cDone = Flag()
-
-        // Inline stub that simulates configurable delays/outcomes per server
-        final class StubProbe: ServerBootstrapProbing, @unchecked Sendable {
-            let cDone: Flag
-            init(_ flag: Flag) { self.cDone = flag }
-
-            func probe(
-                server: VPNServer,
-                credentials: Credentials,
-                context: ProbeContext,
-                timeout: Duration,
-                queuePosition: Int
-            ) async -> ServerBootstrapAttempt {
-                let t0 = Int64(Date().timeIntervalSince1970 * 1000)
-                func metrics(_ outcome: ProbeMetricOutcome) -> ProbeMetrics {
-                    let t1 = Int64(Date().timeIntervalSince1970 * 1000)
-                    return ProbeMetrics(
-                        serverID: server.id, queuePosition: queuePosition,
-                        queuedAtMs: t0, startedAtMs: t0, completedAtMs: t1,
-                        dnsMs: 5, tcpConnectMs: 10,
-                        fakeHandshakeMs: nil, tlsHandshakeMs: nil,
-                        loginHTTPMs: nil, bootstrapHTTPMs: nil,
-                        totalMs: Int(t1 - t0),
-                        cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
-                        outcome: outcome
-                    )
-                }
-
-                switch server.host {
-                case "1.1.1.1": // A — instant failure
-                    return .failure(ServerProbeFailure(
-                        server: server, kind: .connectionTimeout,
-                        metrics: metrics(.failure), safeDiagnostic: "unreachable"))
-
-                case "2.2.2.2": // B — slow; waits until C signals or is cancelled
-                    for _ in 0..<200 {
-                        if cDone.value { break }
-                        do { try await Task.sleep(for: .milliseconds(20)) }
-                        catch {
-                            return .failure(ServerProbeFailure(
-                                server: server, kind: .cancelled,
-                                metrics: metrics(.cancelled), safeDiagnostic: "cancelled"))
-                        }
-                    }
-                    return .success(ServerBootstrapResult(
-                        server: server, accessToken: "token-b",
-                        dnsIPv4: "10.0.0.1", dnsIPv6: nil, metrics: metrics(.success)))
-
-                default: // C — fast winner
-                    try? await Task.sleep(for: .milliseconds(10))
-                    cDone.set()
-                    return .success(ServerBootstrapResult(
-                        server: server, accessToken: "token-c",
-                        dnsIPv4: "10.0.0.1", dnsIPv6: nil, metrics: metrics(.success)))
-                }
-            }
-        }
-
-        let credentials = Credentials(username: "user", password: "pwd")
-        let context = ProbeContext(
-            networkClass: .wifi,
-            sni: "test.example.com",
-            censorshipStrategy: CensorshipStrategy(storedValue: ""),
-            ipv6Available: false,
-            tokenConfigurationID: "test"
-        )
-
-        let result = await SlidingWindowRace().run(
-            candidates: [serverA, serverB, serverC],
-            credentials: credentials,
-            context: context,
-            probe: StubProbe(cDone)
-        )
-
-        guard case .success(let winner) = result else {
-            #expect(false, "Expected .success but got \(String(describing: result))")
-            return
-        }
-        #expect(winner.server.name == "Server C (Fast)")
-        #expect(winner.accessToken == "token-c")
-    }
-
     // PR1B: WebsocketSendResult enum mapping from C++ bridge uint8_t.
     @Test func sendResultMapsBridgeValues() {
         #expect(WebsocketSendResult(bridgeValue: 0) == .accepted)
@@ -560,6 +446,29 @@ struct FptnVPNTests {
         #expect(heartbeat?.localStopInitiator == nil)
         #expect(heartbeat?.nativeDisconnectCode == nil)
         #expect(heartbeat?.nativeStopOrigin == nil)
+    }
+
+    @Test func tunnelStartupConfigurationV1EncodesAndValidatesSuccessfully() throws {
+        let episodeID = UUID()
+        let config = try TunnelStartupConfigurationV1(
+            episodeID: episodeID,
+            recoveryPolicy: .none,
+            serverHost: "1.1.1.1",
+            serverPort: 443,
+            accessToken: "tok_test",
+            dnsIPv4: "1.1.1.1",
+            sni: "sni.test",
+            md5Fingerprint: "fp_test",
+            censorshipStrategy: CensorshipStrategy(storedValue: "sni")
+        )
+
+        let encoded = try JSONEncoder().encode(config)
+        #expect(encoded.count <= TunnelStartupConfigurationV1.maximumEncodedSize)
+
+        let decoded = try JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: encoded)
+        #expect(decoded.episodeID == episodeID)
+        #expect(decoded.serverHost == "1.1.1.1")
+        #expect(decoded.accessToken == "tok_test")
     }
 
     private func temporaryDiagnosticsDirectory() throws -> URL {

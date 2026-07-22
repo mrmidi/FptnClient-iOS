@@ -30,6 +30,15 @@ struct VPNConnection: Sendable {
     var speedHistory: [SpeedSample] = []
     var connectionMode: ConnectionMode = .auto
 
+    var connectionDurationString: String {
+        guard let connectedAt else { return "00:00:00" }
+        let duration = Int(Date().timeIntervalSince(connectedAt))
+        let hours = duration / 3600
+        let minutes = (duration % 3600) / 60
+        let seconds = duration % 60
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+    }
+
     enum ConnectionMode: Sendable {
         case auto
         case manual(VPNServer)
