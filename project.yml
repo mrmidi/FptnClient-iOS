@@ -26,8 +26,11 @@ settings:
   configs:
     Debug:
       DEBUG_INFORMATION_FORMAT: dwarf
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_SIGNPOSTS
     Release:
       DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+    Measurement:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_MEASUREMENT_BUILD FPTN_SIGNPOSTS
 
 configs:
   Debug: debug
@@ -213,7 +216,7 @@ targets:
         # memory-only telemetry path. Build with -configuration Measurement
         # to produce a clean baseline for native memory profiling.
         Measurement:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_MEASUREMENT_BUILD
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_MEASUREMENT_BUILD FPTN_SIGNPOSTS
     info:
       path: FptnVPNTunnel/Info.plist
     entitlements:
