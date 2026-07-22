@@ -18,7 +18,7 @@ configs:
 packages:
   FptnShared:
     url: https://github.com/mrmidi/FptnShared.git
-    exactVersion: 0.4.3
+    exactVersion: 0.4.4
   FptnNativeBootstrap:
     path: ../../Packages/FptnNativeBootstrap
 

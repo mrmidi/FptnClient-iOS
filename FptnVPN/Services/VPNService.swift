@@ -25,6 +25,9 @@ final class VPNService: ObservableObject {
     private var activeCoordinator: (any ConnectionLifecycleCoordinating)?
     private var activeEpisodeID: ConnectionEpisodeID?
     private var connectionTask: Task<Void, Never>?
+    private var trafficPollingTask: Task<Void, Never>?
+    private var previousTrafficSample: TrafficSample?
+    private var lastTrafficPollingFailureAt: Date?
     private var connectionGeneration: UInt64 = 0
 
     private let tokenService = TokenService.shared
@@ -71,6 +74,7 @@ final class VPNService: ObservableObject {
         connection.isConnecting = false
         connection.isReconnecting = false
         connection.runtimeState = .stopping
+        stopTrafficPolling(clearHistory: false)
 
         Task {
             if let activeCoordinator {
@@ -278,9 +282,15 @@ final class VPNService: ObservableObject {
 
         switch status {
         case .connected:
+            let isNewSession = connection.connectedAt == nil
             connection.isConnected = true
             connection.isConnecting = false
             connection.isReconnecting = false
+            if isNewSession {
+                connection.connectedAt = tunnelConnection.connectedDate ?? Date()
+                stopTrafficPolling(clearHistory: true)
+            }
+            startTrafficPollingIfNeeded()
             if let activeEpisodeID {
                 await activeCoordinator?.handle(.tunnelConnected(activeEpisodeID))
             }
@@ -289,16 +299,19 @@ final class VPNService: ObservableObject {
             connection.isConnecting = false
             connection.isReconnecting = true
             connection.runtimeState = .reasserting
+            stopTrafficPolling(clearHistory: false)
         case .connecting:
             connection.isConnected = false
             connection.isConnecting = true
             connection.isReconnecting = false
             connection.runtimeState = .starting
+            stopTrafficPolling(clearHistory: false)
         case .disconnecting:
             connection.isConnected = false
             connection.isConnecting = false
             connection.isReconnecting = false
             connection.runtimeState = .stopping
+            stopTrafficPolling(clearHistory: false)
         case .disconnected, .invalid:
             if !isUserInitiatedDisconnect, let activeEpisodeID {
                 await activeCoordinator?.handle(.tunnelDisconnected(activeEpisodeID, .remoteClosed))
@@ -315,6 +328,159 @@ final class VPNService: ObservableObject {
         connection.isConnecting = false
         connection.isReconnecting = false
         connection.runtimeState = nil
+        connection.connectedAt = nil
+        stopTrafficPolling(clearHistory: false)
+    }
+
+    // MARK: - Live transfer statistics
+
+    private func startTrafficPollingIfNeeded() {
+        guard trafficPollingTask == nil else { return }
+
+        trafficPollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.refreshTrafficSnapshot()
+
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopTrafficPolling(clearHistory: Bool) {
+        trafficPollingTask?.cancel()
+        trafficPollingTask = nil
+        previousTrafficSample = nil
+        connection.downloadSpeed = 0
+        connection.uploadSpeed = 0
+        if clearHistory {
+            connection.speedHistory = []
+        }
+    }
+
+    private func refreshTrafficSnapshot() async {
+        guard connection.isConnected,
+              !connection.isReconnecting,
+              let manager = packetTunnelProvider,
+              manager.connection.status == .connected,
+              let session = manager.connection as? NETunnelProviderSession else {
+            return
+        }
+
+        do {
+            let snapshot = try await Self.sendProviderMessage(
+                TunnelControlMessage(action: .getStatus),
+                via: session,
+                expecting: TunnelTrafficSnapshotV1.self
+            )
+            guard !Task.isCancelled, connection.isConnected, !connection.isReconnecting else {
+                return
+            }
+            applyTrafficSnapshot(snapshot, sampledAt: Date())
+        } catch {
+            logTrafficPollingFailureIfNeeded(error)
+        }
+    }
+
+    private func applyTrafficSnapshot(
+        _ snapshot: TunnelTrafficSnapshotV1,
+        sampledAt: Date
+    ) {
+        let current = TrafficSample(snapshot: snapshot, timestamp: sampledAt)
+        guard let previous = previousTrafficSample else {
+            previousTrafficSample = current
+            return
+        }
+
+        guard current.outboundPacketBytes >= previous.outboundPacketBytes,
+              current.inboundPacketBytes >= previous.inboundPacketBytes else {
+            // The provider has started a fresh session; establish a new
+            // baseline rather than presenting an invalid negative rate.
+            previousTrafficSample = current
+            return
+        }
+
+        let elapsed = current.timestamp.timeIntervalSince(previous.timestamp)
+        guard elapsed > 0 else { return }
+
+        let uploadBytes = current.outboundPacketBytes - previous.outboundPacketBytes
+        let downloadBytes = current.inboundPacketBytes - previous.inboundPacketBytes
+        connection.uploadSpeed = Double(uploadBytes) / elapsed
+        connection.downloadSpeed = Double(downloadBytes) / elapsed
+        connection.speedHistory.append(
+            SpeedSample(
+                timestamp: current.timestamp,
+                downloadMbps: connection.downloadSpeed * 8 / 1_000_000,
+                uploadMbps: connection.uploadSpeed * 8 / 1_000_000
+            )
+        )
+        if connection.speedHistory.count > 300 {
+            connection.speedHistory.removeFirst(connection.speedHistory.count - 300)
+        }
+        previousTrafficSample = current
+    }
+
+    private func logTrafficPollingFailureIfNeeded(_ error: Error) {
+        let now = Date()
+        guard lastTrafficPollingFailureAt.map({ now.timeIntervalSince($0) >= 60 }) ?? true else {
+            return
+        }
+        lastTrafficPollingFailureAt = now
+        logger.debug("Tunnel traffic snapshot unavailable: \(error.localizedDescription)")
+    }
+
+    nonisolated private static func sendProviderMessage<Response: Decodable & Sendable>(
+        _ message: TunnelControlMessage,
+        via session: NETunnelProviderSession,
+        expecting responseType: Response.Type
+    ) async throws -> Response {
+        let payload = try JSONEncoder().encode(message)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            do {
+                try session.sendProviderMessage(payload) { responseData in
+                    guard let responseData else {
+                        continuation.resume(throwing: TunnelIPCError.missingResponse)
+                        return
+                    }
+
+                    do {
+                        continuation.resume(returning: try JSONDecoder().decode(responseType, from: responseData))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    private struct TrafficSample {
+        let outboundPacketBytes: UInt64
+        let inboundPacketBytes: UInt64
+        let timestamp: Date
+
+        init(snapshot: TunnelTrafficSnapshotV1, timestamp: Date) {
+            self.outboundPacketBytes = snapshot.outboundPacketBytes
+            self.inboundPacketBytes = snapshot.inboundPacketBytes
+            self.timestamp = timestamp
+        }
+    }
+
+    private enum TunnelIPCError: LocalizedError {
+        case missingResponse
+
+        var errorDescription: String? {
+            switch self {
+            case .missingResponse:
+                return "Tunnel did not return a response"
+            }
+        }
     }
 
     /// Handles an orphaned provider after an app relaunch. Normal disconnects are

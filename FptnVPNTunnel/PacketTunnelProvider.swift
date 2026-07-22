@@ -487,7 +487,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "stop_initiator_recorded")))
         case .getStatus:
-            completionHandler?(try? JSONEncoder().encode(currentSnapshot()))
+            completionHandler?(try? JSONEncoder().encode(currentTrafficSnapshot()))
         }
     }
 
@@ -1973,6 +1973,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             nativeStopOrigin: status?.stopOrigin.rawValue ?? 0,
             nativeActiveOperations: status?.activeOperations ?? 0,
             nativeStopCleanupCompleted: status?.stopCleanupCompleted ?? false
+        )
+    }
+
+    /// This is an IPC response for the foreground app, not diagnostics
+    /// telemetry. Keep it small and restricted to monotonically increasing
+    /// byte counters so the UI can calculate its own transfer rates without
+    /// duplicating the provider's binary lifecycle/flight-recorder data.
+    private func currentTrafficSnapshot() -> TunnelTrafficSnapshotV1 {
+        stateLock.lock()
+        let outboundBytes = counters.packetFlowReadBytes
+        let inboundBytes = counters.transportReceivedBytes
+        stateLock.unlock()
+
+        return TunnelTrafficSnapshotV1(
+            outboundPacketBytes: UInt64(max(0, outboundBytes)),
+            inboundPacketBytes: UInt64(max(0, inboundBytes))
         )
     }
 
