@@ -68,6 +68,17 @@ resolve_build_type() {
 
 BUILD_TYPE="$(resolve_build_type)"
 
+# PR1A: iOS socket buffer experiment parameter.
+# 0 = kernel default. Override: FPTN_IOS_SOCKET_BUFFER_BYTES=262144
+SOCKET_BUFFER_BYTES="${FPTN_IOS_SOCKET_BUFFER_BYTES:-0}"
+case "$SOCKET_BUFFER_BYTES" in
+    0|262144|524288) ;;
+    *)
+        echo "error: invalid FPTN_IOS_SOCKET_BUFFER_BYTES=$SOCKET_BUFFER_BYTES (expected 0, 262144, or 524288)" >&2
+        exit 1
+        ;;
+esac
+
 resolve_framework_binary() {
     local framework_path="$1"
     if [ -f "${framework_path}/Versions/1.0.0/fptn_native_lib" ]; then
@@ -267,6 +278,7 @@ if [ "${FPTN_NATIVE_BUILD_IF_MISSING:-0}" = "1" ]; then
         grep -q "\"wrapper_hash\": \"${current_wrapper_hash}\"" "$manifest_path" 2>/dev/null || return 1
         grep -q "\"build_hash\": \"${current_build_hash}\"" "$manifest_path" 2>/dev/null || return 1
         grep -Fq "\"compiler\": \"${current_compiler_id}\"" "$manifest_path" 2>/dev/null || return 1
+        grep -q "\"ios_socket_buffer_bytes\": ${SOCKET_BUFFER_BYTES}" "$manifest_path" 2>/dev/null || return 1
         return 0
     }
 
@@ -285,7 +297,7 @@ if [ "$TARGET" = "macos" ]; then
     # ── arm64 slice ──────────────────────────────────────────────────────────
     ARM64_DIR="build-macos-${BUILD_TYPE}"
     echo "Building arm64 slice (${BUILD_TYPE})..."
-    conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR" -s build_type="$BUILD_TYPE"
+    conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
     cd "$ARM64_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -297,7 +309,7 @@ if [ "$TARGET" = "macos" ]; then
     # ── x86_64 slice ─────────────────────────────────────────────────────────
     X86_DIR="build-macos-x86_64-${BUILD_TYPE}"
     echo "Building x86_64 slice (${BUILD_TYPE})..."
-    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR" -s build_type="$BUILD_TYPE"
+    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
     cd "$X86_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -354,7 +366,7 @@ if [ "$TARGET" = "macos" ]; then
     exit 0
 fi
 
-conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR" -s build_type="$BUILD_TYPE"
+conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
 
 cd "$OUTPUT_DIR"
 cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
@@ -408,6 +420,7 @@ copy_framework_to_dest() {
   "wrapper_hash": "${wrapper_hash}",
   "build_hash": "${build_hash}",
   "compiler": "${compiler_id}",
+  "ios_socket_buffer_bytes": ${SOCKET_BUFFER_BYTES},
   "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 MANIFEST

@@ -16,6 +16,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #include <vector>
 
 #include <mach/mach.h>
+#include <TargetConditionals.h>
 
 #include <fptn-protocol-lib/https/websocket_client/websocket_client.h>
 
@@ -221,22 +222,15 @@ void packet_callback_adapter(fptn::common::network::IPPacketPtr packet,
         const auto& data_vec = packet->Data();
         const auto* data = data_vec.data();
         const auto len = data_vec.size();
-        const auto packet_count = wrapper->received_packet_count.fetch_add(1) + 1;
-        const auto total_bytes = wrapper->received_byte_count.fetch_add(len) + len;
+        wrapper->received_packet_count.fetch_add(1);
+        wrapper->received_byte_count.fetch_add(len);
         wrapper->callback_enter_count.fetch_add(1);
         wrapper->callback_byte_count.fetch_add(len);
         wrapper->in_packet_callback = true;
-        if (packet_count == 1 || packet_count % 500 == 0) {
-            SPDLOG_WARN(
-                "WebSocket bridge memory rss={}MB footprint={}MB received_packets={} received_bytes={} callback_enter={} callback_exit={}",
-                current_resident_size_bytes() / 1024 / 1024,
-                current_phys_footprint_bytes() / 1024 / 1024,
-                packet_count,
-                total_bytes,
-                wrapper->callback_enter_count.load(),
-                wrapper->callback_exit_count.load()
-            );
-        }
+        // PR1A: removed SPDLOG_WARN + two Mach task_info syscalls that
+        // fired on packet #1 and every 500th packet. These added
+        // non-trivial per-batch overhead on the receive hot path.
+        // Counters above remain for getStatus() reporting.
         wrapper->packet_callback(data, len, wrapper->context);
         wrapper->in_packet_callback = false;
         wrapper->callback_exit_count.fetch_add(1);
@@ -303,9 +297,16 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
                 packet_callback_adapter(std::move(packet), wrapper);
             };
 
+            // PR1A: io_context concurrency hint of 1 on iOS. The wrapper
+            // already drives the context from a single native thread; the
+            // hint only affects internal data-structure sizing.
             wrapper->client = std::make_shared<fptn::protocol::https::WebsocketClient>(
                 std::move(client_config),
+#if defined(__APPLE__) && TARGET_OS_IOS
+                1
+#else
                 4
+#endif
             );
         }
 
@@ -463,7 +464,7 @@ bool WebsocketSwiftBridge::isStarted() const {
 }
 
 WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
-    WebsocketClientBridgeStatus status = {false, false, 0, "", "", 0, 0, 0, 0, 0, 0, 0, false};
+    WebsocketClientBridgeStatus status = {false, false, 0, "", "", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0};
     if (!wrapper_) {
         status.last_error = "Invalid handle";
         return status;
@@ -483,6 +484,17 @@ WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
         status.callback_exit_count = wrapper_->callback_exit_count.load();
         status.callback_byte_count = wrapper_->callback_byte_count.load();
         status.in_packet_callback = wrapper_->in_packet_callback.load();
+        // PR1A: socket buffer diagnostics and process-wide lifecycle counters.
+        if (wrapper_->client) {
+            status.requested_rcvbuf_bytes = wrapper_->client->GetRequestedRcvbufBytes();
+            status.requested_sndbuf_bytes = wrapper_->client->GetRequestedSndbufBytes();
+            status.effective_rcvbuf_bytes = wrapper_->client->GetEffectiveRcvbufBytes();
+            status.effective_sndbuf_bytes = wrapper_->client->GetEffectiveSndbufBytes();
+            status.socket_buffer_set_error_count = wrapper_->client->GetSocketBufferSetErrorCount();
+        }
+        status.live_clients = fptn::protocol::https::WebsocketClient::GetLiveClients();
+        status.active_reader_coroutines = fptn::protocol::https::WebsocketClient::GetActiveReaderCoroutines();
+        status.active_sender_coroutines = fptn::protocol::https::WebsocketClient::GetActiveSenderCoroutines();
     } catch (const std::exception& ex) {
         status.last_error = ex.what();
     } catch (...) {

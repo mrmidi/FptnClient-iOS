@@ -20,6 +20,15 @@ struct WebsocketClientStatus: Sendable {
     let callbackExitCount: Int64
     let callbackByteCount: Int64
     let inPacketCallback: Bool
+    // PR1A: socket buffer diagnostics and process-wide lifecycle counters.
+    let requestedRcvbufBytes: Int
+    let requestedSndbufBytes: Int
+    let effectiveRcvbufBytes: Int
+    let effectiveSndbufBytes: Int
+    let liveClients: Int
+    let activeReaderCoroutines: Int
+    let activeSenderCoroutines: Int
+    let socketBufferSetErrorCount: Int
 }
 
 final class WebsocketClientBridge {
@@ -149,7 +158,15 @@ final class WebsocketClientBridge {
             callbackEnterCount: Int64(raw.callback_enter_count),
             callbackExitCount: Int64(raw.callback_exit_count),
             callbackByteCount: Int64(raw.callback_byte_count),
-            inPacketCallback: raw.in_packet_callback
+            inPacketCallback: raw.in_packet_callback,
+            requestedRcvbufBytes: Int(raw.requested_rcvbuf_bytes),
+            requestedSndbufBytes: Int(raw.requested_sndbuf_bytes),
+            effectiveRcvbufBytes: Int(raw.effective_rcvbuf_bytes),
+            effectiveSndbufBytes: Int(raw.effective_sndbuf_bytes),
+            liveClients: Int(raw.live_clients),
+            activeReaderCoroutines: Int(raw.active_reader_coroutines),
+            activeSenderCoroutines: Int(raw.active_sender_coroutines),
+            socketBufferSetErrorCount: Int(raw.socket_buffer_set_error_count)
         )
     }
 }

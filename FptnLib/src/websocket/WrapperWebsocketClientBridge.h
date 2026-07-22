@@ -29,6 +29,15 @@ struct WebsocketClientBridgeStatus {
     int64_t callback_exit_count;
     int64_t callback_byte_count;
     bool in_packet_callback;
+    // PR1A: socket buffer diagnostics and process-wide lifecycle counters.
+    int requested_rcvbuf_bytes;
+    int requested_sndbuf_bytes;
+    int effective_rcvbuf_bytes;
+    int effective_sndbuf_bytes;
+    int live_clients;
+    int active_reader_coroutines;
+    int active_sender_coroutines;
+    int socket_buffer_set_error_count;
 };
 
 // PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,
