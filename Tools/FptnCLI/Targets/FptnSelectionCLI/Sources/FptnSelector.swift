@@ -327,6 +327,9 @@ struct FptnSelectorApp {
                     case .success:
                         statusStr = "ONLINE"
                         latencyStr = obs.totalBootstrapMs.map { "\($0) ms" } ?? "N/A"
+                    case .certificateMismatch:
+                        statusStr = "OUTDATED_TOKEN"
+                        latencyStr = "N/A"
                     default:
                         statusStr = obs.outcome.rawValue.uppercased()
                         latencyStr = "N/A"

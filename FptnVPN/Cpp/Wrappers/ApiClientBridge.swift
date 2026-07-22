@@ -21,13 +21,14 @@ struct ApiClientHandshakeResult: Sendable {
 final class ApiClientBridge: @unchecked Sendable {
     private let client: SwiftApiClient
 
-    init(host: String, port: Int, sni: String, md5Fingerprint: String, censorshipStrategy: String = "SNI") {
+    init(host: String, port: Int, sni: String, md5Fingerprint: String, censorshipStrategy: String = "SNI", name: String = "") {
         client = SwiftApiClient(
             std.string(host),
             Int32(port),
             std.string(sni),
             std.string(md5Fingerprint),
-            std.string(censorshipStrategy)
+            std.string(censorshipStrategy),
+            std.string(name)
         )
     }
 

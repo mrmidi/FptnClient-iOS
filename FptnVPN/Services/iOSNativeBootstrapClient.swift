@@ -17,7 +17,8 @@ final class iOSNativeBootstrapClient: NativeBootstrapClient, @unchecked Sendable
             port: server.port,
             sni: context.sni,
             md5Fingerprint: server.md5Fingerprint,
-            censorshipStrategy: context.censorshipStrategy.rawValue
+            censorshipStrategy: context.censorshipStrategy.rawValue,
+            name: server.name
         )
     }
 

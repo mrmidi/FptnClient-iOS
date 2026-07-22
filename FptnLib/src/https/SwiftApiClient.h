@@ -34,7 +34,8 @@ public:
         int port,
         const std::string& sni,
         const std::string& md5_fingerprint,
-        const std::string& censorship_strategy
+        const std::string& censorship_strategy,
+        const std::string& name = ""
     );
 
     ~SwiftApiClient();

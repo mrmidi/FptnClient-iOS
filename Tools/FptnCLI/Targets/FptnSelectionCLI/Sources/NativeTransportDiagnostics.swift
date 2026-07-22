@@ -41,7 +41,8 @@ public final class NativeTransportDiagnostics: ServerDiagnosticProbing, @uncheck
             Int32(server.port),
             std.string(context.sni),
             std.string(server.md5Fingerprint),
-            std.string(context.censorshipStrategy.rawValue)
+            std.string(context.censorshipStrategy.rawValue),
+            std.string(server.name)
         )
         let start = Date()
         let result = try! await executor.run {

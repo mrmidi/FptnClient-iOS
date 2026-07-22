@@ -84,7 +84,8 @@ SwiftApiClient::SwiftApiClient(
     int port,
     const std::string& sni,
     const std::string& md5_fingerprint,
-    const std::string& censorship_strategy
+    const std::string& censorship_strategy,
+    const std::string& name
 )
     : client_(nullptr)
 {
@@ -94,7 +95,8 @@ SwiftApiClient::SwiftApiClient(
             port,
             sni,
             md5_fingerprint,
-            parse_censorship_strategy(censorship_strategy.c_str())
+            parse_censorship_strategy(censorship_strategy.c_str()),
+            name
         );
     } catch (const std::exception& e) {
         client_ = nullptr;

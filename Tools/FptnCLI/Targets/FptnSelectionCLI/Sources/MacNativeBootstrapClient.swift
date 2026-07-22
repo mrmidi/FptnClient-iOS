@@ -19,7 +19,8 @@ public final class MacNativeBootstrapClient: NativeBootstrapClient, @unchecked S
             Int32(server.port),
             std.string(context.sni),
             std.string(server.md5Fingerprint),
-            std.string(context.censorshipStrategy.rawValue)
+            std.string(context.censorshipStrategy.rawValue),
+            std.string(server.name)
         )
     }
 

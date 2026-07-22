@@ -65,7 +65,7 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
             }
 
             guard loginResponse.code == 200 else {
-                let failKind = mapFailureKind(loginResponse.code)
+                let failKind = mapFailureKind(loginResponse.code, errmsg: loginResponse.errmsg)
                 return .failure(ServerProbeFailure(
                     server: server, kind: failKind,
                     metrics: ProbeMetrics(serverID: server.id, queuePosition: attempt.queuePosition,
@@ -154,7 +154,11 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
         }
     }
 
-    private func mapFailureKind(_ code: Int) -> ServerProbeFailureKind {
+    private func mapFailureKind(_ code: Int, errmsg: String = "") -> ServerProbeFailureKind {
+        let lower = errmsg.lowercased()
+        if lower.contains("outdated token") || lower.contains("certificate") || lower.contains("certificateverifyfailed") || lower.contains("md5 mismatch") {
+            return .certificateMismatch
+        }
         switch code {
         case 401: return .authenticationRejected
         case 403: return .authorizationRejected
