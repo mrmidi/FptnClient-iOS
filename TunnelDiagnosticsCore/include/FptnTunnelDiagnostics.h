@@ -13,6 +13,23 @@
 extern "C" {
 #endif
 
+// ── Schema constants ─────────────────────────────────────────────────
+
+uint16_t fptn_diagnostics_schema_version(void);
+size_t fptn_flight_recorder_capacity(void);
+size_t fptn_flight_recorder_record_size(void);
+size_t fptn_flight_ring_file_size(void);
+
+// ── Read status ──────────────────────────────────────────────────────
+
+typedef enum {
+    FPTN_READ_OK = 0,
+    FPTN_READ_FILE_NOT_FOUND = 1,
+    FPTN_READ_INVALID_HEADER = 2,
+    FPTN_READ_EMPTY = 3,
+    FPTN_READ_IO_ERROR = 4
+} FptnReadStatus;
+
 // ── Flight Recorder ──────────────────────────────────────────────────
 
 
@@ -125,7 +142,7 @@ typedef struct {
 } FptnDecodedLifecycleSnapshot;
 
 // Reads the latest valid snapshot from a double-buffered file.
-int
+FptnReadStatus
 fptn_lifecycle_store_read_latest(
     const char *path,
     FptnDecodedLifecycleSnapshot *output);
@@ -145,11 +162,12 @@ typedef struct {
     uint64_t value_2;
 } FptnDecodedFlightEvent;
 
-size_t
+FptnReadStatus
 fptn_flight_recorder_read_valid(
     const char *path,
     FptnDecodedFlightEvent *output,
-    size_t output_capacity);
+    size_t output_capacity,
+    size_t *output_count);
 
 #ifdef __cplusplus
 }
