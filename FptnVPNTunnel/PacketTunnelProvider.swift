@@ -558,8 +558,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             accessToken: configuration.accessToken,
             md5Fingerprint: configuration.md5Fingerprint,
             censorshipStrategy: configuration.websocketStrategy,
-            packetCallback: { [weak self] packet in
-                self?.handleIncomingPacketFromServer(packet, generation: generation)
+            packetBatchCallback: { [weak self] batch in
+                self?.handleIncomingPacketBatchFromServer(batch, generation: generation)
             },
             connectedCallback: { [weak self] in
                 guard let self else { return }
@@ -1177,13 +1177,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
     }
 
-    private func handleIncomingPacketFromServer(_ packet: Data, generation: Int) {
-        guard generation == currentWebSocketGeneration() else { return }
-        guard shouldHandlePackets() else { return }
-
-        let protocolNumber = ipProtocolNumber(for: packet)
-        packetFlow.writePackets([packet], withProtocols: [protocolNumber])
-        recordPacketFlowWrite(byteCount: Int64(packet.count))
+    private func handleIncomingPacketBatchFromServer(_ batch: InboundPacketBatch, generation: Int) {
+        guard generation == currentWebSocketGeneration(), shouldHandlePackets(),
+              !batch.packets.isEmpty else { return }
+        let bytes = batch.packets.reduce(into: Int64.zero) { $0 += Int64($1.count) }
+        let accepted = packetFlow.writePackets(batch.packets, withProtocols: batch.protocols)
+        recordPacketFlowWrite(
+            packetCount: Int64(batch.packets.count),
+            byteCount: bytes,
+            accepted: accepted
+        )
     }
 
     private func shouldContinueReadLoop() -> Bool {
@@ -1484,18 +1487,26 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         clearReadBackpressure()
     }
 
-    private func recordPacketFlowWrite(byteCount: Int64) -> Int64 {
+    private func recordPacketFlowWrite(
+        packetCount writtenPacketCount: Int64,
+        byteCount: Int64,
+        accepted: Bool
+    ) -> Int64 {
         let now = Date()
         var previousInboundActivityAt: Date?
         var packetCount: Int64 = 0
 
         stateLock.lock()
         previousInboundActivityAt = counters.lastInboundActivityAt
-        counters.transportReceivedPackets += 1
+        counters.transportReceivedPackets += writtenPacketCount
         packetCount = counters.transportReceivedPackets
         counters.transportReceivedBytes += byteCount
-        counters.packetFlowWritePackets += 1
-        counters.packetFlowWriteBytes += byteCount
+        if accepted {
+            counters.packetFlowWritePackets += writtenPacketCount
+        }
+        if accepted {
+            counters.packetFlowWriteBytes += byteCount
+        }
         counters.lastInboundActivityAt = now
         stateLock.unlock()
 
@@ -1503,7 +1514,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             direction: "inbound",
             previousActivityAt: previousInboundActivityAt,
             now: now,
-            packetCount: 1,
+            packetCount: writtenPacketCount,
             byteCount: byteCount
         )
         return packetCount

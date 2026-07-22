@@ -39,11 +39,23 @@ struct WebsocketClientStatus: Sendable {
     let stopOrigin: WebsocketStopOrigin
     let stopCleanupCompleted: Bool
     let activeOperations: UInt32
+    let outboundAdmissionCopyBytes: UInt64
+    let outboundRejectedBeforeCopyBytes: UInt64
+    let outboundCopiedButRejectedBytes: UInt64
+    let inboundZeroCopyBytes: UInt64
+    let inboundBatchesDelivered: UInt64
+    let livePacketLeases: UInt64
+    let peakPacketLeases: UInt64
+}
+
+struct InboundPacketBatch {
+    let packets: [Data]
+    let protocols: [NSNumber]
 }
 
 final class WebsocketClientBridge {
 
-    typealias PacketCallback     = (Data) -> Void
+    typealias PacketBatchCallback = (InboundPacketBatch) -> Void
     typealias ConnectionCallback = () -> Void
     typealias DisconnectionCallback = (_ wasConnected: Bool, _ reason: String) -> Void
     typealias IPAssignedCallback = (_ ipv4: String, _ ipv6: String) -> Void
@@ -51,7 +63,7 @@ final class WebsocketClientBridge {
     // MARK: - Private state
 
     private var clientBridge: WebsocketSwiftBridge! = nil
-    private let packetCallback: PacketCallback
+    private let packetBatchCallback: PacketBatchCallback
     private let connectedCallback: ConnectionCallback
     private let disconnectedCallback: DisconnectionCallback
     private let ipAssignedCallback: IPAssignedCallback
@@ -71,12 +83,12 @@ final class WebsocketClientBridge {
         accessToken: String,
         md5Fingerprint: String,
         censorshipStrategy: String = "SNI",
-        packetCallback: @escaping PacketCallback,
+        packetBatchCallback: @escaping PacketBatchCallback,
         connectedCallback: @escaping ConnectionCallback,
         disconnectedCallback: @escaping DisconnectionCallback = { _, _ in },
         ipAssignedCallback: @escaping IPAssignedCallback = { _, _ in }
     ) {
-        self.packetCallback    = packetCallback
+        self.packetBatchCallback = packetBatchCallback
         self.connectedCallback = connectedCallback
         self.disconnectedCallback = disconnectedCallback
         self.ipAssignedCallback = ipAssignedCallback
@@ -92,11 +104,15 @@ final class WebsocketClientBridge {
             std.string(md5Fingerprint),
             std.string(censorshipStrategy),
             // IPPacketCallback
-            { rawPtr, length, ctx in
-                guard let ctx, let rawPtr else { return }
+            { descriptors, count, ctx in
+                guard let descriptors else { return }
+                guard let ctx else {
+                    for index in 0..<Int(count) { fptn_release_owned_packet(descriptors[index].owner) }
+                    return
+                }
                 let bridge = Unmanaged<WebsocketClientBridge>
                     .fromOpaque(ctx).takeUnretainedValue()
-                bridge.packetCallback(Data(bytes: rawPtr, count: Int(length)))
+                bridge.packetBatchCallback(WebsocketClientBridge.makeInboundBatch(descriptors, count: Int(count)))
             },
             // ConnectionCallback
             { ctx in
@@ -172,6 +188,25 @@ final class WebsocketClientBridge {
         clientBridge.isStarted()
     }
 
+    private static let ipv4ProtocolNumber = NSNumber(value: AF_INET)
+    private static let ipv6ProtocolNumber = NSNumber(value: AF_INET6)
+    private static func makeInboundBatch(_ descriptors: UnsafePointer<FptnOwnedPacketDescriptor>, count: Int) -> InboundPacketBatch {
+        var packets: [Data] = []
+        var protocols: [NSNumber] = []
+        packets.reserveCapacity(count)
+        protocols.reserveCapacity(count)
+        for index in 0..<count {
+            let descriptor = descriptors[index]
+            guard let bytes = descriptor.bytes, descriptor.length > 0, let owner = descriptor.owner else {
+                if let owner = descriptor.owner { fptn_release_owned_packet(owner) }
+                continue
+            }
+            packets.append(Data(bytesNoCopy: bytes, count: Int(descriptor.length), deallocator: .custom { _, _ in fptn_release_owned_packet(owner) }))
+            protocols.append(descriptor.ip_version == 6 ? ipv6ProtocolNumber : ipv4ProtocolNumber)
+        }
+        return InboundPacketBatch(packets: packets, protocols: protocols)
+    }
+
     var status: WebsocketClientStatus {
         let raw = clientBridge.getStatus()
         return WebsocketClientStatus(
@@ -203,7 +238,14 @@ final class WebsocketClientBridge {
             disconnectCode: WebsocketDisconnectCode(bridgeValue: raw.disconnect_code),
             stopOrigin: WebsocketStopOrigin(bridgeValue: raw.stop_origin),
             stopCleanupCompleted: raw.stop_cleanup_completed,
-            activeOperations: raw.active_operations
+            activeOperations: raw.active_operations,
+            outboundAdmissionCopyBytes: raw.outbound_admission_copy_bytes,
+            outboundRejectedBeforeCopyBytes: raw.outbound_rejected_before_copy_bytes,
+            outboundCopiedButRejectedBytes: raw.outbound_copied_but_rejected_bytes,
+            inboundZeroCopyBytes: raw.inbound_zero_copy_bytes,
+            inboundBatchesDelivered: raw.inbound_batches_delivered,
+            livePacketLeases: raw.live_packet_leases,
+            peakPacketLeases: raw.peak_packet_leases
         )
     }
 }
