@@ -9,10 +9,13 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #include <string>
 #include <cstdint>
 #include <stdbool.h>
+#include <swift/bridging>
 
 namespace fptn::protocol::https { class ApiClient; }
 
-class SwiftApiClient {
+// PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,
+// removing the implicitly-unwrapped-optional workaround in Swift wrappers.
+class SWIFT_NONCOPYABLE SwiftApiClient {
 public:
     struct Response {
         std::string body;
@@ -31,7 +34,8 @@ public:
         int port,
         const std::string& sni,
         const std::string& md5_fingerprint,
-        const std::string& censorship_strategy
+        const std::string& censorship_strategy,
+        const std::string& name = ""
     );
 
     ~SwiftApiClient();
@@ -44,6 +48,7 @@ public:
     Response get(const std::string& path, int timeout) const;
     Response post(const std::string& path, const std::string& body, int timeout) const;
     HandshakeResult testHandshake(int timeout) const;
+    void cancel() const;
 
 private:
     fptn::protocol::https::ApiClient* client_;

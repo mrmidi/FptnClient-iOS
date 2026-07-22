@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_CXX_INTEROPERABILITY_MODE: default
     SWIFT_OBJC_INTEROP_MODE: objcxx
-    CLANG_CXX_LANGUAGE_STANDARD: c++20
+    CLANG_CXX_LANGUAGE_STANDARD: c++23
 
 configs:
   Debug: debug
@@ -17,7 +17,10 @@ configs:
 
 packages:
   FptnShared:
-    path: ../../../FptnShared
+    url: https://github.com/mrmidi/FptnShared.git
+    exactVersion: 0.4.3
+  FptnNativeBootstrap:
+    path: ../../Packages/FptnNativeBootstrap
 
 targets:
 
@@ -32,22 +35,51 @@ targets:
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
+        product: FptnSharedTunnel
+      - package: FptnShared
         product: FptnServerSelection
       - package: FptnShared
         product: FptnConnectionOrchestration
       - package: FptnShared
         product: FptnSharedTestSupport
+      - package: FptnNativeBootstrap
+        product: FptnNativeBootstrap
       - framework: ../Fptn-macOS/Cpp/fptn_native_lib.framework
     settings:
       base:
         SWIFT_OBJC_BRIDGING_HEADER: Targets/FptnSelectionCLI/Cpp/FptnSelectionCLI-Bridging-Header.h
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp
-        LD_RUNPATH_SEARCH_PATHS: "@loader_path/../../../../../../Fptn-macOS/Cpp"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../../../../Fptn-macOS/Cpp"
+          - "@loader_path/../../../../Fptn-macOS/Cpp"
+          - "@loader_path/../../../../../../Fptn-macOS/Cpp"
+          - "$(SRCROOT)/../../Fptn-macOS/Cpp"
+
+  CLIIntegrationTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Targets/CLIIntegrationTests
+    dependencies:
+      - target: FptnSelectionCLI
+      - package: FptnShared
+        product: FptnSharedCore
+      - package: FptnShared
+        product: FptnSharedTunnel
+      - package: FptnShared
+        product: FptnServerSelection
+      - package: FptnNativeBootstrap
+        product: FptnNativeBootstrap
 
 schemes:
   FptnSelectionCLI:
     build:
       targets:
         FptnSelectionCLI: all
+        CLIIntegrationTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - CLIIntegrationTests

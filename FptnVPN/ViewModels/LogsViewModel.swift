@@ -86,6 +86,8 @@ final class LogsViewModel: ObservableObject {
         RingLogSink.app.clear()
         RingLogSink.tunnel.clear()
         TunnelDiagnosticsStore.shared.clear()
+        // PR4b: write logical clear watermark instead of deleting binary files.
+        TunnelDiagnosticsDecoder.production?.writeClearWatermark()
         entries.removeAll()
         lastAppOffset = 0
         lastTunnelOffset = 0
@@ -102,7 +104,8 @@ final class LogsViewModel: ObservableObject {
 
     func exportFilteredText() -> String {
         let logText = filteredEntries.map(\.raw).joined(separator: "\n")
-        let diagnosticsText = TunnelDiagnosticsStore.shared.exportDiagnosticsText()
+        // PR4b: use binary decoder for diagnostics export.
+        let diagnosticsText = TunnelDiagnosticsDecoder.production?.exportText() ?? ""
         return redactSensitive([logText, diagnosticsText].filter { !$0.isEmpty }.joined(separator: "\n\n"))
     }
 

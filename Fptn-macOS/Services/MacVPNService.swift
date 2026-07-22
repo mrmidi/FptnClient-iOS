@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import NetworkExtension
 import FptnSharedCore
+import FptnSharedTunnel
 
 @MainActor
 final class MacVPNService: ObservableObject {
@@ -69,21 +70,25 @@ final class MacVPNService: ObservableObject {
                 let dns = try fetchDNSInfo(server: server, sni: sni, accessToken: accessToken)
 
                 let manager = try await ensureManager()
-                let payload = MacTunnelProviderPayload(
-                    server: server.host,
-                    port: server.port,
+                let startup = try TunnelStartupConfigurationV1(
+                    episodeID: UUID(),
+                    recoveryPolicy: .automatic(AutoTunnelRecoveryPolicy(sameServerAttempts: 0, reconnectDelaySeconds: 2)),
+                    serverHost: server.host,
+                    serverPort: server.port,
                     accessToken: accessToken,
                     dnsIPv4: dns.dnsIPv4,
                     dnsIPv6: dns.dnsIPv6,
                     sni: sni,
                     md5Fingerprint: server.md5_fingerprint,
-                    logLevel: logLevel
+                    censorshipStrategy: CensorshipStrategy(storedValue: ""),
+                    logLevel: SharedLogLevel(rawValue: logLevel) ?? .warning
                 )
+                let startupData = try JSONEncoder().encode(startup)
 
                 let proto = NETunnelProviderProtocol()
                 proto.serverAddress = "Fptn-macOS"
                 proto.providerBundleIdentifier = "net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel"
-                proto.providerConfiguration = payload.asDictionary()
+                proto.providerConfiguration = [TunnelProviderConfigurationKey.startupV1: startupData]
 
                 // Force APNs (push) traffic through the tunnel. excludeAPNs is only
                 // honored when includeAllNetworks is true, which captures all traffic;

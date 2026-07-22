@@ -9,7 +9,9 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <cstdint>
 #include <string>
+#include <swift/bridging>
 
 // Forward declaration of internal wrapper implementation
 struct WebsocketClientWrapper;
@@ -28,9 +30,30 @@ struct WebsocketClientBridgeStatus {
     int64_t callback_exit_count;
     int64_t callback_byte_count;
     bool in_packet_callback;
+    // PR1A: socket buffer diagnostics and process-wide lifecycle counters.
+    int requested_rcvbuf_bytes;
+    int requested_sndbuf_bytes;
+    int effective_rcvbuf_bytes;
+    int effective_sndbuf_bytes;
+    int live_clients;
+    int active_reader_coroutines;
+    int active_sender_coroutines;
+    int socket_buffer_set_error_count;
+    // PR1B: outbound queue diagnostics.
+    uint64_t queued_packets;
+    uint64_t queued_bytes;
+    uint64_t queued_bytes_peak;
+    uint64_t queue_full_count;
+    // PR1C: teardown diagnostics.
+    uint16_t disconnect_code;
+    uint16_t stop_origin;
+    bool stop_cleanup_completed;
+    uint32_t active_operations;
 };
 
-class WebsocketSwiftBridge {
+// PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,
+// removing the implicitly-unwrapped-optional workaround in Swift wrappers.
+class SWIFT_NONCOPYABLE WebsocketSwiftBridge {
 public:
     // Callbacks
     using IPPacketCallback = void (*)(const uint8_t* packet_data, uint32_t length, void* context);
@@ -60,8 +83,11 @@ public:
     WebsocketSwiftBridge& operator=(WebsocketSwiftBridge&& other) noexcept;
 
     bool start();
-    bool stop();
-    bool sendPacket(const uint8_t* packet_data, uint32_t length);
+    // PR1C: stop accepts an origin (0=none, 1=swift_tunnel_stop,
+    // 2=swift_reconnect, 3=native_failure, 4=peer, 255=unknown).
+    bool stop(std::uint16_t origin = 1);
+    // PR1B: returns 0=accepted, 1=queue_full, 2=transport_stopped, 3=invalid_packet.
+    std::uint8_t sendPacket(const std::uint8_t* packet_data, std::uint32_t length);
     bool isStarted() const;
     WebsocketClientBridgeStatus getStatus() const;
     void registerIPAssignedCallback(IPAssignedCallback callback);

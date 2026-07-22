@@ -8,24 +8,11 @@ import Foundation
 import Darwin
 import Network
 import NetworkExtension
-
-private enum TunnelControlAction: String, Codable {
-    case setLogLevel = "set_log_level"
-    case ping
-    case getStatus = "get_status"
-    case prepareStop = "prepare_stop"
-}
-
-private struct TunnelControlMessage: Codable {
-    let action: TunnelControlAction
-    let logLevel: String?
-    let initiator: String?
-}
-
-private struct TunnelControlResponse: Codable {
-    let ok: Bool
-    let message: String
-}
+import FptnSharedCore
+import FptnSharedTunnel
+#if FPTN_SIGNPOSTS
+import OSLog
+#endif
 
 private enum TunnelRuntimeState: String, Codable {
     case idle
@@ -35,6 +22,19 @@ private enum TunnelRuntimeState: String, Codable {
     case waitingForNetwork
     case stopping
     case failed
+
+    // PR3: stable numeric codes for binary snapshot.
+    var binaryCode: UInt32 {
+        switch self {
+        case .idle: return 0
+        case .starting: return 1
+        case .connected: return 2
+        case .reasserting: return 3
+        case .waitingForNetwork: return 4
+        case .stopping: return 5
+        case .failed: return 6
+        }
+    }
 }
 
 private enum ReconnectScheduleOutcome {
@@ -47,6 +47,15 @@ private enum LocalStopInitiator: String, Codable {
     case appDisconnect = "app_disconnect"
     case providerFailure = "provider_failure"
     case systemStop = "system_stop"
+
+    // PR3: stable numeric codes for binary snapshot (not hashValue).
+    var binaryCode: UInt16 {
+        switch self {
+        case .appDisconnect: return 1
+        case .providerFailure: return 2
+        case .systemStop: return 3
+        }
+    }
 }
 
 private struct TunnelRuntimeSnapshot: Codable {
@@ -85,9 +94,27 @@ private struct TunnelRuntimeSnapshot: Codable {
     let nativeCallbackExitCount: Int64
     let nativeCallbackByteCount: Int64
     let nativeInPacketCallback: Bool
+    // PR2: all PR1A–1C native diagnostics for app-side visibility.
+    let nativeRequestedRcvbufBytes: Int
+    let nativeRequestedSndbufBytes: Int
+    let nativeEffectiveRcvbufBytes: Int
+    let nativeEffectiveSndbufBytes: Int
+    let nativeSocketBufferSetErrorCount: Int
+    let nativeLiveClients: Int
+    let nativeActiveReaderCoroutines: Int
+    let nativeActiveSenderCoroutines: Int
+    let nativeQueuedPackets: UInt64
+    let nativeQueuedBytes: UInt64
+    let nativeQueuedBytesPeak: UInt64
+    let nativeQueueFullCount: UInt64
+    let nativeDisconnectCode: UInt16
+    let nativeStopOrigin: UInt16
+    let nativeActiveOperations: UInt32
+    let nativeStopCleanupCompleted: Bool
 }
 
 private struct TunnelConfiguration {
+    let episodeID: UUID
     let serverIP: String
     let serverPort: Int
     let accessToken: String
@@ -107,52 +134,36 @@ private struct TunnelConfiguration {
     let tunIPv6: String
 
     init?(providerConfiguration: [String: Any]) {
-        guard
-            let serverIP = providerConfiguration["server"] as? String,
-            let serverPort = providerConfiguration["port"] as? Int,
-            let accessToken = providerConfiguration["accessToken"] as? String,
-            let dnsIPv4 = providerConfiguration["dnsIPv4"] as? String,
-            let sni = providerConfiguration["sni"] as? String,
-            let md5Fingerprint = providerConfiguration["md5Fingerprint"] as? String
-        else {
+        guard let payloadData = providerConfiguration[TunnelProviderConfigurationKey.startupV1] as? Data,
+           payloadData.count <= TunnelStartupConfigurationV1.maximumEncodedSize,
+              let startupV1 = try? JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: payloadData) else {
             return nil
         }
-
-        let dnsIPv6 = Self.validIPv6(providerConfiguration["dnsIPv6"] as? String)
-        let logLevel = providerConfiguration["logLevel"] as? String ?? "info"
-        let bypassMethod = providerConfiguration["bypassMethod"] as? String ?? "SNI"
-        let websocketIdleTimeoutSeconds = providerConfiguration["websocketIdleTimeoutSeconds"] as? Int ?? 60
-        let reconnectEnabled = providerConfiguration["reconnectEnabled"] as? Bool ?? true
-        let maxReconnectAttempts = providerConfiguration["maxReconnectAttempts"] as? Int ?? 5
-        let reconnectDelaySeconds = providerConfiguration["reconnectDelaySeconds"] as? Int ?? 2
-        let customDns = providerConfiguration["customDnsIPv4"] as? String
-        let customDnsIPv4 = (customDns?.isEmpty == false) ? customDns : nil
-
-        self.serverIP = serverIP
-        self.serverPort = serverPort
-        self.accessToken = accessToken
-        self.dnsIPv4 = dnsIPv4
-        self.dnsIPv6 = dnsIPv6
-        self.customDnsIPv4 = customDnsIPv4
-        self.sni = sni
-        self.md5Fingerprint = md5Fingerprint
-        self.logLevel = logLevel
-        self.websocketIdleTimeoutSeconds = websocketIdleTimeoutSeconds
-        self.reconnectEnabled = reconnectEnabled
-        self.maxReconnectAttempts = maxReconnectAttempts
-        self.reconnectDelaySeconds = reconnectDelaySeconds
+        self.episodeID = startupV1.episodeID
+        self.serverIP = startupV1.serverHost
+        self.serverPort = startupV1.serverPort
+        self.accessToken = startupV1.accessToken
+        self.dnsIPv4 = startupV1.dnsIPv4
+        self.dnsIPv6 = startupV1.dnsIPv6
+        self.customDnsIPv4 = startupV1.customDnsIPv4
+        self.sni = startupV1.sni
+        self.md5Fingerprint = startupV1.md5Fingerprint
+        self.logLevel = startupV1.logLevel.rawValue
+        self.websocketIdleTimeoutSeconds = startupV1.websocketIdleTimeoutSeconds
+        switch startupV1.recoveryPolicy {
+        case .none:
+            self.reconnectEnabled = false
+            self.maxReconnectAttempts = 0
+            self.reconnectDelaySeconds = 0
+        case .automatic(let autoPolicy):
+            self.reconnectEnabled = true
+            self.maxReconnectAttempts = autoPolicy.sameServerAttempts
+            self.reconnectDelaySeconds = autoPolicy.reconnectDelaySeconds
+        }
         self.tunIPv4 = "10.8.0.2"
         self.tunIPv4Gateway = "10.8.0.1"
         self.tunIPv6 = "fd00::1"
-        self.websocketStrategy = "\(bypassMethod);idle_timeout=\(websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
-    }
-
-    private static func validIPv6(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-            return nil
-        }
-        var addr = in6_addr()
-        return value.withCString { inet_pton(AF_INET6, $0, &addr) == 1 ? value : nil }
+        self.websocketStrategy = "\(startupV1.censorshipStrategy.rawValue);idle_timeout=\(startupV1.websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
     }
 }
 
@@ -170,9 +181,45 @@ private struct PacketCounters {
     var lastSendFailureWarningAt: Date?
 }
 
+// PR2: explicit invariant violations, logged once per type.
+enum ProviderInvariant: Hashable {
+    case multipleNativeClients
+    case incompleteNativeTeardown
+}
+
+// PR2: process-lifetime read ownership token. Prevents cross-session
+// generation collisions (generation resets to 0 on each startTunnel).
+private struct PacketReadToken: Equatable {
+    let session: UInt64
+    let generation: Int
+}
+
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let eventQueue = DispatchQueue(label: "net.mrmidi.FptnVPN.tunnel.events")
     private let stateLock = NSLock()
+    // PR3: protects latestEventSequence and physicalFootprintPeakBytes
+    // which can be written from native callbacks on different threads.
+    private let diagnosticsLock = NSLock()
+
+    // PR3: binary flight recorder + lifecycle snapshot store.
+    private var flightRecorder: TunnelFlightRecorder?
+    private var lifecycleStore: TunnelLifecycleSnapshotStore?
+    private var tunnelSessionToken: UInt64 = 0
+    private var tunnelStartedMachTime: UInt64 = 0
+    private var physicalFootprintPeakBytes: UInt64 = 0
+    private var latestEventSequence: UInt64 = 0
+
+    // PR3A: Instruments signpost state (Debug/Measurement only).
+    // Protected by signpostLock — never hold stateLock while emitting.
+    #if FPTN_SIGNPOSTS
+    private let signpostLock = NSLock()
+    private var startupSignpost: OSSignpostIntervalState?
+    private var bridgeSignpost: (generation: Int, id: OSSignpostID, state: OSSignpostIntervalState)?
+    private var teardownSignpost: (generation: Int, id: OSSignpostID, state: OSSignpostIntervalState)?
+    private var shutdownSignpost: OSSignpostIntervalState?
+    private var reconnectSignpost: (attempt: Int, id: OSSignpostID, state: OSSignpostIntervalState)?
+    private var readLoopSignpost: OSSignpostIntervalState?
+    #endif
 
     private var wsClient: WebsocketClientBridge?
     private var configuration: TunnelConfiguration?
@@ -202,9 +249,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var lastStopReasonRawValue: Int?
     private var counters = PacketCounters()
     private var lastMemoryWarningAt: Date?
+    // PR4b: track last recorded pressure level so warning→emergency
+    // transitions are always recorded even inside the log throttle.
+    private var lastRecordedMemoryLevel: TunnelMemoryPressureLevel = .normal
     private var readBackpressureUntil: Date?
     private var readBackpressureWorkItem: DispatchWorkItem?
     private var consecutiveSendFailureBatches = 0
+
+    // PR2: invariant tracking (logged once per type).
+    private var loggedInvariantViolations: Set<ProviderInvariant> = []
+    // PR2: process-lifetime session token + generation-based read ownership.
+    private var tunnelSession: UInt64 = 0
+    private var pendingReadToken: PacketReadToken?
+    // PR2: final native status preserved before detaching a client.
+    private var lastNativeStatus: WebsocketClientStatus?
+    private var lastNativeStatusGeneration: Int?
 
     private let runtimeReconnectDelayCapSeconds = 60
     private let activityResumeLogThresholdSeconds = 60
@@ -217,7 +276,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let pathHandoffHintWindowSeconds: TimeInterval = 10
 
     deinit {
-        recordProviderEvent(category: "lifecycle", message: "PacketTunnelProvider deinit")
+        recordProviderEvent(category: "lifecycle", message: "PacketTunnelProvider deinit", flightEvent: .tunnelStopped)
         updateDiagnosticsHeartbeat(lastEvent: "deinit")
     }
 
@@ -225,10 +284,37 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         options: [String: NSObject]?,
         completionHandler: @escaping (Error?) -> Void
     ) {
+        #if FPTN_SIGNPOSTS
+        signpostLock.lock()
+        startupSignpost = TunnelSignposts.beginTunnelStartup()
+        signpostLock.unlock()
+        #endif
         bootstrapLogging()
         TunnelCrashSignalInstaller.installIfPossible()
+
+        // PR3: initialize binary flight recorder + lifecycle snapshot store.
+        if flightRecorder == nil,
+           let container = FileManager.default.containerURL(
+               forSecurityApplicationGroupIdentifier: "group.net.mrmidi.FptnVPN") {
+            let diagDir = container.appendingPathComponent("diagnostics", isDirectory: true)
+            try? FileManager.default.createDirectory(at: diagDir, withIntermediateDirectories: true)
+            let ringPath = diagDir.appendingPathComponent("flight-ring.bin").path
+            let snapPath = diagDir.appendingPathComponent("lifecycle-snapshot.bin").path
+            flightRecorder = TunnelFlightRecorder(path: ringPath)
+            lifecycleStore = TunnelLifecycleSnapshotStore(path: snapPath)
+            let identity = ProviderProcessIdentity.shared
+            flightRecorder?.record(.processStarted,
+                value0: identity.pid,
+                value1: UInt64(Date().timeIntervalSince1970 * 1_000_000_000),
+                value2: identity.processSequence,
+                synchronize: true)
+        }
+
+        tunnelStartedMachTime = mach_continuous_time()
+        physicalFootprintPeakBytes = 0
+        latestEventSequence = 0
         logger.info("PacketTunnelProvider startTunnel")
-        recordProviderEvent(category: "lifecycle", message: "startTunnel")
+        recordProviderEvent(category: "lifecycle", message: "startTunnel", flightEvent: .startTunnel)
         _ = options
 
         guard let config = protocolConfiguration as? NETunnelProviderProtocol,
@@ -236,9 +322,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
               let runtimeConfig = TunnelConfiguration(providerConfiguration: providerConfig) else {
             let err = makeError("Missing or incomplete providerConfiguration")
             logger.error("startTunnel failed: \(err.localizedDescription)")
+            #if FPTN_SIGNPOSTS
+            endStartupSignpost()
+            #endif
             completionHandler(err)
             return
         }
+
+        tunnelSessionToken = Self.sessionToken(for: runtimeConfig.episodeID)
+        flightRecorder?.recordForSession(.startTunnel, sessionToken: tunnelSessionToken, synchronize: true)
 
         setTunnelLogLevel(rawValue: runtimeConfig.logLevel)
         logger.info("Tunnel started (level=\(runtimeConfig.logLevel))")
@@ -253,10 +345,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         localStopInitiator = nil
         shutdownRequested = false
         isNetworkPathSatisfied = true
+        // PR2: increment session token. Generation resets but session
+        // is process-lifetime unique, preventing cross-session collisions.
+        tunnelSession &+= 1
         websocketGeneration = 0
         didApplyNetworkSettings = false
         isReadLoopActive = false
-        isPacketReadPending = false
+        // PR2: do NOT reset isPacketReadPending here. An outstanding
+        // readPackets callback from the old session still exists.
+        // Only the owning callback may clear it via token check.
         reconnectAttempt = 0
         lastTransportError = nil
         lastStopReason = nil
@@ -273,6 +370,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         assignedIPv6 = nil
         appliedIPv4 = nil
         appliedIPv6 = nil
+        // PR2: reset per-session state.
+        loggedInvariantViolations.removeAll()
+        lastNativeStatus = nil
+        lastNativeStatusGeneration = nil
         stateLock.unlock()
 
         updateRuntimeState(.starting, reason: "startTunnel")
@@ -288,14 +389,30 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     ) {
         let description = describeStopReason(reason.rawValue)
         let initiator = currentOrDefaultStopInitiator()
+        #if FPTN_SIGNPOSTS
+        signpostLock.lock()
+        shutdownSignpost = TunnelSignposts.beginTunnelShutdown()
+        signpostLock.unlock()
+        #endif
 
         stateLock.lock()
         shutdownRequested = true
         lastStopReasonRawValue = Int(reason.rawValue)
         lastStopReason = description
+        let wasReadLoopActive = isReadLoopActive
         isReadLoopActive = false
-        isPacketReadPending = false
+        // PR2: do NOT clear isPacketReadPending — the outstanding
+        // readPackets callback still exists and owns the slot.
         stateLock.unlock()
+
+        // PR3A: end ReadLoopLifetime on true→false transition, outside lock.
+        #if FPTN_SIGNPOSTS
+        if wasReadLoopActive {
+            signpostLock.lock()
+            if let sp = readLoopSignpost { TunnelSignposts.endReadLoopLifetime(sp); readLoopSignpost = nil }
+            signpostLock.unlock()
+        }
+        #endif
 
         updateRuntimeState(.stopping, reason: "stopTunnel(\(description))")
         logger.warning(
@@ -304,7 +421,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         recordProviderEvent(
             category: "lifecycle",
             message: "stopTunnel reason=\(reason.rawValue) (\(description)) initiator=\(initiator.rawValue)",
-            runtimeState: "stopping"
+            runtimeState: "stopping",
+            flightEvent: .stopTunnelEntered
         )
         updateDiagnosticsHeartbeat(lastEvent: "stopTunnel")
 
@@ -316,6 +434,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         finishStart(with: makeError("Tunnel stopped before startup completed"))
         replaceWebSocketClient(with: nil, stopCurrent: true)
 
+        #if FPTN_SIGNPOSTS
+        signpostLock.lock()
+        if let sp = shutdownSignpost {
+            TunnelSignposts.endTunnelShutdown(sp)
+            shutdownSignpost = nil
+        }
+        signpostLock.unlock()
+        #endif
         completionHandler()
     }
 
@@ -332,23 +458,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         switch message.action {
         case .setLogLevel:
-            setTunnelLogLevel(rawValue: message.logLevel)
-            logger.info("Tunnel log level updated via IPC: \(message.logLevel ?? "info")")
+            setTunnelLogLevel(rawValue: message.logLevel?.rawValue)
+            logger.info("Tunnel log level updated via IPC: \(message.logLevel?.rawValue ?? "info")")
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "log_level_updated")))
         case .ping:
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "pong")))
         case .prepareStop:
-            if let initiator = message.initiator, initiator == LocalStopInitiator.appDisconnect.rawValue {
+            if message.initiator == .appDisconnect {
                 stateLock.lock()
                 localStopInitiator = .appDisconnect
                 shutdownRequested = true
+                let wasReadLoopActive = isReadLoopActive
                 isReadLoopActive = false
-                isPacketReadPending = false
                 stateLock.unlock()
+                // PR3A: end ReadLoopLifetime outside lock.
+                #if FPTN_SIGNPOSTS
+                if wasReadLoopActive {
+                    signpostLock.lock()
+                    if let sp = readLoopSignpost { TunnelSignposts.endReadLoopLifetime(sp); readLoopSignpost = nil }
+                    signpostLock.unlock()
+                }
+                #endif
                 cancelPendingReconnect()
                 cancelReadBackpressure()
-                logger.info("Marked local stop initiator via IPC: \(initiator); reconnect will be suppressed")
-                recordProviderEvent(category: "ipc", message: "prepare_stop initiator=\(initiator)")
+                logger.info("Marked local stop initiator via IPC: app_disconnect; reconnect will be suppressed")
+                recordProviderEvent(category: "ipc", message: "prepare_stop initiator=app_disconnect", flightEvent: .stopTunnelEntered)
                 updateDiagnosticsHeartbeat(lastEvent: "prepare_stop")
             }
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "stop_initiator_recorded")))
@@ -366,9 +500,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             category: "lifecycle",
             message: "sleep state=\(snapshot.runtimeState.rawValue)",
             runtimeState: snapshot.runtimeState.rawValue,
-            reconnectAttempt: snapshot.reconnectAttempt
+            reconnectAttempt: snapshot.reconnectAttempt,
+            flightEvent: .pathChanged
         )
-        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "sleep")
+        writeLifecycleSnapshot()
         completionHandler()
     }
 
@@ -381,9 +516,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             category: "lifecycle",
             message: "wake state=\(snapshot.runtimeState.rawValue)",
             runtimeState: snapshot.runtimeState.rawValue,
-            reconnectAttempt: snapshot.reconnectAttempt
+            reconnectAttempt: snapshot.reconnectAttempt,
+            flightEvent: .pathChanged
         )
-        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "wake")
+        writeLifecycleSnapshot()
 
         if snapshot.runtimeState == .connected && !snapshot.websocketStarted {
             logger.warning("Tunnel wake detected connected state without a running websocket — connection likely lost during sleep")
@@ -407,7 +543,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         if shutdownRequested {
             stateLock.unlock()
             logger.info("Skipping WebSocket start context=\(context) because shutdown was requested")
-            recordProviderEvent(category: "websocket", message: "skip_start context=\(context) shutdown=true")
+            recordProviderEvent(category: "websocket", message: "skip_start context=\(context) shutdown=true", flightEvent: .bridgeStopRequested)
             return
         }
         websocketGeneration += 1
@@ -427,14 +563,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             },
             connectedCallback: { [weak self] in
                 guard let self else { return }
-                self.recordProviderEvent(category: "websocket_callback", message: "connected_callback_enter generation=\(generation)", generation: generation)
+                self.recordProviderEvent(category: "websocket_callback", message: "connected_callback_enter generation=\(generation)", generation: generation, flightEvent: .bridgeConnected)
                 self.eventQueue.async { [weak self] in
                     self?.handleTransportConnected(generation: generation)
                 }
             },
             disconnectedCallback: { [weak self] wasConnected, reason in
                 guard let self else { return }
-                self.recordProviderEvent(category: "websocket_callback", message: "disconnected_callback_enter generation=\(generation) was_connected=\(wasConnected) reason=\(reason)", generation: generation)
+                self.recordProviderEvent(category: "websocket_callback", message: "disconnected_callback_enter generation=\(generation) was_connected=\(wasConnected) reason=\(reason)", generation: generation, flightEvent: .transportDisconnected)
                 self.eventQueue.async { [weak self] in
                     self?.handleTransportDisconnected(
                         generation: generation,
@@ -453,11 +589,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }
         )
 
-        replaceWebSocketClient(with: client, stopCurrent: false)
+        // PR2: pass expectedGeneration so a stale replacement is
+        // rejected before detaching the current bridge. If rejected,
+        // do NOT call client.start() — the bridge was stopped.
+        guard replaceWebSocketClient(
+            with: client,
+            stopCurrent: true,
+            stopOrigin: .swiftReconnect,
+            expectedGeneration: generation
+        ) else {
+            logger.info("WebSocket replacement rejected (shutdown/stale) context=\(context) generation=\(generation)")
+            return
+        }
         guard client.start() else {
-            replaceWebSocketClient(with: nil, stopCurrent: false)
+            replaceWebSocketClient(with: nil, stopCurrent: false, expectedGeneration: generation)
             logger.error("WebSocket start failed context=\(context) generation=\(generation)")
-            recordProviderEvent(category: "websocket", message: "start_failed context=\(context) generation=\(generation)", generation: generation)
+            recordProviderEvent(category: "websocket", message: "start_failed context=\(context) generation=\(generation)", generation: generation, flightEvent: .bridgeStopRequested)
             eventQueue.async { [weak self] in
                 self?.handleTransportDisconnected(
                     generation: generation,
@@ -469,7 +616,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         logger.debug("WebSocket start issued context=\(context) generation=\(generation)")
-        recordProviderEvent(category: "websocket", message: "start_issued context=\(context) generation=\(generation)", generation: generation)
+        recordProviderEvent(category: "websocket", message: "start_issued context=\(context) generation=\(generation)", generation: generation, flightEvent: .bridgeStartRequested)
         updateDiagnosticsHeartbeat(lastEvent: "websocket_start_issued")
     }
 
@@ -495,24 +642,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if isStaleCallback {
             logger.info("Ignoring stale websocket connected callback generation=\(generation)")
-            recordProviderEvent(category: "websocket", message: "ignore_stale_connected generation=\(generation)", generation: generation)
+            recordProviderEvent(category: "websocket", message: "ignore_stale_connected generation=\(generation)", generation: generation, flightEvent: .bridgeConnected)
             return
         }
         if shouldIgnoreForShutdown {
             logger.info("Ignoring websocket connected callback generation=\(generation) because shutdown was requested")
-            recordProviderEvent(category: "websocket", message: "ignore_connected_shutdown generation=\(generation)", generation: generation)
+            recordProviderEvent(category: "websocket", message: "ignore_connected_shutdown generation=\(generation)", generation: generation, flightEvent: .bridgeStopRequested)
             replaceWebSocketClient(with: nil, stopCurrent: true)
             return
         }
 
         guard let configuration else {
             logger.error("Transport connected without runtime configuration")
-            recordProviderEvent(category: "websocket", message: "connected_without_configuration generation=\(generation)", generation: generation)
+            recordProviderEvent(category: "websocket", message: "connected_without_configuration generation=\(generation)", generation: generation, flightEvent: .bridgeConnected)
             return
         }
 
         logger.info("Tunnel transport connected \(activityDiagnosticsDescription())")
-        recordProviderEvent(category: "websocket", message: "transport_connected generation=\(generation)", generation: generation)
+        #if FPTN_SIGNPOSTS
+        signpostLock.lock(); TunnelSignposts.transportConnected(generation: generation); signpostLock.unlock()
+        #endif
+        recordProviderEvent(category: "websocket", message: "transport_connected generation=\(generation)", generation: generation, flightEvent: .bridgeConnected)
 
         if shouldApplySettings {
             let pendingAppliedIPv4 = clientIPv4
@@ -524,7 +674,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     guard let self else { return }
                     if let error {
                         logger.error("setTunnelNetworkSettings error: \(error.localizedDescription)")
-                        self.recordProviderEvent(category: "settings", message: "apply_failed \(error.localizedDescription)", generation: generation)
+                        self.recordProviderEvent(category: "settings", message: "apply_failed \(error.localizedDescription)", generation: generation, flightEvent: .bridgeStopRequested)
                         self.updateRuntimeState(.failed, reason: "setTunnelNetworkSettings error")
                         self.finishStart(with: error)
                         self.replaceWebSocketClient(with: nil, stopCurrent: true)
@@ -535,13 +685,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     self.appliedIPv4 = pendingAppliedIPv4
                     self.appliedIPv6 = pendingAppliedIPv6
                     self.didApplyNetworkSettings = true
+                    let shouldBeginReadLoop = !self.isReadLoopActive
                     self.isReadLoopActive = true
                     self.reconnectAttempt = 0
                     self.lastTransportError = nil
                     self.stateLock.unlock()
 
+                    // PR3A: begin ReadLoopLifetime only on false→true transition.
+                    #if FPTN_SIGNPOSTS
+                    if shouldBeginReadLoop {
+                        self.signpostLock.lock()
+                        self.readLoopSignpost = TunnelSignposts.beginReadLoopLifetime()
+                        self.signpostLock.unlock()
+                    }
+                    #endif
+
                     self.updateRuntimeState(.connected, reason: "websocket connected and settings applied")
-                    self.recordProviderEvent(category: "settings", message: "apply_success generation=\(generation)", generation: generation)
+                    self.recordProviderEvent(category: "settings", message: "apply_success generation=\(generation)", generation: generation, flightEvent: .tunnelConnected)
                     self.clearReadBackpressure()
                     self.startReadLoop()
                     self.startTelemetryIfNeeded()
@@ -557,7 +717,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.unlock()
 
         updateRuntimeState(.connected, reason: "transport recovered")
-        recordProviderEvent(category: "websocket", message: "transport_recovered generation=\(generation)", generation: generation)
+        recordProviderEvent(category: "websocket", message: "transport_recovered generation=\(generation)", generation: generation, flightEvent: .bridgeConnected)
         updateDiagnosticsHeartbeat(lastEvent: "transport_recovered")
         clearReadBackpressure()
         startReadLoop()
@@ -582,19 +742,33 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if isStaleCallback {
             logger.info("Ignoring stale websocket disconnected callback generation=\(generation) reason=\(reason)")
-            recordProviderEvent(category: "websocket", message: "ignore_stale_disconnected generation=\(generation) reason=\(reason)", generation: generation)
+            recordProviderEvent(category: "websocket", message: "ignore_stale_disconnected generation=\(generation) reason=\(reason)", generation: generation, flightEvent: .transportDisconnected)
             return
         }
 
+        // PR2: read native status for numeric disconnect diagnostics.
+        let nativeStatus = currentWebSocketClient()?.status
+        let disconnectCode = nativeStatus?.disconnectCode.rawValue ?? 0
+        let stopOrigin = nativeStatus?.stopOrigin.rawValue ?? 0
+        let activeOps = nativeStatus?.activeOperations ?? 0
+
         logger.warning(
-            "Tunnel websocket disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") \(activityDiagnosticsDescription())"
+            "Tunnel websocket disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCode) stop_origin=\(stopOrigin) active_ops=\(activeOps) \(activityDiagnosticsDescription())"
         )
         recordProviderEvent(
             category: "websocket",
-            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-")\(pathHandoffHint)",
-            generation: generation
+            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCode) stop_origin=\(stopOrigin) active_ops=\(activeOps)\(pathHandoffHint)",
+            generation: generation,
+            flightEvent: .transportDisconnected,
+            flightFlags: wasConnected ? 1 : 0,
+            value0: UInt64(disconnectCode),
+            value1: UInt64(stopOrigin),
+            value2: UInt64(activeOps)
         )
         updateDiagnosticsHeartbeat(lastEvent: "transport_disconnected")
+        #if FPTN_SIGNPOSTS
+        signpostLock.lock(); TunnelSignposts.transportDisconnected(generation: generation); signpostLock.unlock()
+        #endif
         applyReadBackpressure(delay: sendFailureBackpressureMaxDelaySeconds, reason: "transport_disconnected")
         replaceWebSocketClient(with: nil, stopCurrent: false)
         cancelStartTimeout()
@@ -610,7 +784,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         guard currentState != .stopping else {
             logger.info("Ignoring transport disconnect because tunnel is already stopping")
-            recordProviderEvent(category: "reconnect", message: "skip_disconnect_already_stopping", runtimeState: currentState.rawValue, generation: generation)
+            recordProviderEvent(category: "reconnect", message: "skip_disconnect_already_stopping", runtimeState: currentState.rawValue, generation: generation, flightEvent: .stopTunnelEntered)
             return
         }
 
@@ -618,7 +792,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             logger.info(
                 "Suppressing reconnect after transport disconnect because stop was already requested by \(stopInitiator?.rawValue ?? "shutdown")"
             )
-            recordProviderEvent(category: "reconnect", message: "suppress_after_stop initiator=\(stopInitiator?.rawValue ?? "shutdown")", runtimeState: currentState.rawValue, generation: generation)
+            recordProviderEvent(category: "reconnect", message: "suppress_after_stop initiator=\(stopInitiator?.rawValue ?? "shutdown")", runtimeState: currentState.rawValue, generation: generation, flightEvent: .stopTunnelEntered)
             updateRuntimeState(.stopping, reason: "transport disconnected after local stop request")
             return
         }
@@ -637,7 +811,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     category: "reconnect",
                     message: "initial_transport_no_path reason=\(reason)",
                     runtimeState: currentState.rawValue,
-                    generation: generation
+                    generation: generation,
+                    flightEvent: .reconnectScheduled
                 )
                 switch scheduleReconnectIfPossible() {
                 case .scheduled:
@@ -651,7 +826,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 return
             }
 
-            recordProviderEvent(category: "reconnect", message: "initial_transport_failure reason=\(reason)", runtimeState: currentState.rawValue, generation: generation)
+            recordProviderEvent(category: "reconnect", message: "initial_transport_failure reason=\(reason)", runtimeState: currentState.rawValue, generation: generation, flightEvent: .reconnectScheduled)
             updateRuntimeState(.failed, reason: "initial transport failure")
             finishStart(with: makeError(reason))
             return
@@ -680,14 +855,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard let currentConfiguration = configuration else {
             stateLock.unlock()
             logger.info("Skipping reconnect schedule because runtime configuration is missing")
-            recordProviderEvent(category: "reconnect", message: "skip_schedule_missing_configuration")
+            recordProviderEvent(category: "reconnect", message: "skip_schedule_missing_configuration", flightEvent: .reconnectScheduled)
             return .unavailable
         }
 
         guard !shutdownRequested else {
             stateLock.unlock()
             logger.info("Skipping reconnect schedule because shutdown was requested")
-            recordProviderEvent(category: "reconnect", message: "skip_schedule_shutdown")
+            recordProviderEvent(category: "reconnect", message: "skip_schedule_shutdown", flightEvent: .reconnectScheduled)
             return .unavailable
         }
 
@@ -701,7 +876,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard currentConfiguration.reconnectEnabled else {
             stateLock.unlock()
             logger.info("Skipping reconnect schedule because reconnect is disabled")
-            recordProviderEvent(category: "reconnect", message: "skip_schedule_disabled")
+            recordProviderEvent(category: "reconnect", message: "skip_schedule_disabled", flightEvent: .reconnectScheduled)
             return .unavailable
         }
 
@@ -720,12 +895,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 message: "waiting_for_network attempt=\(nextAttempt)",
                 generation: generation,
                 reconnectAttempt: nextAttempt,
-                pathSatisfied: false
+                pathSatisfied: false,
+                flightEvent: .reconnectScheduled
             )
             updateDiagnosticsHeartbeat(lastEvent: "waiting_for_network")
             return .waitingForNetwork
         }
 
+        // PR3A: end previous ReconnectDelay before replacing.
+        #if FPTN_SIGNPOSTS
+        endReconnectDelaySignpost()
+        #endif
         reconnectWorkItem?.cancel()
 
         workItem = DispatchWorkItem { [weak self] in
@@ -734,7 +914,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         reconnectWorkItem = workItem
         stateLock.unlock()
 
+        // PR3A: begin ReconnectDelay after work item is accepted.
+        #if FPTN_SIGNPOSTS
+        signpostLock.lock()
+        let rsp = TunnelSignposts.beginReconnectDelay(attempt: nextAttempt)
+        reconnectSignpost = (attempt: nextAttempt, id: rsp.0, state: rsp.1)
+        signpostLock.unlock()
+        #endif
+
         if exceededConfiguredBudget {
+            #if FPTN_SIGNPOSTS
+            endReconnectDelaySignpost()
+            #endif
             logger.warning(
                 "Reconnect attempt \(nextAttempt) exceeded configured budget \(maxAttempts). Failing tunnel."
             )
@@ -750,7 +941,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             message: "schedule attempt=\(nextAttempt) delay=\(delaySeconds)s budget_exceeded=\(exceededConfiguredBudget)",
             generation: generation,
             reconnectAttempt: nextAttempt,
-            pathSatisfied: true
+            pathSatisfied: true,
+            flightEvent: .reconnectScheduled,
+            flightFlags: 1,
+            value0: UInt64(nextAttempt),
+            value1: UInt64(delaySeconds)
         )
         updateDiagnosticsHeartbeat(lastEvent: "reconnect_scheduled")
 
@@ -762,6 +957,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     private func performReconnectAttempt(expectedGeneration: Int) {
+        // PR3A: end ReconnectDelay when the attempt starts.
+        #if FPTN_SIGNPOSTS
+        endReconnectDelaySignpost()
+        #endif
         let configuration: TunnelConfiguration?
         let currentState: TunnelRuntimeState
         let attempt: Int
@@ -781,18 +980,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         if shouldSkip {
             logger.info("Skipping reconnect attempt \(attempt) because it is stale or shutdown was requested")
-            recordProviderEvent(category: "reconnect", message: "skip_attempt_stale_or_shutdown attempt=\(attempt)", reconnectAttempt: attempt)
+            recordProviderEvent(category: "reconnect", message: "skip_attempt_stale_or_shutdown attempt=\(attempt)", reconnectAttempt: attempt, flightEvent: .reconnectStarted)
             return
         }
 
         guard currentState == .reasserting, let configuration else {
-            recordProviderEvent(category: "reconnect", message: "skip_attempt_state=\(currentState.rawValue) attempt=\(attempt)", runtimeState: currentState.rawValue, reconnectAttempt: attempt)
+            recordProviderEvent(category: "reconnect", message: "skip_attempt_state=\(currentState.rawValue) attempt=\(attempt)", runtimeState: currentState.rawValue, reconnectAttempt: attempt, flightEvent: .reconnectStarted)
             return
         }
 
         guard pathSatisfied else {
             logger.warning("Reconnect attempt \(attempt) delayed because network path is unsatisfied")
-            recordProviderEvent(category: "reconnect", message: "delay_attempt_path_unsatisfied attempt=\(attempt)", runtimeState: currentState.rawValue, reconnectAttempt: attempt, pathSatisfied: false)
+            recordProviderEvent(category: "reconnect", message: "delay_attempt_path_unsatisfied attempt=\(attempt)", runtimeState: currentState.rawValue, reconnectAttempt: attempt, pathSatisfied: false, flightEvent: .reconnectScheduled)
             updateRuntimeState(.waitingForNetwork, reason: "network path unsatisfied before reconnect")
             return
         }
@@ -800,7 +999,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.warning(
             "Starting reconnect attempt \(attempt)\(maxAttempts == 0 ? " (unlimited)" : "/\(maxAttempts)") \(activityDiagnosticsDescription())"
         )
-        recordProviderEvent(category: "reconnect", message: "start_attempt attempt=\(attempt)", reconnectAttempt: attempt, pathSatisfied: true)
+        recordProviderEvent(category: "reconnect", message: "start_attempt attempt=\(attempt)", reconnectAttempt: attempt, pathSatisfied: true, flightEvent: .reconnectStarted)
         updateDiagnosticsHeartbeat(lastEvent: "reconnect_attempt_start")
         startWebSocket(using: configuration, context: "reconnect_attempt_\(attempt)")
     }
@@ -822,7 +1021,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         updateRuntimeState(.failed, reason: "runtime reconnect exhausted")
         logger.error("Tunnel runtime failure: \(reason)")
-        recordProviderEvent(category: "failure", message: "failRuntimeTunnel reason=\(reason)", runtimeState: "failed")
+        recordProviderEvent(category: "failure", message: "failRuntimeTunnel reason=\(reason)", runtimeState: "failed", flightEvent: .tunnelStopped)
         updateDiagnosticsHeartbeat(lastEvent: "failRuntimeTunnel")
         cancelPendingReconnect()
         cancelTunnelWithError(makeError(reason))
@@ -872,7 +1071,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         logger.info(
             "Applying tunnel settings ipv4_enabled=true ipv6_enabled=\(ipv6Enabled) dns_server_count=\(dnsServers.count) mtu=1400"
         )
-        recordProviderEvent(category: "settings", message: "apply_start ipv6=\(ipv6Enabled)")
+        recordProviderEvent(category: "settings", message: "apply_start ipv6=\(ipv6Enabled)", flightEvent: .tunnelConnected)
 
         setTunnelNetworkSettings(settings, completionHandler: completionHandler)
     }
@@ -887,38 +1086,89 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         stateLock.lock()
-        guard !isPacketReadPending else {
+        // PR2: exactly one process-wide pending read. A stale token
+        // from an old session does not block — but only the owning
+        // callback may clear it. If a read is pending (any session),
+        // do not issue another.
+        guard pendingReadToken == nil else {
             stateLock.unlock()
             return
         }
+        let readToken = PacketReadToken(session: tunnelSession, generation: websocketGeneration)
+        pendingReadToken = readToken
         isPacketReadPending = true
         stateLock.unlock()
 
         packetFlow.readPackets { [weak self] packets, _ in
             guard let self else { return }
 
+            // PR2: only the callback that owns the pending token may
+            // clear it. An old-session callback must not clobber
+            // ownership of a newer read.
             self.stateLock.lock()
-            self.isPacketReadPending = false
+            let ownsPendingSlot = self.pendingReadToken == readToken
+            if ownsPendingSlot {
+                self.isPacketReadPending = false
+                self.pendingReadToken = nil
+            }
+            let currentToken = PacketReadToken(session: self.tunnelSession, generation: self.websocketGeneration)
             self.stateLock.unlock()
+
+            guard ownsPendingSlot else { return }
+
+            // PR2: stale generation within the same session — restart
+            // the current generation's read loop.
+            guard readToken == currentToken else {
+                self.eventQueue.async { [weak self] in
+                    self?.startReadLoop()
+                }
+                return
+            }
 
             guard self.shouldReadOutboundPackets() else { return }
 
-            var totalBytes: Int64 = 0
-            var sendFailures: Int64 = 0
+            var queueFullPackets: Int64 = 0
+            var invalidPackets: Int64 = 0
+            var unknownResults: Int64 = 0
+            var transportStopped = false
             let client = self.currentWebSocketClient()
 
-            for packet in packets {
-                totalBytes += Int64(packet.count)
-                if client?.sendPacket(packet) != true {
-                    sendFailures += 1
+            // PR1B: compute total bytes for the complete read batch
+            // before sending, so packetFlowReadPackets/Bytes both
+            // describe what was read from NEPacketTunnelFlow.
+            let packetCount = Int64(packets.count)
+            let totalBytes = packets.reduce(into: Int64.zero) {
+                $0 += Int64($1.count)
+            }
+
+            // PR1B: use typed send result. Only .queueFull feeds
+            // backpressure. .transportStopped breaks the batch early.
+            // .invalidPacket/.unknown are counted separately.
+            packetLoop: for packet in packets {
+                switch client?.sendPacket(packet) ?? .transportStopped {
+                case .accepted:
+                    break
+                case .queueFull:
+                    queueFullPackets += 1
+                case .transportStopped:
+                    transportStopped = true
+                    break packetLoop
+                case .invalidPacket:
+                    invalidPackets += 1
+                case .unknown:
+                    unknownResults += 1
                 }
             }
 
             let backpressureDelay = self.recordPacketFlowRead(
-                packetCount: Int64(packets.count),
+                packetCount: packetCount,
                 byteCount: totalBytes,
-                sendFailures: sendFailures
+                sendFailures: queueFullPackets
             )
+
+            if transportStopped {
+                return
+            }
             if let backpressureDelay {
                 self.scheduleReadLoopAfterBackpressure(delay: backpressureDelay)
                 return
@@ -969,19 +1219,132 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         return websocketGeneration
     }
 
-    private func replaceWebSocketClient(
-        with newClient: WebsocketClientBridge?,
-        stopCurrent: Bool
-    ) {
-        var previousClient: WebsocketClientBridge?
+    // PR2: log an invariant violation once per type.
+    private func logInvariantOnce(_ invariant: ProviderInvariant) {
         stateLock.lock()
-        previousClient = wsClient
-        wsClient = newClient
+        let alreadyLogged = loggedInvariantViolations.contains(invariant)
+        if !alreadyLogged {
+            loggedInvariantViolations.insert(invariant)
+        }
         stateLock.unlock()
 
-        if stopCurrent {
-            _ = previousClient?.stop()
+        if !alreadyLogged {
+            logger.error("INVARIANT_VIOLATION: \(invariant)")
+            recordProviderEvent(category: "invariant", message: "violation \(invariant)", flightEvent: .invariantViolation)
+            #if FPTN_SIGNPOSTS
+            signpostLock.lock(); TunnelSignposts.invariantViolation(); signpostLock.unlock()
+            #endif
         }
+    }
+
+    // PR2: replace the active bridge with stop-origin plumbing,
+    // final status preservation, and invariant checks.
+    // Order: validate generation → detach → stop/join → capture → expose.
+    // Returns false if the replacement was rejected (shutdown or
+    // generation mismatch). The caller must NOT start a rejected client.
+    @discardableResult
+    private func replaceWebSocketClient(
+        with newClient: WebsocketClientBridge?,
+        stopCurrent: Bool,
+        stopOrigin: WebsocketStopOrigin = .swiftTunnelStop,
+        expectedGeneration: Int? = nil
+    ) -> Bool {
+        // PR2: validate generation BEFORE detaching the current bridge.
+        // A stale caller must never detach the current bridge.
+        stateLock.lock()
+        if let expectedGeneration, websocketGeneration != expectedGeneration {
+            stateLock.unlock()
+            if let newClient { _ = newClient.stop(origin: .swiftTunnelStop) }
+            return false
+        }
+        // PR2: reject new client installation during shutdown, but
+        // always allow removal (newClient == nil) so stopTunnel can
+        // detach and stop the active bridge.
+        if shutdownRequested, newClient != nil {
+            stateLock.unlock()
+            _ = newClient?.stop(origin: .swiftTunnelStop)
+            return false
+        }
+        let previousClient = wsClient
+        let generation = websocketGeneration
+        wsClient = nil
+        stateLock.unlock()
+
+        // PR3A: begin NativeTeardown after detach.
+        #if FPTN_SIGNPOSTS
+        var teardownSP: (id: OSSignpostID, state: OSSignpostIntervalState)?
+        if previousClient != nil {
+            signpostLock.lock()
+            let sp = TunnelSignposts.beginNativeTeardown(generation: generation)
+            teardownSP = sp
+            signpostLock.unlock()
+        }
+        #endif
+
+        // Stop and join the previous bridge.
+        if stopCurrent, let previousClient {
+            _ = previousClient.stop(origin: stopOrigin)
+        }
+
+        // Capture final status AFTER teardown is complete.
+        if let previousClient {
+            let finalStatus = previousClient.status
+            stateLock.lock()
+            lastNativeStatus = finalStatus
+            lastNativeStatusGeneration = generation
+            stateLock.unlock()
+
+            if finalStatus.activeOperations != 0 || !finalStatus.stopCleanupCompleted {
+                logInvariantOnce(.incompleteNativeTeardown)
+            }
+            if finalStatus.liveClients > 1 {
+                logInvariantOnce(.multipleNativeClients)
+            }
+
+            // PR3A: end NativeTeardown + BridgeLifetime after final status.
+            #if FPTN_SIGNPOSTS
+            signpostLock.lock()
+            if let sp = teardownSP {
+                TunnelSignposts.endNativeTeardown(sp.state, generation: generation, activeOps: finalStatus.activeOperations)
+            }
+            if let bsp = bridgeSignpost {
+                TunnelSignposts.endBridgeLifetime(bsp.state, generation: bsp.generation)
+                bridgeSignpost = nil
+            }
+            signpostLock.unlock()
+            #endif
+        }
+
+        // PR2: bridgeReplacementOverlap removed — the previous bridge
+        // is already stopped and joined before the new one is exposed,
+        // so both being non-nil is a normal replacement, not an overlap.
+        // liveClients > 1 (checked above via final status) is the
+        // meaningful overlap invariant.
+
+        // Revalidate before exposing.
+        stateLock.lock()
+        let mayExpose = !shutdownRequested && websocketGeneration == generation
+        if mayExpose {
+            wsClient = newClient
+        }
+        stateLock.unlock()
+
+        if !mayExpose, let newClient {
+            _ = newClient.stop(origin: .swiftTunnelStop)
+            return false
+        }
+
+        // PR3A: begin BridgeLifetime for the newly exposed bridge.
+        #if FPTN_SIGNPOSTS
+        if newClient != nil {
+            signpostLock.lock()
+            let sp = TunnelSignposts.beginBridgeLifetime(generation: generation)
+            bridgeSignpost = (generation: generation, id: sp.0, state: sp.1)
+            signpostLock.unlock()
+        }
+        #endif
+
+        return true
     }
 
     private func recordPacketFlowRead(
@@ -1082,7 +1445,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             readBackpressureUntil = until
         }
         stateLock.unlock()
-        recordProviderEvent(category: "packet_flow", message: "read_backpressure reason=\(reason) delay=\(String(format: "%.2f", clampedDelay))s")
+        recordProviderEvent(category: "packet_flow", message: "read_backpressure reason=\(reason) delay=\(String(format: "%.2f", clampedDelay))s", flightEvent: .queueHighWater)
     }
 
     private func scheduleReadLoopAfterBackpressure(delay: TimeInterval) {
@@ -1187,7 +1550,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         reconnectWorkItem = nil
         stateLock.unlock()
         workItem?.cancel()
+        endReconnectDelaySignpost()
     }
+
+    // PR3A: signpost helpers — capture state under lock, emit outside.
+    #if FPTN_SIGNPOSTS
+    private func endReconnectDelaySignpost() {
+        signpostLock.lock()
+        let sp = reconnectSignpost
+        reconnectSignpost = nil
+        signpostLock.unlock()
+        if let sp {
+            TunnelSignposts.endReconnectDelay(sp.state, attempt: sp.attempt)
+        }
+    }
+
+    private func endStartupSignpost() {
+        signpostLock.lock()
+        let sp = startupSignpost
+        startupSignpost = nil
+        signpostLock.unlock()
+        if let sp {
+            TunnelSignposts.endTunnelStartup(sp)
+        }
+    }
+    #endif
 
     private func startPathMonitor() {
         stopPathMonitor()
@@ -1244,9 +1631,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard didPathChange || shouldScheduleReconnect else { return }
 
         logger.info("Network path satisfied=\(isSatisfied) network=\(pathSummary)")
-        recordProviderEvent(category: "path", message: "path_satisfied=\(isSatisfied) network=\(pathSummary)", pathSatisfied: isSatisfied)
+        recordProviderEvent(category: "path", message: "path_satisfied=\(isSatisfied) network=\(pathSummary)", pathSatisfied: isSatisfied, flightEvent: .pathChanged)
         updateDiagnosticsHeartbeat(lastEvent: "path_satisfied=\(isSatisfied) network=\(pathSummary)")
         if didPathChange {
+            #if FPTN_SIGNPOSTS
+            TunnelSignposts.networkPathChanged(satisfied: isSatisfied)
+            #endif
             applyReadBackpressure(delay: pathChangeBackpressureDelaySeconds, reason: "network_path_changed")
         }
         if shouldScheduleReconnect {
@@ -1315,7 +1705,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard let configuration, !shutdownRequested, isNetworkPathSatisfied else {
             stateLock.unlock()
             logger.info("Skipping reconnect attempt \(attempt) after path change because state is no longer reconnectable")
-            recordProviderEvent(category: "reconnect", message: "skip_path_recovery_not_reconnectable attempt=\(attempt)", reconnectAttempt: attempt)
+            recordProviderEvent(category: "reconnect", message: "skip_path_recovery_not_reconnectable attempt=\(attempt)", reconnectAttempt: attempt, flightEvent: .reconnectScheduled)
             return
         }
 
@@ -1349,7 +1739,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             message: "schedule_after_path_recovery attempt=\(attempt) delay=\(delaySeconds)s budget_exceeded=\(exceededConfiguredBudget)",
             generation: generation,
             reconnectAttempt: attempt,
-            pathSatisfied: true
+            pathSatisfied: true,
+            flightEvent: .reconnectScheduled
         )
         updateDiagnosticsHeartbeat(lastEvent: "reconnect_scheduled_after_path")
 
@@ -1404,7 +1795,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             residentBytes: snapshot.memoryResidentBytes,
             physFootprintBytes: snapshot.memoryPhysFootprintBytes
         )
-        updateDiagnosticsHeartbeat(snapshot: snapshot, lastEvent: "telemetry")
+        writeLifecycleSnapshot()
         evaluateMemoryPressure(memory: memory)
         #endif
     }
@@ -1425,16 +1816,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         reasserting = newReasserting
         if previousState != state {
             logger.info("Tunnel state \(previousState.rawValue) -> \(state.rawValue) reason=\(reason)")
-            recordProviderEvent(category: "state", message: "\(previousState.rawValue)->\(state.rawValue) reason=\(reason)", runtimeState: state.rawValue)
+            recordProviderEvent(category: "state", message: "\(previousState.rawValue)->\(state.rawValue) reason=\(reason)", runtimeState: state.rawValue, flightEvent: .tunnelConnected)
         }
         if previousReasserting != newReasserting {
             logger.info("Tunnel reasserting=\(newReasserting)")
-            recordProviderEvent(category: "state", message: "reasserting=\(newReasserting)", runtimeState: state.rawValue)
+            recordProviderEvent(category: "state", message: "reasserting=\(newReasserting)", runtimeState: state.rawValue, flightEvent: .tunnelConnected)
         }
         updateDiagnosticsHeartbeat(lastEvent: "state=\(state.rawValue)")
     }
 
     private func finishStart(with error: Error?) {
+        #if FPTN_SIGNPOSTS
+        signpostLock.lock()
+        if let sp = startupSignpost {
+            TunnelSignposts.endTunnelStartup(sp)
+            startupSignpost = nil
+        }
+        signpostLock.unlock()
+        #endif
         var completion: ((Error?) -> Void)?
 
         stateLock.lock()
@@ -1444,43 +1843,99 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         startTimeoutWorkItem = nil
         stateLock.unlock()
 
-        recordProviderEvent(category: "startup", message: "finishStart error=\(error?.localizedDescription ?? "none")")
+        recordProviderEvent(category: "startup", message: "finishStart error=\(error?.localizedDescription ?? "none")", flightEvent: .tunnelStopped)
         updateDiagnosticsHeartbeat(lastEvent: "finishStart")
         completion?(error)
     }
 
     private func currentSnapshot() -> TunnelRuntimeSnapshot {
-        stateLock.lock()
-        defer { stateLock.unlock() }
+        // PR2: copy Swift fields and bridge reference under lock,
+        // then query native status OUTSIDE the lock to avoid holding
+        // stateLock during the C++ getStatus() call.
+        let client: WebsocketClientBridge?
+        let savedNativeStatus: WebsocketClientStatus?
+        let savedNativeGeneration: Int?
+        let state: TunnelRuntimeState
+        let reasserting: Bool
+        let reconnAttempt: Int
+        let maxReconn: Int
+        let transportError: String?
+        let stopReason: String?
+        let stopReasonRaw: Int?
+        let stopInitiator: String?
+        let inboundAt: Date?
+        let outboundAt: Date?
+        let readPackets: Int64
+        let readBytes: Int64
+        let recvPackets: Int64
+        let recvBytes: Int64
+        let writePackets: Int64
+        let writeBytes: Int64
+        let sendFailures: Int64
+        let dns4: String?
+        let dns6: String?
+        let tun4: String?
+        let tun6: String?
+        let wsIdleTimeout: Int
 
-        let status = wsClient?.status
+        stateLock.lock()
+        client = wsClient
+        savedNativeStatus = lastNativeStatus
+        savedNativeGeneration = lastNativeStatusGeneration
+        state = runtimeState
+        reasserting = runtimeState == .reasserting || runtimeState == .waitingForNetwork
+        reconnAttempt = reconnectAttempt
+        maxReconn = configuration?.maxReconnectAttempts ?? 0
+        transportError = lastTransportError
+        stopReason = lastStopReason
+        stopReasonRaw = lastStopReasonRawValue
+        stopInitiator = localStopInitiator?.rawValue
+        inboundAt = counters.lastInboundActivityAt
+        outboundAt = counters.lastOutboundActivityAt
+        readPackets = counters.packetFlowReadPackets
+        readBytes = counters.packetFlowReadBytes
+        recvPackets = counters.transportReceivedPackets
+        recvBytes = counters.transportReceivedBytes
+        writePackets = counters.packetFlowWritePackets
+        writeBytes = counters.packetFlowWriteBytes
+        sendFailures = counters.websocketSendFailures
+        dns4 = configuration?.dnsIPv4
+        dns6 = configuration?.dnsIPv6
+        tun4 = configuration?.tunIPv4
+        tun6 = configuration?.tunIPv6
+        wsIdleTimeout = configuration?.websocketIdleTimeoutSeconds ?? 0
+        stateLock.unlock()
+
+        // Query native status outside the lock.
+        let status = client?.status ?? savedNativeStatus
         let memory = providerMemorySnapshot(status: status)
+
         return TunnelRuntimeSnapshot(
-            runtimeState: runtimeState,
-            isReasserting: runtimeState == .reasserting || runtimeState == .waitingForNetwork,
-            reconnectAttempt: reconnectAttempt,
-            maxReconnectAttempts: configuration?.maxReconnectAttempts ?? 0,
-            lastTransportError: lastTransportError,
-            lastStopReason: lastStopReason,
-            lastStopReasonRawValue: lastStopReasonRawValue,
-            localStopInitiator: localStopInitiator?.rawValue,
-            lastInboundActivityAt: iso8601(counters.lastInboundActivityAt),
-            lastOutboundActivityAt: iso8601(counters.lastOutboundActivityAt),
-            packetFlowReadPackets: counters.packetFlowReadPackets,
-            packetFlowReadBytes: counters.packetFlowReadBytes,
-            transportReceivedPackets: counters.transportReceivedPackets,
-            transportReceivedBytes: counters.transportReceivedBytes,
-            packetFlowWritePackets: counters.packetFlowWritePackets,
-            packetFlowWriteBytes: counters.packetFlowWriteBytes,
-            websocketSendFailures: counters.websocketSendFailures,
-            dnsIPv4: configuration?.dnsIPv4,
-            dnsIPv6: configuration?.dnsIPv6,
-            tunnelIPv4: configuration?.tunIPv4,
-            tunnelIPv6: configuration?.tunIPv6,
-            ipv6Enabled: configuration?.dnsIPv6 != nil,
+            runtimeState: state,
+            isReasserting: reasserting,
+            reconnectAttempt: reconnAttempt,
+            maxReconnectAttempts: maxReconn,
+            lastTransportError: transportError,
+            lastStopReason: stopReason,
+            lastStopReasonRawValue: stopReasonRaw,
+            localStopInitiator: stopInitiator,
+            lastInboundActivityAt: iso8601(inboundAt),
+            lastOutboundActivityAt: iso8601(outboundAt),
+            packetFlowReadPackets: readPackets,
+            packetFlowReadBytes: readBytes,
+            transportReceivedPackets: recvPackets,
+            transportReceivedBytes: recvBytes,
+            packetFlowWritePackets: writePackets,
+            packetFlowWriteBytes: writeBytes,
+            websocketSendFailures: sendFailures,
+            dnsIPv4: dns4,
+            dnsIPv6: dns6,
+            tunnelIPv4: tun4,
+            tunnelIPv6: tun6,
+            ipv6Enabled: dns6 != nil,
             websocketRunning: status?.running ?? false,
             websocketStarted: status?.started ?? false,
-            websocketIdleTimeoutSeconds: status?.idleTimeoutSeconds ?? configuration?.websocketIdleTimeoutSeconds ?? 0,
+            websocketIdleTimeoutSeconds: status?.idleTimeoutSeconds ?? wsIdleTimeout,
             websocketLastError: status?.lastError,
             websocketLastDisconnectReason: status?.lastDisconnectReason,
             memoryResidentBytes: memory.residentBytes,
@@ -1490,7 +1945,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             nativeCallbackEnterCount: status?.callbackEnterCount ?? 0,
             nativeCallbackExitCount: status?.callbackExitCount ?? 0,
             nativeCallbackByteCount: status?.callbackByteCount ?? 0,
-            nativeInPacketCallback: status?.inPacketCallback ?? false
+            nativeInPacketCallback: status?.inPacketCallback ?? false,
+            nativeRequestedRcvbufBytes: status?.requestedRcvbufBytes ?? 0,
+            nativeRequestedSndbufBytes: status?.requestedSndbufBytes ?? 0,
+            nativeEffectiveRcvbufBytes: status?.effectiveRcvbufBytes ?? 0,
+            nativeEffectiveSndbufBytes: status?.effectiveSndbufBytes ?? 0,
+            nativeSocketBufferSetErrorCount: status?.socketBufferSetErrorCount ?? 0,
+            nativeLiveClients: status?.liveClients ?? 0,
+            nativeActiveReaderCoroutines: status?.activeReaderCoroutines ?? 0,
+            nativeActiveSenderCoroutines: status?.activeSenderCoroutines ?? 0,
+            nativeQueuedPackets: status?.queuedPackets ?? 0,
+            nativeQueuedBytes: status?.queuedBytes ?? 0,
+            nativeQueuedBytesPeak: status?.queuedBytesPeak ?? 0,
+            nativeQueueFullCount: status?.queueFullCount ?? 0,
+            nativeDisconnectCode: status?.disconnectCode.rawValue ?? 0,
+            nativeStopOrigin: status?.stopOrigin.rawValue ?? 0,
+            nativeActiveOperations: status?.activeOperations ?? 0,
+            nativeStopCleanupCompleted: status?.stopCleanupCompleted ?? false
         )
     }
 
@@ -1499,74 +1970,136 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     // The #if gate eliminates the entire call (including category string
     // literals) at compile time rather than relying on a runtime guard
     // inside TunnelDiagnosticsStore.
+    // PR3: binary-only event recording. No JSONL, no string evaluation.
+    // flightEvent is mandatory — explicit numeric codes are the contract.
+    // PR4b: value0/value1/value2 carry event-specific numeric payloads.
+    // flags bit 0 = wasConnected (transportDisconnected), pathSatisfied (reconnect).
     private func recordProviderEvent(
         category: String,
         message: @autoclosure () -> String,
         runtimeState: String? = nil,
         generation: Int? = nil,
         reconnectAttempt: Int? = nil,
-        pathSatisfied: Bool? = nil
+        pathSatisfied: Bool? = nil,
+        flightEvent: TunnelFlightEventCode,
+        flightFlags: UInt16 = 0,
+        value0: UInt64 = 0,
+        value1: UInt64 = 0,
+        value2: UInt64 = 0
     ) {
-        #if FPTN_MEASUREMENT_BUILD
-        return
-        #else
-        TunnelDiagnosticsStore.shared.recordProviderEvent(
-            category: category,
-            message: message(),
-            runtimeState: runtimeState,
-            generation: generation,
-            reconnectAttempt: reconnectAttempt,
-            pathSatisfied: pathSatisfied
-        )
-        #endif
+        if let seq = flightRecorder?.recordForSession(
+            flightEvent,
+            sessionToken: tunnelSessionToken,
+            generation: UInt32(generation ?? 0),
+            flags: flightFlags,
+            value0: value0,
+            value1: value1,
+            value2: value2
+        ), seq > 0 {
+            diagnosticsLock.lock()
+            latestEventSequence = seq
+            diagnosticsLock.unlock()
+        }
     }
 
-    // PR-1 (Measurement Safety): @autoclosure prevents interpolated
-    // lastEvent strings (e.g. "state=\(state.rawValue)") from being
-    // constructed in Measurement builds.
+    private static func sessionToken(for episodeID: UUID) -> UInt64 {
+        withUnsafeBytes(of: episodeID.uuid) { bytes in
+            bytes.prefix(8).reduce(0) { partial, byte in
+                (partial << 8) | UInt64(byte)
+            }
+        }
+    }
+
+    // PR3: binary-only lifecycle snapshot. No JSONL heartbeat.
+    // The @autoclosure lastEvent is never evaluated.
     private func updateDiagnosticsHeartbeat(lastEvent: @autoclosure () -> String) {
-        #if FPTN_MEASUREMENT_BUILD
-        return
-        #else
-        updateDiagnosticsHeartbeat(snapshot: currentSnapshot(), lastEvent: lastEvent())
-        #endif
+        writeLifecycleSnapshot()
     }
 
-    private func updateDiagnosticsHeartbeat(snapshot: TunnelRuntimeSnapshot, lastEvent: @autoclosure () -> String) {
-        #if FPTN_MEASUREMENT_BUILD
-        return
-        #endif
-        let event = lastEvent()
+    private func writeLifecycleSnapshot(synchronize: Bool = false) {
         let generation: Int
         let pathSatisfied: Bool
+        let currentState: TunnelRuntimeState
+        let reconnAttempt: Int
+        let stopInitiator: LocalStopInitiator?
+        let isShutdown: Bool
+        let readLoopActive: Bool
+        let readPending: Bool
+        let stopReasonRaw: Int?
+        let client: WebsocketClientBridge?
+        let savedNativeStatus: WebsocketClientStatus?
+
         stateLock.lock()
         generation = websocketGeneration
         pathSatisfied = isNetworkPathSatisfied
+        currentState = runtimeState
+        reconnAttempt = reconnectAttempt
+        stopInitiator = localStopInitiator
+        isShutdown = shutdownRequested
+        readLoopActive = isReadLoopActive
+        readPending = isPacketReadPending
+        stopReasonRaw = lastStopReasonRawValue
+        client = wsClient
+        savedNativeStatus = lastNativeStatus
         stateLock.unlock()
 
-        TunnelDiagnosticsStore.shared.writeHeartbeat(
-            TunnelProviderHeartbeat(
-                timestamp: TunnelDiagnosticsStore.now(),
-                runtimeState: snapshot.runtimeState.rawValue,
-                isReasserting: snapshot.isReasserting,
-                generation: generation,
-                reconnectAttempt: snapshot.reconnectAttempt,
-                maxReconnectAttempts: snapshot.maxReconnectAttempts,
-                pathSatisfied: pathSatisfied,
-                websocketStarted: snapshot.websocketStarted,
-                websocketRunning: snapshot.websocketRunning,
-                lastTransportError: snapshot.lastTransportError ?? snapshot.websocketLastError,
-                lastStopReason: snapshot.lastStopReason,
-                lastEvent: event,
-                lastInboundActivityAt: snapshot.lastInboundActivityAt,
-                lastOutboundActivityAt: snapshot.lastOutboundActivityAt,
-                packetFlowReadPackets: snapshot.packetFlowReadPackets,
-                packetFlowWritePackets: snapshot.packetFlowWritePackets,
-                transportReceivedPackets: snapshot.transportReceivedPackets,
-                websocketSendFailures: snapshot.websocketSendFailures,
-                memoryResidentBytes: snapshot.memoryResidentBytes,
-                memoryPhysFootprintBytes: snapshot.memoryPhysFootprintBytes
-            )
+        // Query native status outside stateLock.
+        let liveStatus = client?.status
+        let status = liveStatus ?? savedNativeStatus
+        let identity = ProviderProcessIdentity.shared
+
+        let footprint = status?.memoryPhysFootprintBytes ?? physFootprintBytes() ?? 0
+        let resident = status?.memoryResidentBytes ?? residentMemoryBytes() ?? 0
+
+        // Protect peak + sequence under diagnosticsLock.
+        diagnosticsLock.lock()
+        if footprint > physicalFootprintPeakBytes {
+            physicalFootprintPeakBytes = footprint
+        }
+        let peakBytes = physicalFootprintPeakBytes
+        let eventSeq = latestEventSequence
+        diagnosticsLock.unlock()
+
+        let hasBridge = client != nil
+
+        var flags: UInt32 = 0
+        if isShutdown { flags |= TunnelSnapshotFlag.shutdownRequested.rawValue }
+        if currentState == .reasserting || currentState == .waitingForNetwork {
+            flags |= TunnelSnapshotFlag.reasserting.rawValue
+        }
+        if pathSatisfied { flags |= TunnelSnapshotFlag.pathSatisfied.rawValue }
+        if readLoopActive { flags |= TunnelSnapshotFlag.readLoopActive.rawValue }
+        if readPending { flags |= TunnelSnapshotFlag.packetReadPending.rawValue }
+        if status?.stopCleanupCompleted == true { flags |= TunnelSnapshotFlag.nativeStopCleanupCompleted.rawValue }
+
+        lifecycleStore?.write(
+            pid: UInt32(identity.pid),
+            processToken: identity.processToken,
+            processSequence: identity.processSequence,
+            processStartedMachTime: identity.startedMachTime,
+            tunnelSessionToken: tunnelSessionToken,
+            tunnelStartedMachTime: tunnelStartedMachTime,
+            providerStopReason: UInt32(stopReasonRaw ?? 0),
+            localStopInitiator: stopInitiator?.binaryCode ?? 0,
+            nativeDisconnectCode: status?.disconnectCode.rawValue ?? 0,
+            nativeStopOrigin: status?.stopOrigin.rawValue ?? 0,
+            flags: flags,
+            lifecycleState: currentState.binaryCode,
+            websocketGeneration: UInt32(generation),
+            reconnectAttempt: UInt32(reconnAttempt),
+            physicalFootprintBytes: footprint,
+            physicalFootprintPeakBytes: peakBytes,
+            residentBytes: resident,
+            activeBridges: hasBridge ? 1 : 0,
+            activeNativeClients: UInt32(status?.liveClients ?? 0),
+            nativeActiveOperations: status?.activeOperations ?? 0,
+            activeReaderCoroutines: UInt32(status?.activeReaderCoroutines ?? 0),
+            activeSenderCoroutines: UInt32(status?.activeSenderCoroutines ?? 0),
+            activeReadLoops: readLoopActive ? 1 : 0,
+            outboundQueuedBytes: status?.queuedBytes ?? 0,
+            outboundQueuedBytesPeak: status?.queuedBytesPeak ?? 0,
+            latestEventSequence: eventSeq,
+            synchronize: synchronize
         )
     }
 
@@ -1621,8 +2154,28 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     ) {
         switch memory.level {
         case .normal:
+            lastRecordedMemoryLevel = .normal
             return
         case .warning, .emergency:
+            // PR4b: record binary event on level change, independent
+            // of OSLog throttling. warning→emergency is always recorded.
+            if memory.level != lastRecordedMemoryLevel {
+                lastRecordedMemoryLevel = memory.level
+                let eventCode: TunnelFlightEventCode = memory.level == .emergency ? .memoryCritical : .memoryWarning
+                diagnosticsLock.lock()
+                let peak = physicalFootprintPeakBytes
+                diagnosticsLock.unlock()
+                recordProviderEvent(
+                    category: "memory",
+                    message: "memory_pressure \(memory.description)",
+                    flightEvent: eventCode,
+                    value0: memory.physFootprintBytes ?? 0,
+                    value1: memory.residentBytes ?? 0,
+                    value2: peak
+                )
+            }
+
+            // OSLog throttled separately.
             let now = Date()
             var shouldLog = false
             stateLock.lock()
@@ -1634,6 +2187,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             stateLock.unlock()
             guard shouldLog else { return }
             logger.warning("Tunnel memory pressure \(memory.level.rawValue) \(memory.description)")
+            #if FPTN_SIGNPOSTS
+            signpostLock.lock(); TunnelSignposts.memoryWarning(); signpostLock.unlock()
+            #endif
         }
     }
 

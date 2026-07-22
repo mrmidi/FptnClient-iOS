@@ -9,5 +9,6 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 #include <fptn_native_lib/src/https/SwiftApiClient.h>
 #include <fptn_native_lib/src/websocket/WrapperWebsocketClientBridge.h>
+#include "FptnTunnelDiagnostics.h"
 
 #endif // FPTN_VPN_BRIDGING_HEADER

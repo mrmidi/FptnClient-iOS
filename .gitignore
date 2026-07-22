@@ -141,3 +141,4 @@ FptnLib/build*
 .env.local.bak.*
 .gh_secrets.bak.*
 secrets/*
+**/Cpp/fptn_native_lib.build-manifest.json

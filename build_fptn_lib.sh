@@ -44,6 +44,41 @@ resolve_default_target() {
 
 TARGET="${1:-$(resolve_default_target)}"
 
+# PR0: map Xcode configuration to CMake build type.
+# Debug → Debug, Release/Measurement → MinSizeRel.
+# Absent $CONFIGURATION (manual invocation) defaults to Debug.
+# Unknown named configurations fail to prevent silent misbuilds.
+resolve_build_type() {
+    case "${CONFIGURATION:-}" in
+        "")
+            echo "Debug"
+            ;;
+        Debug)
+            echo "Debug"
+            ;;
+        Release|Measurement)
+            echo "MinSizeRel"
+            ;;
+        *)
+            echo "error: unknown CONFIGURATION '${CONFIGURATION}'. Expected Debug, Release, or Measurement." >&2
+            exit 1
+            ;;
+    esac
+}
+
+BUILD_TYPE="$(resolve_build_type)"
+
+# PR1A: iOS socket buffer experiment parameter.
+# 0 = kernel default. Override: FPTN_IOS_SOCKET_BUFFER_BYTES=262144
+SOCKET_BUFFER_BYTES="${FPTN_IOS_SOCKET_BUFFER_BYTES:-0}"
+case "$SOCKET_BUFFER_BYTES" in
+    0|262144|524288) ;;
+    *)
+        echo "error: invalid FPTN_IOS_SOCKET_BUFFER_BYTES=$SOCKET_BUFFER_BYTES (expected 0, 262144, or 524288)" >&2
+        exit 1
+        ;;
+esac
+
 resolve_framework_binary() {
     local framework_path="$1"
     if [ -f "${framework_path}/Versions/1.0.0/fptn_native_lib" ]; then
@@ -162,7 +197,7 @@ case "$TARGET" in
         ;;
     ios|ios-device)
         HOST_PROFILE="conan-device-profile"
-        OUTPUT_DIR="build-ios"
+        OUTPUT_DIR="build-ios-${BUILD_TYPE}"
         DEST_DIR="${ROOT_DIR}/FptnVPN/Cpp"
         SECONDARY_DEST_DIR=""
         MIN_PLATFORM_VERSION="17.0"
@@ -170,7 +205,7 @@ case "$TARGET" in
         ;;
     ios-simulator)
         HOST_PROFILE="conan-simulator-profile"
-        OUTPUT_DIR="build-simulator"
+        OUTPUT_DIR="build-simulator-${BUILD_TYPE}"
         DEST_DIR="${ROOT_DIR}/FptnVPN/Cpp"
         SECONDARY_DEST_DIR=""
         MIN_PLATFORM_VERSION="17.0"
@@ -178,7 +213,7 @@ case "$TARGET" in
         ;;
     tvos|tvos-device)
         HOST_PROFILE="conan-tvos-profile"
-        OUTPUT_DIR="build-tvos"
+        OUTPUT_DIR="build-tvos-${BUILD_TYPE}"
         DEST_DIR="${ROOT_DIR}/Fptn-tvOS/Cpp"
         SECONDARY_DEST_DIR="${ROOT_DIR}/Fptn-tvOS-Tunnel/Cpp"
         MIN_PLATFORM_VERSION="15.6"
@@ -186,7 +221,7 @@ case "$TARGET" in
         ;;
     tvos-simulator)
         HOST_PROFILE="conan-tvos-simulator-profile"
-        OUTPUT_DIR="build-tvos-simulator"
+        OUTPUT_DIR="build-tvos-simulator-${BUILD_TYPE}"
         DEST_DIR="${ROOT_DIR}/Fptn-tvOS/Cpp"
         SECONDARY_DEST_DIR="${ROOT_DIR}/Fptn-tvOS-Tunnel/Cpp"
         MIN_PLATFORM_VERSION="15.6"
@@ -194,7 +229,7 @@ case "$TARGET" in
         ;;
     macos)
         HOST_PROFILE="conan-macos-profile"
-        OUTPUT_DIR="build-macos"
+        OUTPUT_DIR="build-macos-${BUILD_TYPE}"
         DEST_DIR="${ROOT_DIR}/Fptn-macOS/Cpp"
         SECONDARY_DEST_DIR=""
         MIN_PLATFORM_VERSION=""
@@ -216,9 +251,41 @@ if [ "${FPTN_NATIVE_BUILD_IF_MISSING:-0}" = "1" ]; then
         macos) EXPECTED_PLATFORM="MACOS" ;;
     esac
 
+    # PR0: validate full cache identity via the build manifest so a
+    # stale framework is never silently reused. Checks configuration,
+    # fptn commit, wrapper source hash, and build-file hash.
+    manifest_matches() {
+        local manifest_path="$1/fptn_native_lib.build-manifest.json"
+        [ -f "$manifest_path" ] || return 1
+
+        local current_fptn_commit current_wrapper_hash current_build_hash current_compiler_id
+        current_fptn_commit="$(git -C "${LIB_DIR}/fptn" rev-parse HEAD 2>/dev/null || echo unknown)"
+        current_wrapper_hash="$(find "${LIB_DIR}/src" -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 2>/dev/null | sort -z | xargs -0 shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}')"
+        current_build_hash="$(
+            {
+                printf '%s\n' \
+                    "${SCRIPT_PATH}" \
+                    "${LIB_DIR}/CMakeLists.txt" \
+                    "${LIB_DIR}/conanfile.py" \
+                    "${LIB_DIR}/Info.plist.in"
+                find "${LIB_DIR}" -maxdepth 1 -type f -name 'conan-*-profile' -print
+            } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}'
+        )"
+        current_compiler_id="$(xcrun clang++ --version 2>/dev/null | head -1 || echo unknown)"
+
+        grep -q "\"configuration\": \"${BUILD_TYPE}\"" "$manifest_path" 2>/dev/null || return 1
+        grep -q "\"fptn_commit\": \"${current_fptn_commit}\"" "$manifest_path" 2>/dev/null || return 1
+        grep -q "\"wrapper_hash\": \"${current_wrapper_hash}\"" "$manifest_path" 2>/dev/null || return 1
+        grep -q "\"build_hash\": \"${current_build_hash}\"" "$manifest_path" 2>/dev/null || return 1
+        grep -Fq "\"compiler\": \"${current_compiler_id}\"" "$manifest_path" 2>/dev/null || return 1
+        grep -q "\"ios_socket_buffer_bytes\": ${SOCKET_BUFFER_BYTES}" "$manifest_path" 2>/dev/null || return 1
+        return 0
+    }
+
     if framework_matches_target "${DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM" &&
+       manifest_matches "$DEST_DIR" &&
        { [ -z "$SECONDARY_DEST_DIR" ] || framework_matches_target "${SECONDARY_DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM"; }; then
-        echo "fptn_native_lib already built for ${TARGET}; skipping native build."
+        echo "fptn_native_lib already built for ${TARGET} (${BUILD_TYPE}); skipping native build."
         copy_existing_dsym_to_archive_products
         exit 0
     fi
@@ -228,27 +295,27 @@ cd "$LIB_DIR"
 
 if [ "$TARGET" = "macos" ]; then
     # ── arm64 slice ──────────────────────────────────────────────────────────
-    ARM64_DIR="build-macos"
-    echo "Building arm64 slice..."
-    conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR"
+    ARM64_DIR="build-macos-${BUILD_TYPE}"
+    echo "Building arm64 slice (${BUILD_TYPE})..."
+    conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
     cd "$ARM64_DIR"
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake \
-             -DCMAKE_BUILD_TYPE=Debug \
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
+             -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
              -DCMAKE_OSX_ARCHITECTURES=arm64
     rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
-    cmake --build . --config Debug
+    cmake --build . --config "$BUILD_TYPE"
     cd "$LIB_DIR"
 
     # ── x86_64 slice ─────────────────────────────────────────────────────────
-    X86_DIR="build-macos-x86_64"
-    echo "Building x86_64 slice..."
-    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR"
+    X86_DIR="build-macos-x86_64-${BUILD_TYPE}"
+    echo "Building x86_64 slice (${BUILD_TYPE})..."
+    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
     cd "$X86_DIR"
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake \
-             -DCMAKE_BUILD_TYPE=Debug \
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
+             -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
              -DCMAKE_OSX_ARCHITECTURES=x86_64
     rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
-    cmake --build . --config Debug
+    cmake --build . --config "$BUILD_TYPE"
     cd "$LIB_DIR"
 
     # ── Combine into universal binary with lipo ───────────────────────────────
@@ -299,12 +366,12 @@ if [ "$TARGET" = "macos" ]; then
     exit 0
 fi
 
-conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR"
+conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
 
 cd "$OUTPUT_DIR"
-cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
+cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
 rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
-cmake --build . --config Debug
+cmake --build . --config "$BUILD_TYPE"
 generate_framework_dsym "fptn_native_lib.framework"
 
 if [ "$TARGET" = "ios-device" ] || [ "$TARGET" = "ios" ]; then
@@ -326,6 +393,37 @@ copy_framework_to_dest() {
     fi
 
     rm -rf "${destination}/fptn_native_lib.framework.dSYM"
+
+    # PR0: write the build manifest BESIDE the framework (not inside it)
+    # BEFORE codesign, so the signature is not invalidated. The manifest
+    # records full cache identity: configuration, fptn commit, wrapper
+    # source hash, build-file hash, and compiler identity.
+    local fptn_commit wrapper_hash build_hash compiler_id
+    fptn_commit="$(git -C "${LIB_DIR}/fptn" rev-parse HEAD 2>/dev/null || echo unknown)"
+    wrapper_hash="$(find "${LIB_DIR}/src" -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 2>/dev/null | sort -z | xargs -0 shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}')"
+    build_hash="$(
+        {
+            printf '%s\n' \
+                "${SCRIPT_PATH}" \
+                "${LIB_DIR}/CMakeLists.txt" \
+                "${LIB_DIR}/conanfile.py" \
+                "${LIB_DIR}/Info.plist.in"
+            find "${LIB_DIR}" -maxdepth 1 -type f -name 'conan-*-profile' -print
+        } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}'
+    )"
+    compiler_id="$(xcrun clang++ --version 2>/dev/null | head -1 || echo unknown)"
+    cat > "${destination}/fptn_native_lib.build-manifest.json" <<MANIFEST
+{
+  "platform": "${TARGET}",
+  "configuration": "${BUILD_TYPE}",
+  "fptn_commit": "${fptn_commit}",
+  "wrapper_hash": "${wrapper_hash}",
+  "build_hash": "${build_hash}",
+  "compiler": "${compiler_id}",
+  "ios_socket_buffer_bytes": ${SOCKET_BUFFER_BYTES},
+  "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+MANIFEST
 
     if [ "${FPTN_SKIP_NATIVE_CODESIGN:-0}" != "1" ]; then
         SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"

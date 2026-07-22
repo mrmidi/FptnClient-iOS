@@ -6,9 +6,11 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 import FptnSharedCore
+import FptnSharedTunnel
 import FptnServerSelection
 import FptnConnectionOrchestration
 import FptnSharedTestSupport
+import FptnNativeBootstrap
 
 @main
 struct FptnSelectorApp {
@@ -20,6 +22,11 @@ struct FptnSelectorApp {
         }
 
         let command = args[1]
+
+        if command == "test-token" || getArgValue(for: "--test-token", args: args) != nil {
+            runTestToken(args: args)
+            return
+        }
 
         switch command {
         case "auto-select":
@@ -36,9 +43,15 @@ struct FptnSelectorApp {
             await runMatrix(args: args)
         case "soak-sim":
             await runSoakSim(args: args)
+        case "test-token":
+            runTestToken(args: args)
         default:
-            print("Unknown command: \(command)")
-            Self.printUsage()
+            if getArgValue(for: "--token", args: args) != nil {
+                await runAutoSelect(args: args)
+            } else {
+                print("Unknown command: \(command)")
+                Self.printUsage()
+            }
         }
     }
 
@@ -47,67 +60,156 @@ struct FptnSelectorApp {
         FPTN Server Selector CLI
 
         Usage:
-          fptn-selector auto-select --config <path> [--output <jsonl-path>]
-          fptn-selector manual-bootstrap --config <path> --server <host:port> [--output <jsonl-path>]
-          fptn-selector scan-all --config <path> [--output <jsonl-path>]
-          fptn-selector diagnostic --config <path>
+          fptn-selector test-token --token "<token>"
+          fptn-selector auto-select [--token "<token>"] [--config <path>] [--output <jsonl-path>]
+          fptn-selector scan-all [--token "<token>"] [--config <path>] [--output <jsonl-path>]
+          fptn-selector manual-bootstrap --server <host:port> [--token "<token>"] [--config <path>] [--output <jsonl-path>]
+          fptn-selector diagnostic [--token "<token>"] [--config <path>]
           fptn-selector simulate --scenario <path>
-          fptn-selector matrix --config <path> --iterations <n> [--output <jsonl-path>]
+          fptn-selector matrix [--token "<token>"] [--config <path>] --iterations <n> [--output <jsonl-path>]
           fptn-selector soak-sim --iterations <n>
+
+        Configuration & Authentication:
+          • Pass --token "<token>" (or set FPTN_TOKEN) to automatically supply both the server list and credentials.
+          • Pass --config <path> to load servers and settings from a JSON file.
+          • Credentials can also be passed via --username/--password or FPTN_USERNAME/FPTN_PASSWORD.
         """)
+    }
+
+    // MARK: - Token Inspection Command
+
+    static func runTestToken(args: [String]) {
+        let tokenStr = getArgValue(for: "--token", args: args) ?? getArgValue(for: "--test-token", args: args)
+        guard let rawToken = tokenStr, !rawToken.isEmpty else {
+            print("Error: Missing --token <string> or --test-token <string>")
+            return
+        }
+
+        guard let token = SecureCredentialProvider.parseFPTNToken(rawToken) else {
+            print("Error: Invalid FPTN token format. Failed to decode Brotli/Base64 payload.")
+            return
+        }
+
+        print("\n================ DECODED FPTN TOKEN REPORT ================")
+        print("Version:       \(token.version)")
+        print("Service Name:  \(token.serviceName)")
+        print("Username:      \(token.username)")
+        print("Password:      \(token.password)")
+        print("Server Count:  \(token.servers.count)")
+        print("-----------------------------------------------------------")
+        print(String(format: "%-25@ | %-20@ | %-32@", "Server Name" as NSString, "Host:Port" as NSString, "MD5 Fingerprint" as NSString))
+        print("-----------------------------------------------------------")
+        for s in token.servers {
+            print(String(format: "%-25@ | %-20@ | %-32@", s.name as NSString, "\(s.host):\(s.port)" as NSString, s.md5Fingerprint as NSString))
+        }
+        print("===========================================================\n")
+    }
+
+    // MARK: - Configuration Resolver
+
+    struct CLIResolvedConfig {
+        let servers: [VPNServer]
+        let credentials: Credentials?
+        let context: BootstrapContext
+        let selectionPolicy: SelectionPolicy
+        let bootstrapPolicy: BootstrapPolicy
+    }
+
+    enum CLIError: Error {
+        case missingConfigOrToken
+    }
+
+    static func resolveCLIConfig(args: [String]) throws -> CLIResolvedConfig {
+        let cliTokenStr = getArgValue(for: "--token", args: args) ?? getArgValue(for: "--test-token", args: args) ?? ProcessInfo.processInfo.environment["FPTN_TOKEN"]
+        let parsedToken = cliTokenStr.flatMap { SecureCredentialProvider.parseFPTNToken($0) }
+
+        let configPath = getArgValue(for: "--config", args: args)
+        let loadedConfig = try configPath.map { try CLIConfig.load(from: $0) }
+
+        guard parsedToken != nil || loadedConfig != nil else {
+            print("Error: Specify either --token \"<token>\" or --config <path>.")
+            throw CLIError.missingConfigOrToken
+        }
+
+        let servers: [VPNServer]
+        if let token = parsedToken, !token.servers.isEmpty {
+            servers = token.servers
+        } else if let config = loadedConfig {
+            servers = config.servers
+        } else {
+            servers = []
+        }
+
+        let credentials: Credentials?
+        if let token = parsedToken {
+            credentials = Credentials(username: token.username, password: token.password)
+        } else {
+            credentials = SecureCredentialProvider.getCredentials(args: args)
+        }
+
+        let sni = loadedConfig?.sni ?? "google.com"
+        let strategy = loadedConfig?.censorshipStrategy ?? .sniSpoofing
+        let ipv6 = loadedConfig?.ipv6Available ?? false
+        let tokenConfigID = loadedConfig?.tokenConfigurationID ?? "token-cli"
+
+        let context = BootstrapContext(
+            networkClass: .wifi,
+            sni: sni,
+            censorshipStrategy: strategy,
+            ipv6Available: ipv6,
+            tokenConfigurationID: tokenConfigID
+        )
+
+        let selectionPolicy = loadedConfig?.resolveSelectionPolicy() ?? .production
+        let bootstrapPolicy = loadedConfig?.resolveBootstrapPolicy() ?? .production
+
+        return CLIResolvedConfig(
+            servers: servers,
+            credentials: credentials,
+            context: context,
+            selectionPolicy: selectionPolicy,
+            bootstrapPolicy: bootstrapPolicy
+        )
     }
 
     // MARK: - Subcommands
 
     static func runAutoSelect(args: [String]) async {
-        guard let configPath = getArgValue(for: "--config", args: args) else {
-            print("Error: Missing --config <path>")
-            return
-        }
         let outputFile = getArgValue(for: "--output", args: args)
 
         do {
-            let config = try CLIConfig.load(from: configPath)
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            let config = try resolveCLIConfig(args: args)
+            guard let credentials = config.credentials else {
                 print("Error: Failed to obtain credentials.")
+                return
+            }
+            guard !config.servers.isEmpty else {
+                print("Error: No servers available to probe.")
                 return
             }
 
             let healthStore = FileBackedHealthStore(fileURL: URL(fileURLWithPath: "health.json"))
-            let bootstrapper = NativeServerBootstrapper()
-
-            let bootstrapPolicy = config.resolveBootstrapPolicy()
-            let selectionPolicy = config.resolveSelectionPolicy()
+            let bootstrapper = makeNativeBootstrapper()
 
             let selector = AutoServerSelector(
-                policy: selectionPolicy,
+                policy: config.selectionPolicy,
                 healthStore: healthStore,
                 bootstrapper: bootstrapper
-            )
-
-            let context = BootstrapContext(
-                networkClass: .wifi,
-                sni: config.sni,
-                censorshipStrategy: config.censorshipStrategy,
-                ipv6Available: config.ipv6Available,
-                tokenConfigurationID: config.tokenConfigurationID
             )
 
             let request = SelectionRequest(
                 servers: config.servers,
                 credentials: credentials,
-                context: context,
-                bootstrapPolicy: bootstrapPolicy,
-                selectionPolicy: selectionPolicy
+                context: config.context,
+                bootstrapPolicy: config.bootstrapPolicy,
+                selectionPolicy: config.selectionPolicy
             )
 
-            print("Starting Auto Server Selection Race...")
+            print("Starting Auto Server Selection Race (\(config.servers.count) servers)...")
             let run = await selector.select(request)
 
-            // Log output using JSONL
             JSONLOutput.printRecord(command: "auto-select", data: run.statistics, toFile: outputFile)
 
-            // Render report
             let report = ReportGenerator.generate(from: run.observations)
             ReportGenerator.renderToConsole(report: report)
 
@@ -118,16 +220,14 @@ struct FptnSelectorApp {
                 print("Auto-Select Failed or Cancelled: \(run.result)")
             }
 
+        } catch CLIError.missingConfigOrToken {
+            // Error message printed in resolver
         } catch {
             print("Error running auto-select: \(error)")
         }
     }
 
     static func runManualBootstrap(args: [String]) async {
-        guard let configPath = getArgValue(for: "--config", args: args) else {
-            print("Error: Missing --config <path>")
-            return
-        }
         guard let targetServerID = getArgValue(for: "--server", args: args) else {
             print("Error: Missing --server <host:port>")
             return
@@ -135,37 +235,28 @@ struct FptnSelectorApp {
         let outputFile = getArgValue(for: "--output", args: args)
 
         do {
-            let config = try CLIConfig.load(from: configPath)
-            guard let targetServer = config.servers.first(where: { "\($0.host):\($0.port)" == targetServerID }) else {
-                print("Error: Server \(targetServerID) not found in config.")
+            let config = try resolveCLIConfig(args: args)
+            guard let targetServer = config.servers.first(where: { "\($0.host):\($0.port)" == targetServerID || $0.host == targetServerID }) else {
+                print("Error: Server \(targetServerID) not found in candidate list.")
                 return
             }
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            guard let credentials = config.credentials else {
                 print("Error: Failed to obtain credentials.")
                 return
             }
 
-            let bootstrapper = NativeServerBootstrapper()
+            let bootstrapper = makeNativeBootstrapper()
             let tunnelController = BootstrapOnlyTunnelController()
             let coordinator = ManualConnectionCoordinator(
                 bootstrapper: bootstrapper,
                 tunnelController: tunnelController
             )
 
-            let context = BootstrapContext(
-                networkClass: .wifi,
-                sni: config.sni,
-                censorshipStrategy: config.censorshipStrategy,
-                ipv6Available: config.ipv6Available,
-                tokenConfigurationID: config.tokenConfigurationID
-            )
-
-            let bootstrapPolicy = config.resolveBootstrapPolicy()
             let request = ManualConnectionRequest(
                 server: targetServer,
                 credentials: credentials,
-                bootstrapContext: context,
-                bootstrapPolicy: bootstrapPolicy
+                bootstrapContext: config.context,
+                bootstrapPolicy: config.bootstrapPolicy
             )
 
             print("Initiating manual connection to \(targetServer.name)...")
@@ -183,57 +274,49 @@ struct FptnSelectorApp {
                 JSONLOutput.printRecord(command: "manual-bootstrap", data: "cancelled", toFile: outputFile)
             }
 
+        } catch CLIError.missingConfigOrToken {
+            // Error message printed in resolver
         } catch {
             print("Error running manual-bootstrap: \(error)")
         }
     }
 
     static func runScanAll(args: [String]) async {
-        guard let configPath = getArgValue(for: "--config", args: args) else {
-            print("Error: Missing --config <path>")
-            return
-        }
         let outputFile = getArgValue(for: "--output", args: args)
 
         do {
-            let config = try CLIConfig.load(from: configPath)
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            let config = try resolveCLIConfig(args: args)
+            guard let credentials = config.credentials else {
                 print("Error: Failed to obtain credentials.")
+                return
+            }
+            guard !config.servers.isEmpty else {
+                print("Error: No servers available to probe.")
                 return
             }
 
             let healthStore = FileBackedHealthStore(fileURL: URL(fileURLWithPath: "health.json"))
-            let bootstrapper = NativeServerBootstrapper()
+            let bootstrapper = makeNativeBootstrapper()
             let runner = FullScanRunner(healthStore: healthStore, bootstrapper: bootstrapper)
 
-            let context = BootstrapContext(
-                networkClass: .wifi,
-                sni: config.sni,
-                censorshipStrategy: config.censorshipStrategy,
-                ipv6Available: config.ipv6Available,
-                tokenConfigurationID: config.tokenConfigurationID
-            )
+            let maxActive = config.selectionPolicy.maximumActiveProbes
 
-            let bootstrapPolicy = config.resolveBootstrapPolicy()
-            let maxActive = config.resolveSelectionPolicy().maximumActiveProbes
-
-            print("Initiating full scan of all candidates concurrently...")
+            print("Initiating full scan of \(config.servers.count) candidates concurrently...")
             let report = await runner.scan(
                 servers: config.servers,
                 credentials: credentials,
-                context: context,
-                bootstrapPolicy: bootstrapPolicy,
+                context: config.context,
+                bootstrapPolicy: config.bootstrapPolicy,
                 maxActive: maxActive
             )
 
-            // Log outputs
             JSONLOutput.printRecord(command: "scan-all", data: report.statistics, toFile: outputFile)
 
-            let acceptance = ReportGenerator.generate(from: report.observations)
+            let acceptance = ReportGenerator.generate(from: report.observations, totalScanDurationMs: report.statistics.totalScanDurationMs)
             ReportGenerator.renderToConsole(report: acceptance)
 
             print("\n================ DETAILED SERVER REPORT ================")
-            print(String(format: "%-25s | %-20s | %-12s | %-12s", "Server Name", "Host:Port", "Status", "Latency"))
+            print(String(format: "%-25@ | %-20@ | %-12@ | %-12@", "Server Name" as NSString, "Host:Port" as NSString, "Status" as NSString, "Latency" as NSString))
             print("--------------------------------------------------------------------------------")
             for server in config.servers.sorted(by: { $0.name < $1.name }) {
                 let obs = report.observations.first(where: { $0.serverID == server.id })
@@ -244,6 +327,9 @@ struct FptnSelectorApp {
                     case .success:
                         statusStr = "ONLINE"
                         latencyStr = obs.totalBootstrapMs.map { "\($0) ms" } ?? "N/A"
+                    case .certificateMismatch:
+                        statusStr = "OUTDATED_TOKEN"
+                        latencyStr = "N/A"
                     default:
                         statusStr = obs.outcome.rawValue.uppercased()
                         latencyStr = "N/A"
@@ -252,10 +338,12 @@ struct FptnSelectorApp {
                     statusStr = "SKIPPED"
                     latencyStr = "N/A"
                 }
-                print(String(format: "%-25s | %-20s | %-12s | %-12s", server.name, "\(server.host):\(server.port)", statusStr, latencyStr))
+                print(String(format: "%-25@ | %-20@ | %-12@ | %-12@", server.name as NSString, "\(server.host):\(server.port)" as NSString, statusStr as NSString, latencyStr as NSString))
             }
             print("========================================================\n")
 
+        } catch CLIError.missingConfigOrToken {
+            // Error message printed in resolver
         } catch {
             print("Error running scan-all: \(error)")
         }
@@ -405,13 +493,13 @@ struct FptnSelectorApp {
 
         do {
             let config = try CLIConfig.load(from: configPath)
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            guard let credentials = SecureCredentialProvider.getCredentials(args: args) else {
                 print("Error: Failed to obtain credentials.")
                 return
             }
 
             let healthStore = FileBackedHealthStore(fileURL: URL(fileURLWithPath: "health.json"))
-            let bootstrapper = NativeServerBootstrapper()
+            let bootstrapper = makeNativeBootstrapper()
 
             let bootstrapPolicy = config.resolveBootstrapPolicy()
             let selectionPolicy = config.resolveSelectionPolicy()
@@ -512,10 +600,22 @@ struct FptnSelectorApp {
     // MARK: - Helpers
 
     private static func getArgValue(for flag: String, args: [String]) -> String? {
-        if let idx = args.firstIndex(of: flag), idx + 1 < args.count {
-            return args[idx + 1]
+        let prefix = "\(flag)="
+        for (idx, arg) in args.enumerated() {
+            if arg.hasPrefix(prefix) {
+                return String(arg.dropFirst(prefix.count)).trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+            }
+            if arg == flag, idx + 1 < args.count {
+                return args[idx + 1].trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+            }
         }
         return nil
+    }
+
+    private static func makeNativeBootstrapper() -> NativeServerBootstrapper {
+        NativeServerBootstrapper { server, context in
+            MacNativeBootstrapClient(server: server, context: context)
+        }
     }
 }
 

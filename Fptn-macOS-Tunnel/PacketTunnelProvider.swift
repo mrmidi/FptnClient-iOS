@@ -10,6 +10,7 @@ import Foundation
 import Network
 import NetworkExtension
 import OSLog
+import FptnSharedTunnel
 
 private struct MacTunnelControlMessage: Codable {
     let action: MacTunnelMessageAction
@@ -27,20 +28,6 @@ private enum MacTunnelMessageAction: String, Codable {
     case ping
     case getStatus = "get_status"
     case prepareStop = "prepare_stop"
-}
-
-private enum MacTunnelProviderConfig {
-    static let server = "server"
-    static let port = "port"
-    static let accessToken = "accessToken"
-    static let dnsIPv4 = "dnsIPv4"
-    static let dnsIPv6 = "dnsIPv6"
-    static let sni = "sni"
-    static let md5Fingerprint = "md5Fingerprint"
-    static let logLevel = "logLevel"
-    static let reconnectEnabled = "reconnectEnabled"
-    static let maxReconnectAttempts = "maxReconnectAttempts"
-    static let reconnectDelaySeconds = "reconnectDelaySeconds"
 }
 
 private enum MacTunnelRuntimeState: String {
@@ -69,26 +56,30 @@ private struct MacTunnelConfiguration {
     let tunIPv4Gateway = "10.8.0.1"
 
     init?(providerConfig: [String: Any]) {
-        guard let server = providerConfig[MacTunnelProviderConfig.server] as? String,
-              let port = providerConfig[MacTunnelProviderConfig.port] as? Int,
-              let accessToken = providerConfig[MacTunnelProviderConfig.accessToken] as? String,
-              let dnsIPv4 = providerConfig[MacTunnelProviderConfig.dnsIPv4] as? String,
-              let sni = providerConfig[MacTunnelProviderConfig.sni] as? String,
-              let md5 = providerConfig[MacTunnelProviderConfig.md5Fingerprint] as? String else {
+        guard let startupData = providerConfig[TunnelProviderConfigurationKey.startupV1] as? Data,
+              startupData.count <= TunnelStartupConfigurationV1.maximumEncodedSize,
+              let startup = try? JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: startupData) else {
             return nil
         }
 
-        self.server = server
-        self.port = port
-        self.accessToken = accessToken
-        self.dnsIPv4 = dnsIPv4
-        self.dnsIPv6 = providerConfig[MacTunnelProviderConfig.dnsIPv6] as? String ?? "2606:4700:4700::1111"
-        self.sni = sni
-        self.md5Fingerprint = md5
-        self.logLevel = providerConfig[MacTunnelProviderConfig.logLevel] as? String ?? "warning"
-        self.reconnectEnabled = providerConfig[MacTunnelProviderConfig.reconnectEnabled] as? Bool ?? true
-        self.maxReconnectAttempts = providerConfig[MacTunnelProviderConfig.maxReconnectAttempts] as? Int ?? 0
-        self.reconnectDelaySeconds = providerConfig[MacTunnelProviderConfig.reconnectDelaySeconds] as? Int ?? 2
+        self.server = startup.serverHost
+        self.port = startup.serverPort
+        self.accessToken = startup.accessToken
+        self.dnsIPv4 = startup.dnsIPv4
+        self.dnsIPv6 = startup.dnsIPv6 ?? "2606:4700:4700::1111"
+        self.sni = startup.sni
+        self.md5Fingerprint = startup.md5Fingerprint
+        self.logLevel = startup.logLevel.rawValue
+        switch startup.recoveryPolicy {
+        case .none:
+            self.reconnectEnabled = false
+            self.maxReconnectAttempts = 0
+            self.reconnectDelaySeconds = 0
+        case let .automatic(policy):
+            self.reconnectEnabled = true
+            self.maxReconnectAttempts = policy.sameServerAttempts
+            self.reconnectDelaySeconds = policy.reconnectDelaySeconds
+        }
     }
 }
 

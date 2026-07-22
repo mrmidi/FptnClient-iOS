@@ -20,6 +20,25 @@ struct WebsocketClientStatus: Sendable {
     let callbackExitCount: Int64
     let callbackByteCount: Int64
     let inPacketCallback: Bool
+    // PR1A: socket buffer diagnostics and process-wide lifecycle counters.
+    let requestedRcvbufBytes: Int
+    let requestedSndbufBytes: Int
+    let effectiveRcvbufBytes: Int
+    let effectiveSndbufBytes: Int
+    let liveClients: Int
+    let activeReaderCoroutines: Int
+    let activeSenderCoroutines: Int
+    let socketBufferSetErrorCount: Int
+    // PR1B: outbound queue diagnostics.
+    let queuedPackets: UInt64
+    let queuedBytes: UInt64
+    let queuedBytesPeak: UInt64
+    let queueFullCount: UInt64
+    // PR1C: teardown diagnostics.
+    let disconnectCode: WebsocketDisconnectCode
+    let stopOrigin: WebsocketStopOrigin
+    let stopCleanupCompleted: Bool
+    let activeOperations: UInt32
 }
 
 final class WebsocketClientBridge {
@@ -36,6 +55,11 @@ final class WebsocketClientBridge {
     private let connectedCallback: ConnectionCallback
     private let disconnectedCallback: DisconnectionCallback
     private let ipAssignedCallback: IPAssignedCallback
+
+    // PR2: one-shot lifecycle latch.
+    private enum Lifecycle { case created, started, stopped }
+    private let lifecycleLock = NSLock()
+    private var lifecycle: Lifecycle = .created
 
     // MARK: - Init / deinit
 
@@ -106,28 +130,42 @@ final class WebsocketClientBridge {
 
     // MARK: - Control
 
+    // PR2: lifecycle-locked start/stop.
     @discardableResult
     func start() -> Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard lifecycle == .created else { return false }
         let ok = clientBridge.start()
+        lifecycle = ok ? .started : .stopped
         logger.debug("WebSocket start → \(ok)")
         return ok
     }
 
     @discardableResult
-    func stop() -> Bool {
-        let ok = clientBridge.stop()
-        logger.debug("WebSocket stop → \(ok)")
+    func stop(origin: WebsocketStopOrigin = .swiftTunnelStop) -> Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard lifecycle != .stopped else { return false }
+        lifecycle = .stopped
+        let ok = clientBridge.stop(origin.rawValue)
+        logger.debug("WebSocket stop → \(ok) origin=\(origin)")
         return ok
     }
 
-    @discardableResult
-    func sendPacket(_ data: Data) -> Bool {
-        return data.withUnsafeBytes { buf in
-            guard let ptr = buf.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                return false
-            }
-            return clientBridge.sendPacket(ptr, UInt32(data.count))
+    // PR1B: returns typed send result for provider-level diagnostics.
+    func sendPacket(_ data: Data) -> WebsocketSendResult {
+        guard !data.isEmpty else {
+            return .invalidPacket
         }
+        let rawValue: UInt8 = data.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?
+                .assumingMemoryBound(to: UInt8.self) else {
+                return WebsocketSendResult.invalidPacket.rawValue
+            }
+            return clientBridge.sendPacket(pointer, UInt32(data.count))
+        }
+        return WebsocketSendResult(bridgeValue: rawValue)
     }
 
     var isStarted: Bool {
@@ -149,7 +187,23 @@ final class WebsocketClientBridge {
             callbackEnterCount: Int64(raw.callback_enter_count),
             callbackExitCount: Int64(raw.callback_exit_count),
             callbackByteCount: Int64(raw.callback_byte_count),
-            inPacketCallback: raw.in_packet_callback
+            inPacketCallback: raw.in_packet_callback,
+            requestedRcvbufBytes: Int(raw.requested_rcvbuf_bytes),
+            requestedSndbufBytes: Int(raw.requested_sndbuf_bytes),
+            effectiveRcvbufBytes: Int(raw.effective_rcvbuf_bytes),
+            effectiveSndbufBytes: Int(raw.effective_sndbuf_bytes),
+            liveClients: Int(raw.live_clients),
+            activeReaderCoroutines: Int(raw.active_reader_coroutines),
+            activeSenderCoroutines: Int(raw.active_sender_coroutines),
+            socketBufferSetErrorCount: Int(raw.socket_buffer_set_error_count),
+            queuedPackets: raw.queued_packets,
+            queuedBytes: raw.queued_bytes,
+            queuedBytesPeak: raw.queued_bytes_peak,
+            queueFullCount: raw.queue_full_count,
+            disconnectCode: WebsocketDisconnectCode(bridgeValue: raw.disconnect_code),
+            stopOrigin: WebsocketStopOrigin(bridgeValue: raw.stop_origin),
+            stopCleanupCompleted: raw.stop_cleanup_completed,
+            activeOperations: raw.active_operations
         )
     }
 }
