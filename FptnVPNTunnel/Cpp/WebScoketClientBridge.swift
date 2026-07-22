@@ -57,6 +57,12 @@ final class WebsocketClientBridge {
     private let ipAssignedCallback: IPAssignedCallback
     private let diagnosticsID = UUID().uuidString
 
+    // PR2: one-shot lifecycle latch. Once stop() wins, start() is
+    // permanently rejected. Prevents resurrection after shutdown.
+    private enum Lifecycle { case created, started, stopped }
+    private let lifecycleLock = NSLock()
+    private var lifecycle: Lifecycle = .created
+
     // MARK: - Init / deinit
 
     init(
@@ -136,17 +142,26 @@ final class WebsocketClientBridge {
 
     // MARK: - Control
 
+    // PR2: lifecycle-locked start. Rejected if already started or stopped.
     @discardableResult
     func start() -> Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard lifecycle == .created else { return false }
         let ok = clientBridge.start()
+        lifecycle = ok ? .started : .stopped
         logger.debug("WebSocket start → \(ok)")
         TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "start id=\(diagnosticsID) ok=\(ok)")
         return ok
     }
 
-    // PR1C: stop accepts an origin for disconnect classification.
+    // PR2: lifecycle-locked stop. Once stopped, start() is permanently rejected.
     @discardableResult
     func stop(origin: WebsocketStopOrigin = .swiftTunnelStop) -> Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard lifecycle != .stopped else { return false }
+        lifecycle = .stopped
         let ok = clientBridge.stop(origin.rawValue)
         logger.debug("WebSocket stop → \(ok) origin=\(origin)")
         TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "stop id=\(diagnosticsID) ok=\(ok) origin=\(origin)")

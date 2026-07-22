@@ -33,6 +33,11 @@ struct TunnelProviderHeartbeat: Codable, Equatable, Sendable {
     let websocketSendFailures: Int64
     let memoryResidentBytes: UInt64?
     let memoryPhysFootprintBytes: UInt64?
+    // PR2: typed fields for fallback reconnect gating.
+    // Optional so old persisted heartbeats still decode.
+    let localStopInitiator: String?
+    let nativeDisconnectCode: UInt16?
+    let nativeStopOrigin: UInt16?
 }
 
 enum TunnelMemoryPressureLevel: String, Codable, Sendable {

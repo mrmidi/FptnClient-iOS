@@ -85,6 +85,23 @@ private struct TunnelRuntimeSnapshot: Codable {
     let nativeCallbackExitCount: Int64
     let nativeCallbackByteCount: Int64
     let nativeInPacketCallback: Bool
+    // PR2: all PR1A–1C native diagnostics for app-side visibility.
+    let nativeRequestedRcvbufBytes: Int
+    let nativeRequestedSndbufBytes: Int
+    let nativeEffectiveRcvbufBytes: Int
+    let nativeEffectiveSndbufBytes: Int
+    let nativeSocketBufferSetErrorCount: Int
+    let nativeLiveClients: Int
+    let nativeActiveReaderCoroutines: Int
+    let nativeActiveSenderCoroutines: Int
+    let nativeQueuedPackets: UInt64
+    let nativeQueuedBytes: UInt64
+    let nativeQueuedBytesPeak: UInt64
+    let nativeQueueFullCount: UInt64
+    let nativeDisconnectCode: UInt16
+    let nativeStopOrigin: UInt16
+    let nativeActiveOperations: UInt32
+    let nativeStopCleanupCompleted: Bool
 }
 
 private struct TunnelConfiguration {
@@ -170,6 +187,19 @@ private struct PacketCounters {
     var lastSendFailureWarningAt: Date?
 }
 
+// PR2: explicit invariant violations, logged once per type.
+enum ProviderInvariant: Hashable {
+    case multipleNativeClients
+    case incompleteNativeTeardown
+}
+
+// PR2: process-lifetime read ownership token. Prevents cross-session
+// generation collisions (generation resets to 0 on each startTunnel).
+private struct PacketReadToken: Equatable {
+    let session: UInt64
+    let generation: Int
+}
+
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let eventQueue = DispatchQueue(label: "net.mrmidi.FptnVPN.tunnel.events")
     private let stateLock = NSLock()
@@ -205,6 +235,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var readBackpressureUntil: Date?
     private var readBackpressureWorkItem: DispatchWorkItem?
     private var consecutiveSendFailureBatches = 0
+
+    // PR2: invariant tracking (logged once per type).
+    private var loggedInvariantViolations: Set<ProviderInvariant> = []
+    // PR2: process-lifetime session token + generation-based read ownership.
+    private var tunnelSession: UInt64 = 0
+    private var pendingReadToken: PacketReadToken?
+    // PR2: final native status preserved before detaching a client.
+    private var lastNativeStatus: WebsocketClientStatus?
+    private var lastNativeStatusGeneration: Int?
 
     private let runtimeReconnectDelayCapSeconds = 60
     private let activityResumeLogThresholdSeconds = 60
@@ -253,10 +292,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         localStopInitiator = nil
         shutdownRequested = false
         isNetworkPathSatisfied = true
+        // PR2: increment session token. Generation resets but session
+        // is process-lifetime unique, preventing cross-session collisions.
+        tunnelSession &+= 1
         websocketGeneration = 0
         didApplyNetworkSettings = false
         isReadLoopActive = false
-        isPacketReadPending = false
+        // PR2: do NOT reset isPacketReadPending here. An outstanding
+        // readPackets callback from the old session still exists.
+        // Only the owning callback may clear it via token check.
         reconnectAttempt = 0
         lastTransportError = nil
         lastStopReason = nil
@@ -273,6 +317,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         assignedIPv6 = nil
         appliedIPv4 = nil
         appliedIPv6 = nil
+        // PR2: reset per-session state.
+        loggedInvariantViolations.removeAll()
+        lastNativeStatus = nil
+        lastNativeStatusGeneration = nil
         stateLock.unlock()
 
         updateRuntimeState(.starting, reason: "startTunnel")
@@ -294,7 +342,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         lastStopReasonRawValue = Int(reason.rawValue)
         lastStopReason = description
         isReadLoopActive = false
-        isPacketReadPending = false
+        // PR2: do NOT clear isPacketReadPending — the outstanding
+        // readPackets callback still exists and owns the slot.
         stateLock.unlock()
 
         updateRuntimeState(.stopping, reason: "stopTunnel(\(description))")
@@ -343,7 +392,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 localStopInitiator = .appDisconnect
                 shutdownRequested = true
                 isReadLoopActive = false
-                isPacketReadPending = false
                 stateLock.unlock()
                 cancelPendingReconnect()
                 cancelReadBackpressure()
@@ -453,9 +501,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }
         )
 
-        replaceWebSocketClient(with: client, stopCurrent: false)
+        // PR2: pass expectedGeneration so a stale replacement is
+        // rejected before detaching the current bridge. If rejected,
+        // do NOT call client.start() — the bridge was stopped.
+        guard replaceWebSocketClient(
+            with: client,
+            stopCurrent: true,
+            stopOrigin: .swiftReconnect,
+            expectedGeneration: generation
+        ) else {
+            logger.info("WebSocket replacement rejected (shutdown/stale) context=\(context) generation=\(generation)")
+            return
+        }
         guard client.start() else {
-            replaceWebSocketClient(with: nil, stopCurrent: false)
+            replaceWebSocketClient(with: nil, stopCurrent: false, expectedGeneration: generation)
             logger.error("WebSocket start failed context=\(context) generation=\(generation)")
             recordProviderEvent(category: "websocket", message: "start_failed context=\(context) generation=\(generation)", generation: generation)
             eventQueue.async { [weak self] in
@@ -586,12 +645,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             return
         }
 
+        // PR2: read native status for numeric disconnect diagnostics.
+        let nativeStatus = currentWebSocketClient()?.status
+        let disconnectCodeStr = nativeStatus.map { "\($0.disconnectCode)" } ?? "-"
+        let stopOriginStr = nativeStatus.map { "\($0.stopOrigin)" } ?? "-"
+        let activeOpsStr = nativeStatus.map { "\($0.activeOperations)" } ?? "-"
+
         logger.warning(
-            "Tunnel websocket disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") \(activityDiagnosticsDescription())"
+            "Tunnel websocket disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCodeStr) stop_origin=\(stopOriginStr) active_ops=\(activeOpsStr) \(activityDiagnosticsDescription())"
         )
         recordProviderEvent(
             category: "websocket",
-            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-")\(pathHandoffHint)",
+            message: "transport_disconnected generation=\(generation) was_connected=\(wasConnected) reason=\(reason) stop_initiator=\(stopInitiator?.rawValue ?? "-") disconnect_code=\(disconnectCodeStr) stop_origin=\(stopOriginStr) active_ops=\(activeOpsStr)\(pathHandoffHint)",
             generation: generation
         )
         updateDiagnosticsHeartbeat(lastEvent: "transport_disconnected")
@@ -887,19 +952,44 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         stateLock.lock()
-        guard !isPacketReadPending else {
+        // PR2: exactly one process-wide pending read. A stale token
+        // from an old session does not block — but only the owning
+        // callback may clear it. If a read is pending (any session),
+        // do not issue another.
+        guard pendingReadToken == nil else {
             stateLock.unlock()
             return
         }
+        let readToken = PacketReadToken(session: tunnelSession, generation: websocketGeneration)
+        pendingReadToken = readToken
         isPacketReadPending = true
         stateLock.unlock()
 
         packetFlow.readPackets { [weak self] packets, _ in
             guard let self else { return }
 
+            // PR2: only the callback that owns the pending token may
+            // clear it. An old-session callback must not clobber
+            // ownership of a newer read.
             self.stateLock.lock()
-            self.isPacketReadPending = false
+            let ownsPendingSlot = self.pendingReadToken == readToken
+            if ownsPendingSlot {
+                self.isPacketReadPending = false
+                self.pendingReadToken = nil
+            }
+            let currentToken = PacketReadToken(session: self.tunnelSession, generation: self.websocketGeneration)
             self.stateLock.unlock()
+
+            guard ownsPendingSlot else { return }
+
+            // PR2: stale generation within the same session — restart
+            // the current generation's read loop.
+            guard readToken == currentToken else {
+                self.eventQueue.async { [weak self] in
+                    self?.startReadLoop()
+                }
+                return
+            }
 
             guard self.shouldReadOutboundPackets() else { return }
 
@@ -995,19 +1085,95 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         return websocketGeneration
     }
 
-    private func replaceWebSocketClient(
-        with newClient: WebsocketClientBridge?,
-        stopCurrent: Bool
-    ) {
-        var previousClient: WebsocketClientBridge?
+    // PR2: log an invariant violation once per type.
+    private func logInvariantOnce(_ invariant: ProviderInvariant) {
         stateLock.lock()
-        previousClient = wsClient
-        wsClient = newClient
+        let alreadyLogged = loggedInvariantViolations.contains(invariant)
+        if !alreadyLogged {
+            loggedInvariantViolations.insert(invariant)
+        }
         stateLock.unlock()
 
-        if stopCurrent {
-            _ = previousClient?.stop()
+        if !alreadyLogged {
+            logger.error("INVARIANT_VIOLATION: \(invariant)")
+            recordProviderEvent(category: "invariant", message: "violation \(invariant)")
         }
+    }
+
+    // PR2: replace the active bridge with stop-origin plumbing,
+    // final status preservation, and invariant checks.
+    // Order: validate generation → detach → stop/join → capture → expose.
+    // Returns false if the replacement was rejected (shutdown or
+    // generation mismatch). The caller must NOT start a rejected client.
+    @discardableResult
+    private func replaceWebSocketClient(
+        with newClient: WebsocketClientBridge?,
+        stopCurrent: Bool,
+        stopOrigin: WebsocketStopOrigin = .swiftTunnelStop,
+        expectedGeneration: Int? = nil
+    ) -> Bool {
+        // PR2: validate generation BEFORE detaching the current bridge.
+        // A stale caller must never detach the current bridge.
+        stateLock.lock()
+        if let expectedGeneration, websocketGeneration != expectedGeneration {
+            stateLock.unlock()
+            if let newClient { _ = newClient.stop(origin: .swiftTunnelStop) }
+            return false
+        }
+        // PR2: reject new client installation during shutdown, but
+        // always allow removal (newClient == nil) so stopTunnel can
+        // detach and stop the active bridge.
+        if shutdownRequested, newClient != nil {
+            stateLock.unlock()
+            _ = newClient?.stop(origin: .swiftTunnelStop)
+            return false
+        }
+        let previousClient = wsClient
+        let generation = websocketGeneration
+        wsClient = nil
+        stateLock.unlock()
+
+        // Stop and join the previous bridge.
+        if stopCurrent, let previousClient {
+            _ = previousClient.stop(origin: stopOrigin)
+        }
+
+        // Capture final status AFTER teardown is complete.
+        if let previousClient {
+            let finalStatus = previousClient.status
+            stateLock.lock()
+            lastNativeStatus = finalStatus
+            lastNativeStatusGeneration = generation
+            stateLock.unlock()
+
+            if finalStatus.activeOperations != 0 || !finalStatus.stopCleanupCompleted {
+                logInvariantOnce(.incompleteNativeTeardown)
+            }
+            if finalStatus.liveClients > 1 {
+                logInvariantOnce(.multipleNativeClients)
+            }
+        }
+
+        // PR2: bridgeReplacementOverlap removed — the previous bridge
+        // is already stopped and joined before the new one is exposed,
+        // so both being non-nil is a normal replacement, not an overlap.
+        // liveClients > 1 (checked above via final status) is the
+        // meaningful overlap invariant.
+
+        // Revalidate before exposing.
+        stateLock.lock()
+        let mayExpose = !shutdownRequested && websocketGeneration == generation
+        if mayExpose {
+            wsClient = newClient
+        }
+        stateLock.unlock()
+
+        if !mayExpose, let newClient {
+            _ = newClient.stop(origin: .swiftTunnelStop)
+            return false
+        }
+
+        return true
     }
 
     private func recordPacketFlowRead(
@@ -1476,37 +1642,93 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     private func currentSnapshot() -> TunnelRuntimeSnapshot {
-        stateLock.lock()
-        defer { stateLock.unlock() }
+        // PR2: copy Swift fields and bridge reference under lock,
+        // then query native status OUTSIDE the lock to avoid holding
+        // stateLock during the C++ getStatus() call.
+        let client: WebsocketClientBridge?
+        let savedNativeStatus: WebsocketClientStatus?
+        let savedNativeGeneration: Int?
+        let state: TunnelRuntimeState
+        let reasserting: Bool
+        let reconnAttempt: Int
+        let maxReconn: Int
+        let transportError: String?
+        let stopReason: String?
+        let stopReasonRaw: Int?
+        let stopInitiator: String?
+        let inboundAt: Date?
+        let outboundAt: Date?
+        let readPackets: Int64
+        let readBytes: Int64
+        let recvPackets: Int64
+        let recvBytes: Int64
+        let writePackets: Int64
+        let writeBytes: Int64
+        let sendFailures: Int64
+        let dns4: String?
+        let dns6: String?
+        let tun4: String?
+        let tun6: String?
+        let wsIdleTimeout: Int
 
-        let status = wsClient?.status
+        stateLock.lock()
+        client = wsClient
+        savedNativeStatus = lastNativeStatus
+        savedNativeGeneration = lastNativeStatusGeneration
+        state = runtimeState
+        reasserting = runtimeState == .reasserting || runtimeState == .waitingForNetwork
+        reconnAttempt = reconnectAttempt
+        maxReconn = configuration?.maxReconnectAttempts ?? 0
+        transportError = lastTransportError
+        stopReason = lastStopReason
+        stopReasonRaw = lastStopReasonRawValue
+        stopInitiator = localStopInitiator?.rawValue
+        inboundAt = counters.lastInboundActivityAt
+        outboundAt = counters.lastOutboundActivityAt
+        readPackets = counters.packetFlowReadPackets
+        readBytes = counters.packetFlowReadBytes
+        recvPackets = counters.transportReceivedPackets
+        recvBytes = counters.transportReceivedBytes
+        writePackets = counters.packetFlowWritePackets
+        writeBytes = counters.packetFlowWriteBytes
+        sendFailures = counters.websocketSendFailures
+        dns4 = configuration?.dnsIPv4
+        dns6 = configuration?.dnsIPv6
+        tun4 = configuration?.tunIPv4
+        tun6 = configuration?.tunIPv6
+        wsIdleTimeout = configuration?.websocketIdleTimeoutSeconds ?? 0
+        stateLock.unlock()
+
+        // Query native status outside the lock.
+        let status = client?.status ?? savedNativeStatus
         let memory = providerMemorySnapshot(status: status)
+
         return TunnelRuntimeSnapshot(
-            runtimeState: runtimeState,
-            isReasserting: runtimeState == .reasserting || runtimeState == .waitingForNetwork,
-            reconnectAttempt: reconnectAttempt,
-            maxReconnectAttempts: configuration?.maxReconnectAttempts ?? 0,
-            lastTransportError: lastTransportError,
-            lastStopReason: lastStopReason,
-            lastStopReasonRawValue: lastStopReasonRawValue,
-            localStopInitiator: localStopInitiator?.rawValue,
-            lastInboundActivityAt: iso8601(counters.lastInboundActivityAt),
-            lastOutboundActivityAt: iso8601(counters.lastOutboundActivityAt),
-            packetFlowReadPackets: counters.packetFlowReadPackets,
-            packetFlowReadBytes: counters.packetFlowReadBytes,
-            transportReceivedPackets: counters.transportReceivedPackets,
-            transportReceivedBytes: counters.transportReceivedBytes,
-            packetFlowWritePackets: counters.packetFlowWritePackets,
-            packetFlowWriteBytes: counters.packetFlowWriteBytes,
-            websocketSendFailures: counters.websocketSendFailures,
-            dnsIPv4: configuration?.dnsIPv4,
-            dnsIPv6: configuration?.dnsIPv6,
-            tunnelIPv4: configuration?.tunIPv4,
-            tunnelIPv6: configuration?.tunIPv6,
-            ipv6Enabled: configuration?.dnsIPv6 != nil,
+            runtimeState: state,
+            isReasserting: reasserting,
+            reconnectAttempt: reconnAttempt,
+            maxReconnectAttempts: maxReconn,
+            lastTransportError: transportError,
+            lastStopReason: stopReason,
+            lastStopReasonRawValue: stopReasonRaw,
+            localStopInitiator: stopInitiator,
+            lastInboundActivityAt: iso8601(inboundAt),
+            lastOutboundActivityAt: iso8601(outboundAt),
+            packetFlowReadPackets: readPackets,
+            packetFlowReadBytes: readBytes,
+            transportReceivedPackets: recvPackets,
+            transportReceivedBytes: recvBytes,
+            packetFlowWritePackets: writePackets,
+            packetFlowWriteBytes: writeBytes,
+            websocketSendFailures: sendFailures,
+            dnsIPv4: dns4,
+            dnsIPv6: dns6,
+            tunnelIPv4: tun4,
+            tunnelIPv6: tun6,
+            ipv6Enabled: dns6 != nil,
             websocketRunning: status?.running ?? false,
             websocketStarted: status?.started ?? false,
-            websocketIdleTimeoutSeconds: status?.idleTimeoutSeconds ?? configuration?.websocketIdleTimeoutSeconds ?? 0,
+            websocketIdleTimeoutSeconds: status?.idleTimeoutSeconds ?? wsIdleTimeout,
             websocketLastError: status?.lastError,
             websocketLastDisconnectReason: status?.lastDisconnectReason,
             memoryResidentBytes: memory.residentBytes,
@@ -1516,7 +1738,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             nativeCallbackEnterCount: status?.callbackEnterCount ?? 0,
             nativeCallbackExitCount: status?.callbackExitCount ?? 0,
             nativeCallbackByteCount: status?.callbackByteCount ?? 0,
-            nativeInPacketCallback: status?.inPacketCallback ?? false
+            nativeInPacketCallback: status?.inPacketCallback ?? false,
+            nativeRequestedRcvbufBytes: status?.requestedRcvbufBytes ?? 0,
+            nativeRequestedSndbufBytes: status?.requestedSndbufBytes ?? 0,
+            nativeEffectiveRcvbufBytes: status?.effectiveRcvbufBytes ?? 0,
+            nativeEffectiveSndbufBytes: status?.effectiveSndbufBytes ?? 0,
+            nativeSocketBufferSetErrorCount: status?.socketBufferSetErrorCount ?? 0,
+            nativeLiveClients: status?.liveClients ?? 0,
+            nativeActiveReaderCoroutines: status?.activeReaderCoroutines ?? 0,
+            nativeActiveSenderCoroutines: status?.activeSenderCoroutines ?? 0,
+            nativeQueuedPackets: status?.queuedPackets ?? 0,
+            nativeQueuedBytes: status?.queuedBytes ?? 0,
+            nativeQueuedBytesPeak: status?.queuedBytesPeak ?? 0,
+            nativeQueueFullCount: status?.queueFullCount ?? 0,
+            nativeDisconnectCode: status?.disconnectCode.rawValue ?? 0,
+            nativeStopOrigin: status?.stopOrigin.rawValue ?? 0,
+            nativeActiveOperations: status?.activeOperations ?? 0,
+            nativeStopCleanupCompleted: status?.stopCleanupCompleted ?? false
         )
     }
 
@@ -1591,7 +1829,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 transportReceivedPackets: snapshot.transportReceivedPackets,
                 websocketSendFailures: snapshot.websocketSendFailures,
                 memoryResidentBytes: snapshot.memoryResidentBytes,
-                memoryPhysFootprintBytes: snapshot.memoryPhysFootprintBytes
+                memoryPhysFootprintBytes: snapshot.memoryPhysFootprintBytes,
+                localStopInitiator: snapshot.localStopInitiator,
+                nativeDisconnectCode: snapshot.nativeDisconnectCode,
+                nativeStopOrigin: snapshot.nativeStopOrigin
             )
         )
     }

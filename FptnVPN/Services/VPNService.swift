@@ -54,7 +54,8 @@ final class VPNService: ObservableObject {
     private var conflictDisconnects: Int = 0
     private var remainingFallbackBudget: Int = 0
     private var isUserInitiatedDisconnect: Bool = true
-    private var isFallbackReconnecting: Bool = false
+    // PR2: cancellable fallback reconnect task replaces the boolean guard.
+    private var fallbackReconnectTask: Task<Void, Never>?
 
     private let tokenService = TokenService.shared
     private let serverSelectionService = ServerSelectionService.shared
@@ -93,7 +94,7 @@ final class VPNService: ObservableObject {
     func disconnect() {
         let manager = packetTunnelProvider
         isUserInitiatedDisconnect = true
-        isFallbackReconnecting = false
+        cancelFallbackReconnect()
         connection.isConnected = false
         connection.isConnecting = false
         connection.isReconnecting = false
@@ -557,6 +558,7 @@ final class VPNService: ObservableObject {
 
         switch status {
         case .connected:
+            cancelFallbackReconnect()
             connection.isConnected = true
             connection.isConnecting = false
             connection.isReconnecting = false
@@ -570,6 +572,7 @@ final class VPNService: ObservableObject {
             let maxAttempts = SettingsService.shared.maxReconnectAttempts
             remainingFallbackBudget = maxAttempts == 0 ? Int.max : maxAttempts
         case .reasserting:
+            cancelFallbackReconnect()
             connection.isConnected = true
             connection.isConnecting = false
             connection.isReconnecting = true
@@ -579,6 +582,7 @@ final class VPNService: ObservableObject {
             startTimer()
             stopSpeedMonitoring()
         case .connecting:
+            cancelFallbackReconnect()
             connection.isConnected = false
             connection.isConnecting = true
             connection.isReconnecting = false
@@ -595,7 +599,7 @@ final class VPNService: ObservableObject {
                 logLastDisconnectError(from: tunnelConnection)
                 detectConflictAfterDisconnect()
                 
-                // If it's an unexpected disconnect (connection drop) and fallback reconnect is enabled
+                // PR2: gated fallback reconnect with heartbeat check.
                 if !isUserInitiatedDisconnect && SettingsService.shared.reconnectEnabled {
                     triggerFallbackReconnect()
                 }
@@ -705,36 +709,94 @@ final class VPNService: ObservableObject {
         }
     }
 
+    // PR2: fallback reconnect decision.
+    private enum FallbackReconnectDecision {
+        case doNotReconnect
+        case reconnectNow
+        case recheckAfter(TimeInterval)
+    }
+
+    private func cancelFallbackReconnect() {
+        fallbackReconnectTask?.cancel()
+        fallbackReconnectTask = nil
+    }
+
+    // PR2: evaluate whether to reconnect, defer, or suppress.
+    private func evaluateFallbackDecision() -> FallbackReconnectDecision {
+        guard !isUserInitiatedDisconnect else { return .doNotReconnect }
+        guard SettingsService.shared.reconnectEnabled else { return .doNotReconnect }
+
+        // Check provider heartbeat staleness.
+        let heartbeat = TunnelDiagnosticsStore.shared.readHeartbeat()
+        let heartbeatAge = heartbeat.flatMap {
+            TunnelDiagnosticsStore.ageSeconds(since: $0.timestamp)
+        }
+
+        // Fresh heartbeat (< 45s): provider is alive and handling its
+        // own reconnect. Defer recheck until the heartbeat goes stale.
+        if let age = heartbeatAge, age < 45 {
+            return .recheckAfter(TimeInterval(45 - age))
+        }
+
+        // PR2: use typed fields, not lastEvent strings.
+        // If the provider performed a controlled stop, don't restart.
+        // Raw values match LocalStopInitiator: "app_disconnect", "system_stop".
+        if let initiator = heartbeat?.localStopInitiator,
+           initiator == "app_disconnect" || initiator == "system_stop" {
+            return .doNotReconnect
+        }
+
+        return .reconnectNow
+    }
+
     private func triggerFallbackReconnect() {
-        guard !isUserInitiatedDisconnect else { return }
-        guard !isFallbackReconnecting else { return }
-        
-        isFallbackReconnecting = true
-        
-        Task { @MainActor in
-            defer { isFallbackReconnecting = false }
-            
+        cancelFallbackReconnect()
+
+        fallbackReconnectTask = Task { @MainActor in
+            // PR2: recheck loop — a fresh heartbeat defers, not
+            // permanently suppresses. Keep checking until stale.
+            decisionLoop: while !Task.isCancelled {
+                switch evaluateFallbackDecision() {
+                case .doNotReconnect:
+                    return
+                case .reconnectNow:
+                    break decisionLoop
+                case .recheckAfter(let seconds):
+                    logger.info("Fallback reconnect deferred \(String(format: "%.0f", seconds))s (provider heartbeat fresh)")
+                    try? await Task.sleep(for: .seconds(max(1, seconds)))
+                }
+            }
+            guard !Task.isCancelled else { return }
+
             let delaySeconds = SettingsService.shared.reconnectDelay
             logger.info("Scheduling fallback reconnect after \(delaySeconds)s")
             try? await Task.sleep(for: .seconds(delaySeconds))
-            
+            guard !Task.isCancelled else { return }
             guard !isUserInitiatedDisconnect else { return }
-            
+
+            // PR2: recheck actual NE status after sleeping.
+            guard packetTunnelProvider?.connection.status == .disconnected else {
+                logger.info("Fallback reconnect cancelled: tunnel no longer disconnected")
+                return
+            }
+
+            // PR2: fix budget off-by-one. Check BEFORE decrementing
+            // so a budget of N allows exactly N attempts.
             let maxAttempts = SettingsService.shared.maxReconnectAttempts
             if maxAttempts != 0 {
-                remainingFallbackBudget -= 1
                 if remainingFallbackBudget <= 0 {
                     logger.warning("Reconnection budget exhausted. Stopping reconnection attempts.")
                     connection.errorMessage = "All servers unreachable (attempts exhausted)"
                     return
                 }
+                remainingFallbackBudget -= 1
             }
-            
+
             logger.info("Triggering fallback reconnect attempt. Remaining budget: \(maxAttempts == 0 ? "infinite" : String(remainingFallbackBudget))")
-            
+
             connection.isReconnecting = true
             connection.runtimeState = .starting
-            
+
             await performConnect()
         }
     }

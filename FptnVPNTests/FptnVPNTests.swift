@@ -307,7 +307,10 @@ struct FptnVPNTests {
                 transportReceivedPackets: 12,
                 websocketSendFailures: 0,
                 memoryResidentBytes: 123,
-                memoryPhysFootprintBytes: 456
+                memoryPhysFootprintBytes: 456,
+                localStopInitiator: nil,
+                nativeDisconnectCode: nil,
+                nativeStopOrigin: nil
             )
         )
         try #"{"timestamp":"signal-time-unavailable","signal":11,"signalName":"SIGSEGV","process":"FptnVPNTunnel"}"#
@@ -491,6 +494,72 @@ struct FptnVPNTests {
         #expect(sendFailures == 2)
         #expect(transportStopped == true)
         #expect(invalidPackets == 1)
+    }
+
+    // PR2: disconnect code and stop origin enum mapping.
+    @Test func disconnectCodeAndStopOriginMapBridgeValues() {
+        #expect(WebsocketDisconnectCode(bridgeValue: 0) == .none)
+        #expect(WebsocketDisconnectCode(bridgeValue: 1) == .peerClosed)
+        #expect(WebsocketDisconnectCode(bridgeValue: 5) == .watchdog)
+        #expect(WebsocketDisconnectCode(bridgeValue: 6) == .localStop)
+        #expect(WebsocketDisconnectCode(bridgeValue: 99) == .unknown)
+
+        #expect(WebsocketStopOrigin(bridgeValue: 0) == .none)
+        #expect(WebsocketStopOrigin(bridgeValue: 1) == .swiftTunnelStop)
+        #expect(WebsocketStopOrigin(bridgeValue: 2) == .swiftReconnect)
+        #expect(WebsocketStopOrigin(bridgeValue: 3) == .nativeFailure)
+        #expect(WebsocketStopOrigin(bridgeValue: 4) == .peer)
+        #expect(WebsocketStopOrigin(bridgeValue: 200) == .unknown)
+    }
+
+    // PR2: heartbeat with typed stop fields decodes correctly.
+    @Test func heartbeatDecodesTypedStopFields() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        let store = TunnelDiagnosticsStore(rootURL: root)
+        store.writeHeartbeat(
+            TunnelProviderHeartbeat(
+                timestamp: TunnelDiagnosticsStore.now(),
+                runtimeState: "connected",
+                isReasserting: false,
+                generation: 1,
+                reconnectAttempt: 0,
+                maxReconnectAttempts: 5,
+                pathSatisfied: true,
+                websocketStarted: true,
+                websocketRunning: true,
+                lastTransportError: nil,
+                lastStopReason: nil,
+                lastEvent: "telemetry",
+                lastInboundActivityAt: nil,
+                lastOutboundActivityAt: nil,
+                packetFlowReadPackets: 0,
+                packetFlowWritePackets: 0,
+                transportReceivedPackets: 0,
+                websocketSendFailures: 0,
+                memoryResidentBytes: nil,
+                memoryPhysFootprintBytes: nil,
+                localStopInitiator: "app_disconnect",
+                nativeDisconnectCode: 6,
+                nativeStopOrigin: 1
+            )
+        )
+        let heartbeat = store.readHeartbeat()
+        #expect(heartbeat?.localStopInitiator == "app_disconnect")
+        #expect(heartbeat?.nativeDisconnectCode == 6)
+        #expect(heartbeat?.nativeStopOrigin == 1)
+    }
+
+    // PR2: old heartbeat without typed fields still decodes (backward compat).
+    @Test func heartbeatDecodesWithoutTypedStopFields() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        try #"{"timestamp":"2026-01-01T00:00:00Z","runtimeState":"connected","isReasserting":false,"generation":1,"reconnectAttempt":0,"maxReconnectAttempts":5,"pathSatisfied":true,"websocketStarted":true,"websocketRunning":true,"lastTransportError":null,"lastStopReason":null,"lastEvent":"telemetry","lastInboundActivityAt":null,"lastOutboundActivityAt":null,"packetFlowReadPackets":0,"packetFlowWritePackets":0,"transportReceivedPackets":0,"websocketSendFailures":0,"memoryResidentBytes":null,"memoryPhysFootprintBytes":null}"#
+            .write(to: root.appendingPathComponent("provider-heartbeat.json"), atomically: true, encoding: .utf8)
+        let store = TunnelDiagnosticsStore(rootURL: root)
+        let heartbeat = store.readHeartbeat()
+        #expect(heartbeat != nil)
+        #expect(heartbeat?.localStopInitiator == nil)
+        #expect(heartbeat?.nativeDisconnectCode == nil)
+        #expect(heartbeat?.nativeStopOrigin == nil)
     }
 
     private func temporaryDiagnosticsDirectory() throws -> URL {

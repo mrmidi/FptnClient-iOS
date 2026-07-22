@@ -56,6 +56,11 @@ final class WebsocketClientBridge {
     private let disconnectedCallback: DisconnectionCallback
     private let ipAssignedCallback: IPAssignedCallback
 
+    // PR2: one-shot lifecycle latch.
+    private enum Lifecycle { case created, started, stopped }
+    private let lifecycleLock = NSLock()
+    private var lifecycle: Lifecycle = .created
+
     // MARK: - Init / deinit
 
     init(
@@ -125,16 +130,24 @@ final class WebsocketClientBridge {
 
     // MARK: - Control
 
+    // PR2: lifecycle-locked start/stop.
     @discardableResult
     func start() -> Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard lifecycle == .created else { return false }
         let ok = clientBridge.start()
+        lifecycle = ok ? .started : .stopped
         logger.debug("WebSocket start → \(ok)")
         return ok
     }
 
-    // PR1C: stop accepts an origin for disconnect classification.
     @discardableResult
     func stop(origin: WebsocketStopOrigin = .swiftTunnelStop) -> Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard lifecycle != .stopped else { return false }
+        lifecycle = .stopped
         let ok = clientBridge.stop(origin.rawValue)
         logger.debug("WebSocket stop → \(ok) origin=\(origin)")
         return ok
