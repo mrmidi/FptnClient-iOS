@@ -226,6 +226,36 @@ struct FptnVPNTests {
         #expect(rssWarningWithoutFootprint.level == .warning)
     }
 
+    // PR-1 (Measurement Safety): the emergency threshold (42 MiB) must not
+    // stop, replace, or reconnect the native WebSocket bridge. The provider's
+    // response at both warning and emergency is log-only — no bridge
+    // destruction, generation bump, reconnect scheduling, or state transition.
+    @Test func memoryPressureActionIsLogOnlyAtAllThresholds() {
+        #expect(TunnelMemoryPressureAction.action(for: .normal) == .none)
+        #expect(TunnelMemoryPressureAction.action(for: .warning) == .logOnly)
+        #expect(TunnelMemoryPressureAction.action(for: .emergency) == .logOnly)
+
+        let emergency = TunnelMemoryPressureSnapshot(
+            residentBytes: 50 * 1024 * 1024,
+            physFootprintBytes: 45 * 1024 * 1024
+        )
+        #expect(emergency.level == .emergency)
+        #expect(TunnelMemoryPressureAction.action(for: emergency.level) == .logOnly)
+
+        let exactlyAtEmergency = TunnelMemoryPressureSnapshot(
+            residentBytes: nil,
+            physFootprintBytes: TunnelMemoryPressureSnapshot.emergencyThresholdBytes
+        )
+        #expect(exactlyAtEmergency.level == .emergency)
+
+        let oneBelowEmergency = TunnelMemoryPressureSnapshot(
+            residentBytes: nil,
+            physFootprintBytes: TunnelMemoryPressureSnapshot.emergencyThresholdBytes - 1
+        )
+        #expect(oneBelowEmergency.level == .warning)
+        #expect(TunnelMemoryPressureAction.action(for: oneBelowEmergency.level) == .logOnly)
+    }
+
     @Test func diagnosticsStoreReadsOldHeartbeatWithoutFootprint() throws {
         let root = try temporaryDiagnosticsDirectory()
         try """

@@ -32,6 +32,7 @@ settings:
 configs:
   Debug: debug
   Release: release
+  Measurement: release
 
 packages:
   FptnShared:
@@ -172,6 +173,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.FptnVPN.FptnVPNTunnel
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
         SWIFT_OBJC_BRIDGING_HEADER: FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h
+      configs:
+        # PR-1 (Measurement Safety): the Measurement configuration disables
+        # legacy JSONL diagnostics, forces warning-only logging, and uses a
+        # memory-only telemetry path. Build with -configuration Measurement
+        # to produce a clean baseline for native memory profiling.
+        Measurement:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_MEASUREMENT_BUILD
     info:
       path: FptnVPNTunnel/Info.plist
     entitlements:
