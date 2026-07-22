@@ -206,9 +206,39 @@ enum WebsocketSendResult: UInt8, Sendable {
     }
 }
 
+// PR1C: numeric disconnect diagnostics matching C++ ABI values.
+enum WebsocketDisconnectCode: UInt16, Sendable {
+    case none = 0
+    case peerClosed = 1
+    case tcpError = 2
+    case tlsError = 3
+    case websocketError = 4
+    case watchdog = 5
+    case localStop = 6
+    case queueFailure = 7
+    case unknown = 255
+
+    init(bridgeValue: UInt16) {
+        self = Self(rawValue: bridgeValue) ?? .unknown
+    }
+}
+
+enum WebsocketStopOrigin: UInt16, Sendable {
+    case none = 0
+    case swiftTunnelStop = 1
+    case swiftReconnect = 2
+    case nativeFailure = 3
+    case peer = 4
+    case unknown = 255
+
+    init(bridgeValue: UInt16) {
+        self = Self(rawValue: bridgeValue) ?? .unknown
+    }
+}
+
 protocol TunnelWebSocketTransport: AnyObject {
     func start() -> Bool
-    func stop() -> Bool
+    func stop(origin: WebsocketStopOrigin) -> Bool
     func sendPacket(_ data: Data) -> WebsocketSendResult
 }
 

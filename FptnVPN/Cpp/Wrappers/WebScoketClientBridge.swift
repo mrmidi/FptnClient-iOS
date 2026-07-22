@@ -34,6 +34,11 @@ struct WebsocketClientStatus: Sendable {
     let queuedBytes: UInt64
     let queuedBytesPeak: UInt64
     let queueFullCount: UInt64
+    // PR1C: teardown diagnostics.
+    let disconnectCode: WebsocketDisconnectCode
+    let stopOrigin: WebsocketStopOrigin
+    let stopCleanupCompleted: Bool
+    let activeOperations: UInt32
 }
 
 final class WebsocketClientBridge {
@@ -127,10 +132,11 @@ final class WebsocketClientBridge {
         return ok
     }
 
+    // PR1C: stop accepts an origin for disconnect classification.
     @discardableResult
-    func stop() -> Bool {
-        let ok = clientBridge.stop()
-        logger.debug("WebSocket stop → \(ok)")
+    func stop(origin: WebsocketStopOrigin = .swiftTunnelStop) -> Bool {
+        let ok = clientBridge.stop(origin.rawValue)
+        logger.debug("WebSocket stop → \(ok) origin=\(origin)")
         return ok
     }
 
@@ -180,7 +186,11 @@ final class WebsocketClientBridge {
             queuedPackets: raw.queued_packets,
             queuedBytes: raw.queued_bytes,
             queuedBytesPeak: raw.queued_bytes_peak,
-            queueFullCount: raw.queue_full_count
+            queueFullCount: raw.queue_full_count,
+            disconnectCode: WebsocketDisconnectCode(bridgeValue: raw.disconnect_code),
+            stopOrigin: WebsocketStopOrigin(bridgeValue: raw.stop_origin),
+            stopCleanupCompleted: raw.stop_cleanup_completed,
+            activeOperations: raw.active_operations
         )
     }
 }

@@ -44,6 +44,8 @@ struct WebsocketClientWrapper {
     std::atomic<bool> running{false};
     std::mutex mutex;
     int idle_timeout_seconds;
+    // PR1C: terminal reason stored after Run() returns.
+    std::uint32_t final_terminal_reason{0};
 
     std::string server_ip;
     int server_port;
@@ -274,6 +276,12 @@ void initialize_logger_once() {
 void client_run_thread(WebsocketClientWrapper* wrapper) {
     initialize_logger_once();
 
+    // PR1C: keep a local strong pointer for the entire thread lifetime.
+    // The wrapper's stop() may reset wrapper->client before join, but
+    // this local keeps the client alive until Run() returns and we've
+    // read the terminal reason.
+    std::shared_ptr<fptn::protocol::https::WebsocketClient> client;
+
     try {
         {
             std::unique_lock<std::mutex> lock(wrapper->mutex);
@@ -297,10 +305,7 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
                 packet_callback_adapter(std::move(packet), wrapper);
             };
 
-            // PR1A: io_context concurrency hint of 1 on iOS. The wrapper
-            // already drives the context from a single native thread; the
-            // hint only affects internal data-structure sizing.
-            wrapper->client = std::make_shared<fptn::protocol::https::WebsocketClient>(
+            client = std::make_shared<fptn::protocol::https::WebsocketClient>(
                 std::move(client_config),
 #if defined(__APPLE__) && TARGET_OS_IOS
                 1
@@ -308,10 +313,25 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
                 4
 #endif
             );
+            wrapper->client = client;
         }
 
-        if (wrapper->running && wrapper->client) {
-            wrapper->client->Run();
+        // PR1C: always drive the client once constructed. A pre-Run
+        // stop is represented by stop_requested_; Run() processes the
+        // posted cleanup and exits through the barrier. Skipping Run()
+        // would leave the posted lambda (and its captured shared_ptr)
+        // stranded in the io_context forever.
+        if (client) {
+            client->Run();
+        }
+
+        const auto reason = client ? client->GetTerminalReason() : 0;
+        {
+            std::unique_lock<std::mutex> lock(wrapper->mutex);
+            if (wrapper->client == client) {
+                wrapper->client.reset();
+            }
+            wrapper->final_terminal_reason = reason;
         }
         disconnected_callback_adapter(true, "WebSocket client stopped", wrapper);
     } catch (const std::exception& ex) {
@@ -319,6 +339,9 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
             std::unique_lock<std::mutex> lock(wrapper->mutex);
             wrapper->last_error = std::string("WebSocket wrapper exception: ") + ex.what();
             wrapper->last_disconnect_reason = wrapper->last_error;
+            if (wrapper->client == client) {
+                wrapper->client.reset();
+            }
         }
         disconnected_callback_adapter(false,
                                       std::string("WebSocket wrapper exception: ") + ex.what(),
@@ -328,6 +351,9 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
             std::unique_lock<std::mutex> lock(wrapper->mutex);
             wrapper->last_error = "WebSocket wrapper unknown exception";
             wrapper->last_disconnect_reason = wrapper->last_error;
+            if (wrapper->client == client) {
+                wrapper->client.reset();
+            }
         }
         disconnected_callback_adapter(false, "WebSocket wrapper unknown exception", wrapper);
     }
@@ -420,7 +446,9 @@ bool WebsocketSwiftBridge::start() {
     }
 }
 
-bool WebsocketSwiftBridge::stop() {
+// PR1C: stop accepts an origin so the caller can distinguish
+// tunnel shutdown, reconnect, and bridge destruction.
+bool WebsocketSwiftBridge::stop(std::uint16_t origin) {
     if (!wrapper_) {
         return false;
     }
@@ -435,7 +463,7 @@ bool WebsocketSwiftBridge::stop() {
     }
 
     if (active_client) {
-        active_client->Stop();
+        active_client->Stop(static_cast<fptn::protocol::https::StopOrigin>(origin));
     }
 
     if (wrapper_->client_thread.joinable()) {
@@ -447,15 +475,22 @@ bool WebsocketSwiftBridge::stop() {
 
 // PR1B: returns typed send result as uint8_t.
 // 0=accepted, 1=queue_full, 2=transport_stopped, 3=invalid_packet.
+// PR1C: takes a local copy of the client under the mutex to avoid
+// racing with stop() resetting wrapper_->client.
 std::uint8_t WebsocketSwiftBridge::sendPacket(const uint8_t* packet_data, uint32_t length) {
     if (!wrapper_ || !wrapper_->running) {
         return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::transport_stopped);
     }
-    if (!wrapper_->client) {
-        return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::transport_stopped);
-    }
     if (!packet_data || length == 0) {
         return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::invalid_packet);
+    }
+    std::shared_ptr<fptn::protocol::https::WebsocketClient> client;
+    {
+        std::lock_guard<std::mutex> lock(wrapper_->mutex);
+        client = wrapper_->client;
+    }
+    if (!client) {
+        return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::transport_stopped);
     }
     try {
         fptn::common::network::IPPacketData buffer(packet_data, packet_data + length);
@@ -463,18 +498,24 @@ std::uint8_t WebsocketSwiftBridge::sendPacket(const uint8_t* packet_data, uint32
         if (!packet) {
             return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::invalid_packet);
         }
-        return static_cast<std::uint8_t>(wrapper_->client->Send(std::move(packet)));
+        return static_cast<std::uint8_t>(client->Send(std::move(packet)));
     } catch (...) {
         return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::invalid_packet);
     }
 }
 
 bool WebsocketSwiftBridge::isStarted() const {
-    return wrapper_ && wrapper_->client && wrapper_->client->IsStarted();
+    if (!wrapper_) return false;
+    std::shared_ptr<fptn::protocol::https::WebsocketClient> client;
+    {
+        std::lock_guard<std::mutex> lock(wrapper_->mutex);
+        client = wrapper_->client;
+    }
+    return client && client->IsStarted();
 }
 
 WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
-    WebsocketClientBridgeStatus status = {false, false, 0, "", "", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    WebsocketClientBridgeStatus status = {false, false, 0, "", "", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0};
     if (!wrapper_) {
         status.last_error = "Invalid handle";
         return status;
@@ -505,6 +546,18 @@ WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
             status.queued_bytes = wrapper_->client->GetQueuedBytes();
             status.queued_bytes_peak = wrapper_->client->GetQueuedBytesPeak();
             status.queue_full_count = wrapper_->client->GetQueueFullCount();
+            const auto reason = wrapper_->client->GetTerminalReason();
+            status.disconnect_code = static_cast<uint16_t>(fptn::protocol::https::unpackDisconnectCode(reason));
+            status.stop_origin = static_cast<uint16_t>(fptn::protocol::https::unpackStopOrigin(reason));
+            status.stop_cleanup_completed = wrapper_->client->IsStopCleanupCompleted();
+            status.active_operations = wrapper_->client->GetActiveOperations();
+        } else {
+            // PR1C: client was reset (after stop); use stored terminal reason.
+            const auto reason = wrapper_->final_terminal_reason;
+            status.disconnect_code = static_cast<uint16_t>(fptn::protocol::https::unpackDisconnectCode(reason));
+            status.stop_origin = static_cast<uint16_t>(fptn::protocol::https::unpackStopOrigin(reason));
+            status.stop_cleanup_completed = true;
+            status.active_operations = 0;
         }
         status.live_clients = fptn::protocol::https::WebsocketClient::GetLiveClients();
         status.active_reader_coroutines = fptn::protocol::https::WebsocketClient::GetActiveReaderCoroutines();
