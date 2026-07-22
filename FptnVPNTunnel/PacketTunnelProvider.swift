@@ -14,24 +14,6 @@ import FptnSharedTunnel
 import OSLog
 #endif
 
-private enum TunnelControlAction: String, Codable {
-    case setLogLevel = "set_log_level"
-    case ping
-    case getStatus = "get_status"
-    case prepareStop = "prepare_stop"
-}
-
-private struct TunnelControlMessage: Codable {
-    let action: TunnelControlAction
-    let logLevel: String?
-    let initiator: String?
-}
-
-private struct TunnelControlResponse: Codable {
-    let ok: Bool
-    let message: String
-}
-
 private enum TunnelRuntimeState: String, Codable {
     case idle
     case starting
@@ -132,6 +114,7 @@ private struct TunnelRuntimeSnapshot: Codable {
 }
 
 private struct TunnelConfiguration {
+    let episodeID: UUID
     let serverIP: String
     let serverPort: Int
     let accessToken: String
@@ -151,84 +134,36 @@ private struct TunnelConfiguration {
     let tunIPv6: String
 
     init?(providerConfiguration: [String: Any]) {
-        if let base64Str = providerConfiguration[TunnelProviderConfigurationKey.startupV1] as? String,
-           let payloadData = Data(base64Encoded: base64Str),
+        guard let payloadData = providerConfiguration[TunnelProviderConfigurationKey.startupV1] as? Data,
            payloadData.count <= TunnelStartupConfigurationV1.maximumEncodedSize,
-           let startupV1 = try? JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: payloadData) {
-            self.serverIP = startupV1.serverHost
-            self.serverPort = startupV1.serverPort
-            self.accessToken = startupV1.accessToken
-            self.dnsIPv4 = startupV1.dnsIPv4
-            self.dnsIPv6 = startupV1.dnsIPv6
-            self.customDnsIPv4 = startupV1.customDnsIPv4
-            self.sni = startupV1.sni
-            self.md5Fingerprint = startupV1.md5Fingerprint
-            self.logLevel = startupV1.logLevel.rawValue
-            self.websocketIdleTimeoutSeconds = startupV1.websocketIdleTimeoutSeconds
-            
-            switch startupV1.recoveryPolicy {
-            case .none:
-                self.reconnectEnabled = false
-                self.maxReconnectAttempts = 0
-                self.reconnectDelaySeconds = 0
-            case .automatic(let autoPolicy):
-                self.reconnectEnabled = true
-                self.maxReconnectAttempts = autoPolicy.sameServerAttempts
-                self.reconnectDelaySeconds = autoPolicy.reconnectDelaySeconds
-            }
-            self.tunIPv4 = "10.8.0.2"
-            self.tunIPv4Gateway = "10.8.0.1"
-            self.tunIPv6 = "fd00::1"
-            self.websocketStrategy = "\(startupV1.censorshipStrategy.rawValue);idle_timeout=\(startupV1.websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
-            return
-        }
-
-        guard
-            let serverIP = providerConfiguration["server"] as? String,
-            let serverPort = providerConfiguration["port"] as? Int,
-            let accessToken = providerConfiguration["accessToken"] as? String,
-            let dnsIPv4 = providerConfiguration["dnsIPv4"] as? String,
-            let sni = providerConfiguration["sni"] as? String,
-            let md5Fingerprint = providerConfiguration["md5Fingerprint"] as? String
-        else {
+              let startupV1 = try? JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: payloadData) else {
             return nil
         }
-
-        let dnsIPv6 = Self.validIPv6(providerConfiguration["dnsIPv6"] as? String)
-        let logLevel = providerConfiguration["logLevel"] as? String ?? "info"
-        let bypassMethod = providerConfiguration["bypassMethod"] as? String ?? "SNI"
-        let websocketIdleTimeoutSeconds = providerConfiguration["websocketIdleTimeoutSeconds"] as? Int ?? 60
-        let reconnectEnabled = providerConfiguration["reconnectEnabled"] as? Bool ?? true
-        let maxReconnectAttempts = providerConfiguration["maxReconnectAttempts"] as? Int ?? 5
-        let reconnectDelaySeconds = providerConfiguration["reconnectDelaySeconds"] as? Int ?? 2
-        let customDns = providerConfiguration["customDnsIPv4"] as? String
-        let customDnsIPv4 = (customDns?.isEmpty == false) ? customDns : nil
-
-        self.serverIP = serverIP
-        self.serverPort = serverPort
-        self.accessToken = accessToken
-        self.dnsIPv4 = dnsIPv4
-        self.dnsIPv6 = dnsIPv6
-        self.customDnsIPv4 = customDnsIPv4
-        self.sni = sni
-        self.md5Fingerprint = md5Fingerprint
-        self.logLevel = logLevel
-        self.websocketIdleTimeoutSeconds = websocketIdleTimeoutSeconds
-        self.reconnectEnabled = reconnectEnabled
-        self.maxReconnectAttempts = maxReconnectAttempts
-        self.reconnectDelaySeconds = reconnectDelaySeconds
+        self.episodeID = startupV1.episodeID
+        self.serverIP = startupV1.serverHost
+        self.serverPort = startupV1.serverPort
+        self.accessToken = startupV1.accessToken
+        self.dnsIPv4 = startupV1.dnsIPv4
+        self.dnsIPv6 = startupV1.dnsIPv6
+        self.customDnsIPv4 = startupV1.customDnsIPv4
+        self.sni = startupV1.sni
+        self.md5Fingerprint = startupV1.md5Fingerprint
+        self.logLevel = startupV1.logLevel.rawValue
+        self.websocketIdleTimeoutSeconds = startupV1.websocketIdleTimeoutSeconds
+        switch startupV1.recoveryPolicy {
+        case .none:
+            self.reconnectEnabled = false
+            self.maxReconnectAttempts = 0
+            self.reconnectDelaySeconds = 0
+        case .automatic(let autoPolicy):
+            self.reconnectEnabled = true
+            self.maxReconnectAttempts = autoPolicy.sameServerAttempts
+            self.reconnectDelaySeconds = autoPolicy.reconnectDelaySeconds
+        }
         self.tunIPv4 = "10.8.0.2"
         self.tunIPv4Gateway = "10.8.0.1"
         self.tunIPv6 = "fd00::1"
-        self.websocketStrategy = "\(bypassMethod);idle_timeout=\(websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
-    }
-
-    private static func validIPv6(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-            return nil
-        }
-        var addr = in6_addr()
-        return value.withCString { inet_pton(AF_INET6, $0, &addr) == 1 ? value : nil }
+        self.websocketStrategy = "\(startupV1.censorshipStrategy.rawValue);idle_timeout=\(startupV1.websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
     }
 }
 
@@ -375,12 +310,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 synchronize: true)
         }
 
-        tunnelSessionToken = UInt64.random(in: 1...UInt64.max)
         tunnelStartedMachTime = mach_continuous_time()
         physicalFootprintPeakBytes = 0
         latestEventSequence = 0
-        flightRecorder?.recordForSession(.startTunnel, sessionToken: tunnelSessionToken, synchronize: true)
-
         logger.info("PacketTunnelProvider startTunnel")
         recordProviderEvent(category: "lifecycle", message: "startTunnel", flightEvent: .startTunnel)
         _ = options
@@ -396,6 +328,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             completionHandler(err)
             return
         }
+
+        tunnelSessionToken = Self.sessionToken(for: runtimeConfig.episodeID)
+        flightRecorder?.recordForSession(.startTunnel, sessionToken: tunnelSessionToken, synchronize: true)
 
         setTunnelLogLevel(rawValue: runtimeConfig.logLevel)
         logger.info("Tunnel started (level=\(runtimeConfig.logLevel))")
@@ -523,13 +458,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         switch message.action {
         case .setLogLevel:
-            setTunnelLogLevel(rawValue: message.logLevel)
-            logger.info("Tunnel log level updated via IPC: \(message.logLevel ?? "info")")
+            setTunnelLogLevel(rawValue: message.logLevel?.rawValue)
+            logger.info("Tunnel log level updated via IPC: \(message.logLevel?.rawValue ?? "info")")
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "log_level_updated")))
         case .ping:
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "pong")))
         case .prepareStop:
-            if let initiator = message.initiator, initiator == LocalStopInitiator.appDisconnect.rawValue {
+            if message.initiator == .appDisconnect {
                 stateLock.lock()
                 localStopInitiator = .appDisconnect
                 shutdownRequested = true
@@ -546,8 +481,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 #endif
                 cancelPendingReconnect()
                 cancelReadBackpressure()
-                logger.info("Marked local stop initiator via IPC: \(initiator); reconnect will be suppressed")
-                recordProviderEvent(category: "ipc", message: "prepare_stop initiator=\(initiator)", flightEvent: .stopTunnelEntered)
+                logger.info("Marked local stop initiator via IPC: app_disconnect; reconnect will be suppressed")
+                recordProviderEvent(category: "ipc", message: "prepare_stop initiator=app_disconnect", flightEvent: .stopTunnelEntered)
                 updateDiagnosticsHeartbeat(lastEvent: "prepare_stop")
             }
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "stop_initiator_recorded")))
@@ -2064,6 +1999,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             diagnosticsLock.lock()
             latestEventSequence = seq
             diagnosticsLock.unlock()
+        }
+    }
+
+    private static func sessionToken(for episodeID: UUID) -> UInt64 {
+        withUnsafeBytes(of: episodeID.uuid) { bytes in
+            bytes.prefix(8).reduce(0) { partial, byte in
+                (partial << 8) | UInt64(byte)
+            }
         }
     }
 

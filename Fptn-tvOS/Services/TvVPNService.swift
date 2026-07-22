@@ -2,6 +2,7 @@ import Foundation
 import NetworkExtension
 import Observation
 import FptnSharedCore
+import FptnSharedTunnel
 
 @MainActor
 @Observable
@@ -67,21 +68,25 @@ final class TvVPNService {
                 let dns = try await fetchDNSInfo(server: server, sni: sni, accessToken: accessToken)
                 let manager = try await ensureManager()
 
-                let payload = TunnelProviderPayload(
-                    server: server.host,
-                    port: server.port,
+                let startup = try TunnelStartupConfigurationV1(
+                    episodeID: UUID(),
+                    recoveryPolicy: .none,
+                    serverHost: server.host,
+                    serverPort: server.port,
                     accessToken: accessToken,
                     dnsIPv4: dns.dnsIPv4,
                     dnsIPv6: dns.dnsIPv6,
                     sni: sni,
                     md5Fingerprint: server.md5_fingerprint,
+                    censorshipStrategy: CensorshipStrategy(storedValue: ""),
                     logLevel: logLevel
                 )
+                let startupData = try JSONEncoder().encode(startup)
 
                 let proto = NETunnelProviderProtocol()
                 proto.serverAddress = "Fptn-tvOS"
                 proto.providerBundleIdentifier = "net.mrmidi.Fptn-macOS.Fptn-tvOS.Fptn-tvOS-Tunnel"
-                proto.providerConfiguration = payload.asDictionary()
+                proto.providerConfiguration = [TunnelProviderConfigurationKey.startupV1: startupData]
 
                 manager.protocolConfiguration = proto
                 manager.localizedDescription = "FPTN tvOS"

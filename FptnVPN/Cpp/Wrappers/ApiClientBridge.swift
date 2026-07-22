@@ -58,4 +58,8 @@ final class ApiClientBridge: @unchecked Sendable {
             error: result.errmsg.empty() ? nil : String(result.errmsg)
         )
     }
+
+    func cancel() {
+        client.cancel()
+    }
 }

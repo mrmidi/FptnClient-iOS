@@ -175,3 +175,9 @@ SwiftApiClient::HandshakeResult SwiftApiClient::testHandshake(int timeout) const
         return HandshakeResult{false, -1, "unknown exception"};
     }
 }
+
+void SwiftApiClient::cancel() const {
+    if (client_) {
+        client_->Cancel();
+    }
+}

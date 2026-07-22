@@ -48,6 +48,7 @@ public:
     Response get(const std::string& path, int timeout) const;
     Response post(const std::string& path, const std::string& body, int timeout) const;
     HandshakeResult testHandshake(int timeout) const;
+    void cancel() const;
 
 private:
     fptn::protocol::https::ApiClient* client_;

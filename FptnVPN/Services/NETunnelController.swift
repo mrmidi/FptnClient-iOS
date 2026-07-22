@@ -11,6 +11,10 @@ import FptnSharedTunnel
 import FptnConnectionOrchestration
 
 public final class NETunnelController: TunnelControlling, @unchecked Sendable {
+    private let ownershipLock = NSLock()
+    private var activeEpisodeID: ConnectionEpisodeID?
+    private var activeManager: NETunnelProviderManager?
+
     public init() {}
 
     public func start(
@@ -46,26 +50,9 @@ public final class NETunnelController: TunnelControlling, @unchecked Sendable {
                 config.serverAddress = "FptnVPN"
                 config.providerBundleIdentifier = "net.mrmidi.FptnVPN.FptnVPNTunnel"
 
-                var providerConfiguration: [String: Any] = [
-                    TunnelProviderConfigurationKey.startupV1: encodedData.base64EncodedString(),
-                    // Backward-compatible fallback keys
-                    "server": configuration.serverHost,
-                    "port": configuration.serverPort,
-                    "accessToken": configuration.accessToken,
-                    "dnsIPv4": configuration.dnsIPv4,
-                    "sni": configuration.sni,
-                    "md5Fingerprint": configuration.md5Fingerprint,
-                    "logLevel": configuration.logLevel.rawValue,
-                    "websocketIdleTimeoutSeconds": configuration.websocketIdleTimeoutSeconds
+                config.providerConfiguration = [
+                    TunnelProviderConfigurationKey.startupV1: encodedData
                 ]
-                if let dnsIPv6 = configuration.dnsIPv6 {
-                    providerConfiguration["dnsIPv6"] = dnsIPv6
-                }
-                if let customDns = configuration.customDnsIPv4 {
-                    providerConfiguration["customDnsIPv4"] = customDns
-                }
-
-                config.providerConfiguration = providerConfiguration
 
                 if #available(iOS 16.4, *), SettingsService.shared.routePushThroughTunnel {
                     config.includeAllNetworks = true
@@ -90,6 +77,10 @@ public final class NETunnelController: TunnelControlling, @unchecked Sendable {
 
                         do {
                             try manager.connection.startVPNTunnel()
+                            self.ownershipLock.withLock {
+                                self.activeEpisodeID = episodeID
+                                self.activeManager = manager
+                            }
                             continuation.resume(returning: .success(()))
                         } catch {
                             continuation.resume(returning: .failure(.refused(error.localizedDescription)))
@@ -101,8 +92,15 @@ public final class NETunnelController: TunnelControlling, @unchecked Sendable {
     }
 
     public func stop(episodeID: ConnectionEpisodeID, initiator: TunnelStopInitiator) async {
-        let managers = try? await NETunnelProviderManager.loadAllFromPreferences()
-        guard let manager = managers?.first else { return }
+        let manager = ownershipLock.withLock { () -> NETunnelProviderManager? in
+            guard activeEpisodeID == episodeID else { return nil }
+            defer {
+                activeEpisodeID = nil
+                activeManager = nil
+            }
+            return activeManager
+        }
+        guard let manager else { return }
 
         if let session = manager.connection as? NETunnelProviderSession {
             let msg = TunnelControlMessage(

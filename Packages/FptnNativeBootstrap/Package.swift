@@ -12,7 +12,7 @@ let package = Package(
         .library(name: "FptnNativeBootstrap", targets: ["FptnNativeBootstrap"])
     ],
     dependencies: [
-        .package(path: "../../../FptnShared")
+        .package(url: "https://github.com/mrmidi/FptnShared.git", exact: "0.4.3")
     ],
     targets: [
         .target(

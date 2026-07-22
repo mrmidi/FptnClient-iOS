@@ -10,8 +10,10 @@ import FptnNativeBootstrap
 
 final class iOSNativeBootstrapClient: NativeBootstrapClient, @unchecked Sendable {
     private let apiClient: ApiClientBridge
+    private let executor: NativeBlockingExecutor
 
     init(server: FptnSharedCore.VPNServer, context: BootstrapContext) {
+        self.executor = NativeBlockingExecutor()
         self.apiClient = ApiClientBridge(
             host: server.host,
             port: server.port,
@@ -23,7 +25,11 @@ final class iOSNativeBootstrapClient: NativeBootstrapClient, @unchecked Sendable
     }
 
     func post(path: String, body: String, timeoutSeconds: Int32) async -> NativeHTTPResponse {
-        let resp = apiClient.post(path: path, body: body, timeout: Int(timeoutSeconds))
+        guard let resp = try? await executor.run({ [apiClient] in
+            apiClient.post(path: path, body: body, timeout: Int(timeoutSeconds))
+        }) else {
+            return NativeHTTPResponse(code: -1, body: "", errmsg: "Native POST executor failed")
+        }
         return NativeHTTPResponse(
             code: resp.code,
             body: resp.body ?? "",
@@ -32,7 +38,11 @@ final class iOSNativeBootstrapClient: NativeBootstrapClient, @unchecked Sendable
     }
 
     func get(path: String, timeoutSeconds: Int32) async -> NativeHTTPResponse {
-        let resp = apiClient.get(path: path, timeout: Int(timeoutSeconds))
+        guard let resp = try? await executor.run({ [apiClient] in
+            apiClient.get(path: path, timeout: Int(timeoutSeconds))
+        }) else {
+            return NativeHTTPResponse(code: -1, body: "", errmsg: "Native GET executor failed")
+        }
         return NativeHTTPResponse(
             code: resp.code,
             body: resp.body ?? "",
@@ -41,6 +51,6 @@ final class iOSNativeBootstrapClient: NativeBootstrapClient, @unchecked Sendable
     }
 
     func cancel() {
-        // Idempotent cancel
+        apiClient.cancel()
     }
 }

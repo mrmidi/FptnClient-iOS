@@ -2,6 +2,7 @@ import Foundation
 import NetworkExtension
 import OSLog
 import FptnSharedCore
+import FptnSharedTunnel
 
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let log = Logger(subsystem: "net.mrmidi.Fptn-tvOS", category: "PacketTunnel")
@@ -22,7 +23,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         guard let config = protocolConfiguration as? NETunnelProviderProtocol,
               let providerConfig = config.providerConfiguration,
-              let payload = TunnelProviderPayload(providerConfiguration: providerConfig) else {
+              let startupData = providerConfig[TunnelProviderConfigurationKey.startupV1] as? Data,
+              startupData.count <= TunnelStartupConfigurationV1.maximumEncodedSize,
+              let payload = try? JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: startupData) else {
             completionHandler(makeError("Missing or invalid providerConfiguration"))
             return
         }
@@ -39,7 +42,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             appliedIPv6 = nil
         }
 
-        log.log("startTunnel server=\(payload.server, privacy: .public):\(payload.port, privacy: .public) sni=\(payload.sni, privacy: .public) level=\(self.runtimeLogLevel.rawValue, privacy: .public)")
+        log.log("startTunnel server=\(payload.serverHost, privacy: .public):\(payload.serverPort, privacy: .public) sni=\(payload.sni, privacy: .public) level=\(self.runtimeLogLevel.rawValue, privacy: .public)")
 
         let tunIPv4 = "10.8.0.2"
         let tunIPv4Gateway = "10.8.0.1"
@@ -47,8 +50,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         scheduleStartTimeout(seconds: 15)
 
         wsClient = WebsocketClientBridge(
-            serverIP: payload.server,
-            serverPort: payload.port,
+            serverIP: payload.serverHost,
+            serverPort: payload.serverPort,
             tunInterfaceIPv4: tunIPv4,
             sni: payload.sni,
             accessToken: payload.accessToken,
@@ -73,7 +76,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 let shouldApply = !alreadyApplied || ipChanged
                 if shouldApply {
                     self.applyNetworkSettings(
-                        serverIP: payload.server,
+                        serverIP: payload.serverHost,
                         tunIPv4: tunIPv4,
                         tunIPv4Gateway: tunIPv4Gateway,
                         dnsIPv4: payload.dnsIPv4,

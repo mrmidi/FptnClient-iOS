@@ -53,38 +53,3 @@ struct MacTunnelControlResponse: Codable {
     let ok: Bool
     let message: String
 }
-
-enum MacTunnelProviderConfig {
-    static let server = "server"
-    static let port = "port"
-    static let accessToken = "accessToken"
-    static let dnsIPv4 = "dnsIPv4"
-    static let dnsIPv6 = "dnsIPv6"
-    static let sni = "sni"
-    static let md5Fingerprint = "md5Fingerprint"
-    static let logLevel = "logLevel"
-}
-
-struct MacTunnelProviderPayload {
-    let server: String
-    let port: Int
-    let accessToken: String
-    let dnsIPv4: String
-    let dnsIPv6: String
-    let sni: String
-    let md5Fingerprint: String
-    let logLevel: String
-
-    func asDictionary() -> [String: Any] {
-        [
-            MacTunnelProviderConfig.server: server,
-            MacTunnelProviderConfig.port: port,
-            MacTunnelProviderConfig.accessToken: accessToken,
-            MacTunnelProviderConfig.dnsIPv4: dnsIPv4,
-            MacTunnelProviderConfig.dnsIPv6: dnsIPv6,
-            MacTunnelProviderConfig.sni: sni,
-            MacTunnelProviderConfig.md5Fingerprint: md5Fingerprint,
-            MacTunnelProviderConfig.logLevel: logLevel
-        ]
-    }
-}

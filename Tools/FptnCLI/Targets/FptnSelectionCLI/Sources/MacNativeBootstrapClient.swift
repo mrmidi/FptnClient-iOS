@@ -47,6 +47,6 @@ public final class MacNativeBootstrapClient: NativeBootstrapClient, @unchecked S
     }
 
     public func cancel() {
-        // Idempotent client cancel operation
+        client.cancel()
     }
 }

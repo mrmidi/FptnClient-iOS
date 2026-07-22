@@ -7,6 +7,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 import Foundation
 import Combine
 import Darwin
+import CryptoKit
 @preconcurrency import NetworkExtension
 import FptnSharedCore
 import FptnSharedTunnel
@@ -22,9 +23,12 @@ final class VPNService: ObservableObject {
     private var tunnelStatusObserver: NSObjectProtocol?
     private var isUserInitiatedDisconnect: Bool = true
     private var activeCoordinator: (any ConnectionLifecycleCoordinating)?
+    private var activeEpisodeID: ConnectionEpisodeID?
+    private var connectionTask: Task<Void, Never>?
+    private var connectionGeneration: UInt64 = 0
 
     private let tokenService = TokenService.shared
-    private let healthStore = FileBackedServerHealthStore(fileURL: URL(fileURLWithPath: "health.json"))
+    private let healthStore = VPNService.makeHealthStore()
 
     // MARK: - Public
 
@@ -40,7 +44,7 @@ final class VPNService: ObservableObject {
 
                 packetTunnelProvider = manager
                 observeTunnelStatus(manager)
-                syncTunnelStatus()
+                await syncTunnelStatus()
             } catch {
                 logger.warning("syncWithSystem: failed to load preferences: \(error.localizedDescription)")
             }
@@ -48,13 +52,20 @@ final class VPNService: ObservableObject {
     }
 
     func connect() {
-        Task {
+        connectionGeneration &+= 1
+        let generation = connectionGeneration
+        connectionTask?.cancel()
+        connectionTask = Task { [weak self] in
+            guard let self else { return }
             isUserInitiatedDisconnect = false
-            await performConnect()
+            await performConnect(generation: generation)
         }
     }
 
     func disconnect() {
+        connectionGeneration &+= 1
+        connectionTask?.cancel()
+        connectionTask = nil
         isUserInitiatedDisconnect = true
         connection.isConnected = false
         connection.isConnecting = false
@@ -65,8 +76,7 @@ final class VPNService: ObservableObject {
             if let activeCoordinator {
                 await activeCoordinator.disconnect(reason: .userInitiated)
             } else {
-                let tunnel = NETunnelController()
-                await tunnel.stop(episodeID: ConnectionEpisodeID(), initiator: .appDisconnect)
+                await stopObservedTunnel()
             }
         }
     }
@@ -105,7 +115,7 @@ final class VPNService: ObservableObject {
 
     // MARK: - Private Connect Flow
 
-    private func performConnect() async {
+    private func performConnect(generation: UInt64) async {
         connection.isConnecting = true
         connection.isReconnecting = false
         connection.isWaitingForNetwork = false
@@ -134,11 +144,15 @@ final class VPNService: ObservableObject {
             connection.isWaitingForNetwork = false
         }
 
+        guard isCurrent(generation) else { return }
+
         guard let tokenData = await tokenService.getTokenData() else {
             connection.errorMessage = "No token data available"
             logger.error("No token data available")
             return
         }
+
+        guard isCurrent(generation) else { return }
 
         let servers = await tokenService.getServers()
         guard !servers.isEmpty else {
@@ -152,10 +166,17 @@ final class VPNService: ObservableObject {
             networkClass: .wifi,
             sni: settings.sni,
             censorshipStrategy: FptnSharedCore.CensorshipStrategy(storedValue: settings.censorshipStrategy.rawValue),
-            ipv6Available: true,
-            tokenConfigurationID: UUID().uuidString
+            ipv6Available: false,
+            tokenConfigurationID: configurationID(tokenUsername: tokenData.username, servers: servers)
         )
         let credentials = Credentials(username: tokenData.username, password: tokenData.password)
+        let runtimeOptions = tunnelRuntimeOptions(settings: settings)
+        let recoveryPolicy: TunnelRecoveryPolicy = settings.reconnectEnabled
+            ? .automatic(AutoTunnelRecoveryPolicy(
+                sameServerAttempts: settings.maxReconnectAttempts,
+                reconnectDelaySeconds: settings.reconnectDelay
+            ))
+            : .none
 
         let bootstrapper = NativeServerBootstrapper { server, context in
             iOSNativeBootstrapClient(server: server, context: context)
@@ -176,7 +197,9 @@ final class VPNService: ObservableObject {
             let request = ManualConnectionRequest(
                 server: chosenServer,
                 credentials: credentials,
-                bootstrapContext: bootstrapContext
+                bootstrapContext: bootstrapContext,
+                tunnelRecoveryPolicy: recoveryPolicy,
+                tunnelRuntimeOptions: runtimeOptions
             )
             result = await coordinator.connect(request)
 
@@ -194,16 +217,26 @@ final class VPNService: ObservableObject {
             let request = AutoConnectionRequest(
                 servers: servers,
                 credentials: credentials,
-                bootstrapContext: bootstrapContext
+                bootstrapContext: bootstrapContext,
+                tunnelRecoveryPolicy: recoveryPolicy,
+                reselectionPolicy: AutoReselectionPolicy(
+                    maxReplacementAttempts: max(0, settings.maxReconnectAttempts),
+                    delaySeconds: settings.reconnectDelay
+                ),
+                tunnelRuntimeOptions: runtimeOptions
             )
             result = await coordinator.connect(request)
         }
 
+        guard isCurrent(generation) else { return }
+
         switch result {
         case .started(let episodeID):
             logger.info("Connection started successfully for episode \(episodeID.rawValue.uuidString)")
-            connection.isConnected = true
-            connection.isConnecting = false
+            activeEpisodeID = episodeID
+            connection.isConnected = false
+            connection.isConnecting = true
+            await adoptSystemManager()
         case .failed(let failure):
             logger.error("Connection failed: \(failure)")
             connection.errorMessage = "Connection failed: \(failure)"
@@ -229,12 +262,12 @@ final class VPNService: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.syncTunnelStatus()
+                await self?.syncTunnelStatus()
             }
         }
     }
 
-    private func syncTunnelStatus() {
+    private func syncTunnelStatus() async {
         guard let tunnelConnection = packetTunnelProvider?.connection else {
             clearConnectionState()
             return
@@ -248,6 +281,9 @@ final class VPNService: ObservableObject {
             connection.isConnected = true
             connection.isConnecting = false
             connection.isReconnecting = false
+            if let activeEpisodeID {
+                await activeCoordinator?.handle(.tunnelConnected(activeEpisodeID))
+            }
         case .reasserting:
             connection.isConnected = true
             connection.isConnecting = false
@@ -264,6 +300,10 @@ final class VPNService: ObservableObject {
             connection.isReconnecting = false
             connection.runtimeState = .stopping
         case .disconnected, .invalid:
+            if !isUserInitiatedDisconnect, let activeEpisodeID {
+                await activeCoordinator?.handle(.tunnelDisconnected(activeEpisodeID, .remoteClosed))
+            }
+            activeEpisodeID = nil
             clearConnectionState()
         @unknown default:
             break
@@ -275,5 +315,73 @@ final class VPNService: ObservableObject {
         connection.isConnecting = false
         connection.isReconnecting = false
         connection.runtimeState = nil
+    }
+
+    /// Handles an orphaned provider after an app relaunch. Normal disconnects are
+    /// routed through the episode-owning coordinator above.
+    private func stopObservedTunnel() async {
+        let manager: NETunnelProviderManager?
+        if let packetTunnelProvider {
+            manager = packetTunnelProvider
+        } else {
+            manager = try? await NETunnelProviderManager.loadAllFromPreferences().first
+        }
+        guard let manager else { return }
+
+        if let session = manager.connection as? NETunnelProviderSession {
+            let message = TunnelControlMessage(action: .prepareStop, initiator: .appDisconnect)
+            if let data = try? JSONEncoder().encode(message) {
+                try? await session.sendProviderMessage(data)
+            }
+        }
+        manager.connection.stopVPNTunnel()
+    }
+
+    private func isCurrent(_ generation: UInt64) -> Bool {
+        generation == connectionGeneration && !Task.isCancelled
+    }
+
+    private func adoptSystemManager() async {
+        do {
+            let managers = try await NETunnelProviderManager.loadAllFromPreferences()
+            guard let manager = managers.first else { return }
+            packetTunnelProvider = manager
+            observeTunnelStatus(manager)
+            await syncTunnelStatus()
+        } catch {
+            logger.warning("Unable to observe newly started tunnel: \(error.localizedDescription)")
+        }
+    }
+
+    private func tunnelRuntimeOptions(settings: SettingsService) -> TunnelRuntimeOptions {
+        let perAppMode: PerAppTunnelMode = switch AppFilterService.shared.mode {
+        case .off: .disabled
+        case .onlyAllowed: .allowSelected
+        case .exceptDisallowed: .excludeSelected
+        }
+        return TunnelRuntimeOptions(
+            logLevel: SharedLogLevel(rawValue: settings.logLevel.rawValue) ?? .warning,
+            websocketIdleTimeoutSeconds: settings.websocketIdleTimeoutSeconds,
+            customDnsIPv4: settings.customDnsEnabled ? settings.customDnsIPv4 : nil,
+            perAppMode: perAppMode,
+            allowedBundleIDs: AppFilterService.shared.selectedBundleIDs
+        )
+    }
+
+    private func configurationID(tokenUsername: String, servers: [VPNServer]) -> String {
+        let canonicalServers = servers
+            .map { "\($0.host):\($0.port):\($0.md5Fingerprint):\($0.name)" }
+            .sorted()
+            .joined(separator: "|")
+        let material = "\(tokenUsername)|\(canonicalServers)"
+        return SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func makeHealthStore() -> FileBackedServerHealthStore {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let directory = base.appendingPathComponent("FptnVPN", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return FileBackedServerHealthStore(fileURL: directory.appendingPathComponent("server-health.json"))
     }
 }

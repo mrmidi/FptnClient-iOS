@@ -25,8 +25,10 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
         let client = clientFactory(server, context)
 
         return await withTaskCancellationHandler {
-            let timeoutSeconds = Int32(policy.stageTimeout.components.seconds)
             let startTime = Date()
+            let candidateDeadlineSeconds = max(1, Int(policy.candidateDeadline.components.seconds))
+            let stageTimeoutSeconds = max(1, Int(policy.stageTimeout.components.seconds))
+            let loginTimeoutSeconds = Int32(min(stageTimeoutSeconds, candidateDeadlineSeconds))
 
             let loginPayload: String
             do {
@@ -46,7 +48,7 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
                 ))
             }
 
-            let loginResponse = await client.post(path: "/api/v1/login", body: loginPayload, timeoutSeconds: timeoutSeconds)
+            let loginResponse = await client.post(path: "/api/v1/login", body: loginPayload, timeoutSeconds: loginTimeoutSeconds)
             let loginElapsedMs = Int(Date().timeIntervalSince(startTime) * 1000)
 
             if Task.isCancelled {
@@ -92,7 +94,22 @@ public final class NativeServerBootstrapper: ServerBootstrapping, @unchecked Sen
                 ))
             }
 
-            let dnsResponse = await client.get(path: "/api/v1/dns", timeoutSeconds: timeoutSeconds)
+            let elapsedBeforeDNS = Int(Date().timeIntervalSince(startTime) * 1000)
+            let remainingDeadlineSeconds = candidateDeadlineSeconds - Int(ceil(Double(elapsedBeforeDNS) / 1000))
+            guard remainingDeadlineSeconds > 0 else {
+                return .failure(ServerProbeFailure(
+                    server: server, kind: .connectionTimeout,
+                    metrics: ProbeMetrics(serverID: server.id, queuePosition: attempt.queuePosition,
+                        queuedAtMs: 0, startedAtMs: 0, completedAtMs: 0,
+                        dnsMs: nil, tcpConnectMs: nil, fakeHandshakeMs: nil,
+                        tlsHandshakeMs: nil, loginHTTPMs: loginElapsedMs, bootstrapHTTPMs: nil,
+                        totalMs: elapsedBeforeDNS, cancellationRequestedAtMs: nil, cancellationCompletedAtMs: nil,
+                        outcome: .failure),
+                    safeDiagnostic: "Candidate bootstrap deadline exhausted before DNS."
+                ))
+            }
+            let dnsTimeoutSeconds = Int32(min(stageTimeoutSeconds, remainingDeadlineSeconds))
+            let dnsResponse = await client.get(path: "/api/v1/dns", timeoutSeconds: dnsTimeoutSeconds)
             let totalElapsedMs = Int(Date().timeIntervalSince(startTime) * 1000)
             let dnsElapsedMs = totalElapsedMs - loginElapsedMs
 
