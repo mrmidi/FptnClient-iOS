@@ -193,10 +193,23 @@ struct TunnelLifecycleRuntime: Equatable, Sendable {
     }
 }
 
+// PR1B: typed send result for the outbound queue.
+enum WebsocketSendResult: UInt8, Sendable {
+    case accepted = 0
+    case queueFull = 1
+    case transportStopped = 2
+    case invalidPacket = 3
+    case unknown = 255
+
+    init(bridgeValue: UInt8) {
+        self = Self(rawValue: bridgeValue) ?? .unknown
+    }
+}
+
 protocol TunnelWebSocketTransport: AnyObject {
     func start() -> Bool
     func stop() -> Bool
-    func sendPacket(_ data: Data) -> Bool
+    func sendPacket(_ data: Data) -> WebsocketSendResult
 }
 
 protocol ReconnectScheduling: AnyObject {

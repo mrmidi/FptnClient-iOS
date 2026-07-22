@@ -453,6 +453,46 @@ struct FptnVPNTests {
         #expect(winner.accessToken == "token-c")
     }
 
+    // PR1B: WebsocketSendResult enum mapping from C++ bridge uint8_t.
+    @Test func sendResultMapsBridgeValues() {
+        #expect(WebsocketSendResult(bridgeValue: 0) == .accepted)
+        #expect(WebsocketSendResult(bridgeValue: 1) == .queueFull)
+        #expect(WebsocketSendResult(bridgeValue: 2) == .transportStopped)
+        #expect(WebsocketSendResult(bridgeValue: 3) == .invalidPacket)
+        #expect(WebsocketSendResult(bridgeValue: 99) == .unknown)
+        #expect(WebsocketSendResult(bridgeValue: 255) == .unknown)
+    }
+
+    // PR1B: only .queueFull should feed backpressure. .transportStopped
+    // breaks the batch. .invalidPacket is counted but does not slow
+    // valid traffic. This test documents the policy; the C++ level
+    // accounting tests (byte reservation CAS, rollback, gauge
+    // lifecycle, batch bounds) require fptn gtest infrastructure.
+    @Test func sendResultBackpressurePolicy() {
+        let queueFull: WebsocketSendResult = .queueFull
+        let stopped: WebsocketSendResult = .transportStopped
+        let invalid: WebsocketSendResult = .invalidPacket
+
+        var sendFailures: Int64 = 0
+        var invalidPackets: Int64 = 0
+        var transportStopped = false
+
+        for result in [queueFull, queueFull, stopped, invalid] {
+            switch result {
+            case .accepted: break
+            case .queueFull: sendFailures += 1
+            case .transportStopped:
+                transportStopped = true
+            case .invalidPacket, .unknown:
+                invalidPackets += 1
+            }
+        }
+
+        #expect(sendFailures == 2)
+        #expect(transportStopped == true)
+        #expect(invalidPackets == 1)
+    }
+
     private func temporaryDiagnosticsDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("FptnVPNTests-\(UUID().uuidString)", isDirectory: true)

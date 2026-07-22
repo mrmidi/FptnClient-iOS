@@ -29,6 +29,11 @@ struct WebsocketClientStatus: Sendable {
     let activeReaderCoroutines: Int
     let activeSenderCoroutines: Int
     let socketBufferSetErrorCount: Int
+    // PR1B: outbound queue diagnostics.
+    let queuedPackets: UInt64
+    let queuedBytes: UInt64
+    let queuedBytesPeak: UInt64
+    let queueFullCount: UInt64
 }
 
 final class WebsocketClientBridge {
@@ -142,14 +147,19 @@ final class WebsocketClientBridge {
         return ok
     }
 
-    @discardableResult
-    func sendPacket(_ data: Data) -> Bool {
-        return data.withUnsafeBytes { buf in
-            guard let ptr = buf.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                return false
-            }
-            return clientBridge.sendPacket(ptr, UInt32(data.count))
+    // PR1B: returns typed send result for provider-level diagnostics.
+    func sendPacket(_ data: Data) -> WebsocketSendResult {
+        guard !data.isEmpty else {
+            return .invalidPacket
         }
+        let rawValue: UInt8 = data.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?
+                .assumingMemoryBound(to: UInt8.self) else {
+                return WebsocketSendResult.invalidPacket.rawValue
+            }
+            return clientBridge.sendPacket(pointer, UInt32(data.count))
+        }
+        return WebsocketSendResult(bridgeValue: rawValue)
     }
 
     var isStarted: Bool {
@@ -179,7 +189,11 @@ final class WebsocketClientBridge {
             liveClients: Int(raw.live_clients),
             activeReaderCoroutines: Int(raw.active_reader_coroutines),
             activeSenderCoroutines: Int(raw.active_sender_coroutines),
-            socketBufferSetErrorCount: Int(raw.socket_buffer_set_error_count)
+            socketBufferSetErrorCount: Int(raw.socket_buffer_set_error_count),
+            queuedPackets: raw.queued_packets,
+            queuedBytes: raw.queued_bytes,
+            queuedBytesPeak: raw.queued_bytes_peak,
+            queueFullCount: raw.queue_full_count
         )
     }
 }

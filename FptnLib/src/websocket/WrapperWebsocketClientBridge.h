@@ -9,6 +9,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <cstdint>
 #include <string>
 #include <swift/bridging>
 
@@ -38,6 +39,11 @@ struct WebsocketClientBridgeStatus {
     int active_reader_coroutines;
     int active_sender_coroutines;
     int socket_buffer_set_error_count;
+    // PR1B: outbound queue diagnostics.
+    uint64_t queued_packets;
+    uint64_t queued_bytes;
+    uint64_t queued_bytes_peak;
+    uint64_t queue_full_count;
 };
 
 // PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,
@@ -73,7 +79,8 @@ public:
 
     bool start();
     bool stop();
-    bool sendPacket(const uint8_t* packet_data, uint32_t length);
+    // PR1B: returns 0=accepted, 1=queue_full, 2=transport_stopped, 3=invalid_packet.
+    std::uint8_t sendPacket(const std::uint8_t* packet_data, std::uint32_t length);
     bool isStarted() const;
     WebsocketClientBridgeStatus getStatus() const;
     void registerIPAssignedCallback(IPAssignedCallback callback);
