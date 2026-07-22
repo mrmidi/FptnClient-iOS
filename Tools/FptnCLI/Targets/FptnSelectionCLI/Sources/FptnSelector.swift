@@ -6,9 +6,11 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 import FptnSharedCore
+import FptnSharedTunnel
 import FptnServerSelection
 import FptnConnectionOrchestration
 import FptnSharedTestSupport
+import FptnNativeBootstrap
 
 @main
 struct FptnSelectorApp {
@@ -74,7 +76,7 @@ struct FptnSelectorApp {
             }
 
             let healthStore = FileBackedHealthStore(fileURL: URL(fileURLWithPath: "health.json"))
-            let bootstrapper = NativeServerBootstrapper()
+            let bootstrapper = makeNativeBootstrapper()
 
             let bootstrapPolicy = config.resolveBootstrapPolicy()
             let selectionPolicy = config.resolveSelectionPolicy()
@@ -145,7 +147,7 @@ struct FptnSelectorApp {
                 return
             }
 
-            let bootstrapper = NativeServerBootstrapper()
+            let bootstrapper = makeNativeBootstrapper()
             let tunnelController = BootstrapOnlyTunnelController()
             let coordinator = ManualConnectionCoordinator(
                 bootstrapper: bootstrapper,
@@ -203,7 +205,7 @@ struct FptnSelectorApp {
             }
 
             let healthStore = FileBackedHealthStore(fileURL: URL(fileURLWithPath: "health.json"))
-            let bootstrapper = NativeServerBootstrapper()
+            let bootstrapper = makeNativeBootstrapper()
             let runner = FullScanRunner(healthStore: healthStore, bootstrapper: bootstrapper)
 
             let context = BootstrapContext(
@@ -411,7 +413,7 @@ struct FptnSelectorApp {
             }
 
             let healthStore = FileBackedHealthStore(fileURL: URL(fileURLWithPath: "health.json"))
-            let bootstrapper = NativeServerBootstrapper()
+            let bootstrapper = makeNativeBootstrapper()
 
             let bootstrapPolicy = config.resolveBootstrapPolicy()
             let selectionPolicy = config.resolveSelectionPolicy()
@@ -516,6 +518,12 @@ struct FptnSelectorApp {
             return args[idx + 1]
         }
         return nil
+    }
+
+    private static func makeNativeBootstrapper() -> NativeServerBootstrapper {
+        NativeServerBootstrapper { server, context in
+            MacNativeBootstrapClient(server: server, context: context)
+        }
     }
 }
 

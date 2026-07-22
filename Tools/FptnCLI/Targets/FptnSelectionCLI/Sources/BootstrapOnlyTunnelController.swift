@@ -6,6 +6,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 import FptnSharedCore
+import FptnSharedTunnel
 import FptnServerSelection
 import FptnConnectionOrchestration
 
@@ -14,9 +15,8 @@ public final class BootstrapOnlyTunnelController: TunnelControlling, @unchecked 
 
     public func start(
         episodeID: ConnectionEpisodeID,
-        configuration: TunnelStartupConfiguration
+        configuration: TunnelStartupConfigurationV1
     ) async -> Result<Void, TunnelStartError> {
-        // Validate startup configuration parameters
         guard !configuration.serverHost.isEmpty else {
             return .failure(.refused("Empty server host"))
         }
@@ -38,7 +38,7 @@ public final class BootstrapOnlyTunnelController: TunnelControlling, @unchecked 
         return .success(())
     }
 
-    public func stop(episodeID: ConnectionEpisodeID) async {
-        print("[TunnelController] stop tunnel called for episode: \(episodeID.rawValue.uuidString)")
+    public func stop(episodeID: ConnectionEpisodeID, initiator: TunnelStopInitiator) async {
+        print("[TunnelController] stop tunnel called for episode: \(episodeID.rawValue.uuidString), initiator: \(initiator)")
     }
 }

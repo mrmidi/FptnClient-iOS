@@ -18,6 +18,8 @@ configs:
 packages:
   FptnShared:
     path: ../../../FptnShared
+  FptnNativeBootstrap:
+    path: ../../Packages/FptnNativeBootstrap
 
 targets:
 
@@ -32,11 +34,15 @@ targets:
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
+        product: FptnSharedTunnel
+      - package: FptnShared
         product: FptnServerSelection
       - package: FptnShared
         product: FptnConnectionOrchestration
       - package: FptnShared
         product: FptnSharedTestSupport
+      - package: FptnNativeBootstrap
+        product: FptnNativeBootstrap
       - framework: ../Fptn-macOS/Cpp/fptn_native_lib.framework
     settings:
       base:
@@ -44,10 +50,31 @@ targets:
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp
         LD_RUNPATH_SEARCH_PATHS: "@loader_path/../../../../../../Fptn-macOS/Cpp"
 
+  CLIIntegrationTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Targets/CLIIntegrationTests
+    dependencies:
+      - target: FptnSelectionCLI
+      - package: FptnShared
+        product: FptnSharedCore
+      - package: FptnShared
+        product: FptnSharedTunnel
+      - package: FptnShared
+        product: FptnServerSelection
+      - package: FptnNativeBootstrap
+        product: FptnNativeBootstrap
+
 schemes:
   FptnSelectionCLI:
     build:
       targets:
         FptnSelectionCLI: all
+        CLIIntegrationTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - CLIIntegrationTests
