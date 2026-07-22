@@ -70,8 +70,8 @@ public struct SecureCredentialProvider {
         return nil
     }
     
-    public static func parseToken(_ token: String) -> Credentials? {
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    public static func parseFPTNToken(_ token: String) -> FPTNToken? {
+        let trimmed = token.trimmingCharacters(in: CharacterSet(charactersIn: "\"\'")).trimmingCharacters(in: .whitespacesAndNewlines)
         let isBrotli = trimmed.lowercased().hasPrefix("fptnb:")
         let prefix = isBrotli ? "fptnb:" : "fptn:"
         
@@ -95,7 +95,16 @@ public struct SecureCredentialProvider {
         }
         
         let decoder = JSONDecoder()
-        guard let parsed = try? decoder.decode(FPTNToken.self, from: jsonData) else { return nil }
+        do {
+            return try decoder.decode(FPTNToken.self, from: jsonData)
+        } catch {
+            print("Token JSON decode error: \(error)")
+            return nil
+        }
+    }
+
+    public static func parseToken(_ token: String) -> Credentials? {
+        guard let parsed = parseFPTNToken(token) else { return nil }
         return Credentials(username: parsed.username, password: parsed.password)
     }
     
