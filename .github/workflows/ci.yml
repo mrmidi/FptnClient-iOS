@@ -82,15 +82,6 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Restore DerivedData cache
-        id: cache-deriveddata
-        uses: actions/cache/restore@v5
-        with:
-          path: .build/DerivedData
-          key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', 'project.yml', '**/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-deriveddata-
-
       - name: macOS unit tests
         if: false
         run: |
@@ -117,10 +108,3 @@ jobs:
             -skip-testing:"FptnVPNUITests" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
           | xcbeautify
-
-      - name: Save DerivedData cache
-        if: always() && steps.cache-deriveddata.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: .build/DerivedData
-          key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', 'project.yml', '**/Package.resolved') }}
