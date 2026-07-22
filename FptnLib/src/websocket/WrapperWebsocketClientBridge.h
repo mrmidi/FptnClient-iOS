@@ -16,6 +16,15 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 // Forward declaration of internal wrapper implementation
 struct WebsocketClientWrapper;
 
+struct FptnOwnedPacketDescriptor {
+    std::uint8_t* bytes;
+    std::uint32_t length;
+    std::uint8_t ip_version;
+    void* owner;
+};
+
+extern "C" void fptn_release_owned_packet(void* owner) noexcept;
+
 struct WebsocketClientBridgeStatus {
     bool running;
     bool started;
@@ -49,6 +58,15 @@ struct WebsocketClientBridgeStatus {
     uint16_t stop_origin;
     bool stop_cleanup_completed;
     uint32_t active_operations;
+    uint64_t outbound_admission_copy_operations;
+    uint64_t outbound_admission_copy_bytes;
+    uint64_t outbound_rejected_before_copy_packets;
+    uint64_t outbound_rejected_before_copy_bytes;
+    uint64_t inbound_zero_copy_packets;
+    uint64_t inbound_zero_copy_bytes;
+    uint64_t inbound_batches_delivered;
+    uint64_t live_packet_leases;
+    uint64_t peak_packet_leases;
 };
 
 // PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,
@@ -56,7 +74,10 @@ struct WebsocketClientBridgeStatus {
 class SWIFT_NONCOPYABLE WebsocketSwiftBridge {
 public:
     // Callbacks
-    using IPPacketCallback = void (*)(const uint8_t* packet_data, uint32_t length, void* context);
+    using IPPacketBatchCallback = void (*)(
+        const FptnOwnedPacketDescriptor* packets,
+        uint32_t packet_count,
+        void* context);
     using ConnectionCallback = void (*)(void* context);
     using DisconnectedCallback = void (*)(bool was_connected, const char* reason, void* context);
     using IPAssignedCallback = void (*)(const char* ip_v4, const char* ip_v6, void* context);
@@ -69,7 +90,7 @@ public:
         const std::string& access_token,
         const std::string& md5_fingerprint,
         const std::string& censorship_strategy,
-        IPPacketCallback packet_callback,
+        IPPacketBatchCallback packet_callback,
         ConnectionCallback connected_callback,
         DisconnectedCallback disconnected_callback,
         void* context

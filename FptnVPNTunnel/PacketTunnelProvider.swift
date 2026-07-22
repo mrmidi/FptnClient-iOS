@@ -558,8 +558,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             accessToken: configuration.accessToken,
             md5Fingerprint: configuration.md5Fingerprint,
             censorshipStrategy: configuration.websocketStrategy,
-            packetCallback: { [weak self] packet in
-                self?.handleIncomingPacketFromServer(packet, generation: generation)
+            packetBatchCallback: { [weak self] batch in
+                self?.handleIncomingPacketBatchFromServer(batch, generation: generation)
             },
             connectedCallback: { [weak self] in
                 guard let self else { return }
@@ -1177,13 +1177,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
     }
 
-    private func handleIncomingPacketFromServer(_ packet: Data, generation: Int) {
-        guard generation == currentWebSocketGeneration() else { return }
-        guard shouldHandlePackets() else { return }
-
-        let protocolNumber = ipProtocolNumber(for: packet)
-        packetFlow.writePackets([packet], withProtocols: [protocolNumber])
-        recordPacketFlowWrite(byteCount: Int64(packet.count))
+    private func handleIncomingPacketBatchFromServer(_ batch: InboundPacketBatch, generation: Int) {
+        guard generation == currentWebSocketGeneration(), shouldHandlePackets(),
+              !batch.packets.isEmpty else { return }
+        let bytes = batch.packets.reduce(into: Int64.zero) { $0 += Int64($1.count) }
+        _ = packetFlow.writePackets(batch.packets, withProtocols: batch.protocols)
+        recordPacketFlowWrite(byteCount: bytes)
     }
 
     private func shouldContinueReadLoop() -> Bool {
