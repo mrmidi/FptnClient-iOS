@@ -312,7 +312,7 @@ struct FptnSelectorApp {
 
             JSONLOutput.printRecord(command: "scan-all", data: report.statistics, toFile: outputFile)
 
-            let acceptance = ReportGenerator.generate(from: report.observations)
+            let acceptance = ReportGenerator.generate(from: report.observations, totalScanDurationMs: report.statistics.totalScanDurationMs)
             ReportGenerator.renderToConsole(report: acceptance)
 
             print("\n================ DETAILED SERVER REPORT ================")

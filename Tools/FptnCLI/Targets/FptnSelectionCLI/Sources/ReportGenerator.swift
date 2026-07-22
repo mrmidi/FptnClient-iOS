@@ -13,19 +13,48 @@ public struct AcceptanceReport: Codable, Sendable {
     public let successCount: Int
     public let failureCount: Int
     public let successRate: Double
-    
+    public let totalScanDurationMs: Int?
+
     public let minLatencyMs: Int?
     public let maxLatencyMs: Int?
     public let avgLatencyMs: Double?
     public let p50LatencyMs: Int?
     public let p90LatencyMs: Int?
     public let p95LatencyMs: Int?
-    
+
     public let failuresByKind: [String: Int]
+
+    public init(
+        totalProbes: Int,
+        successCount: Int,
+        failureCount: Int,
+        successRate: Double,
+        totalScanDurationMs: Int? = nil,
+        minLatencyMs: Int?,
+        maxLatencyMs: Int?,
+        avgLatencyMs: Double?,
+        p50LatencyMs: Int?,
+        p90LatencyMs: Int?,
+        p95LatencyMs: Int?,
+        failuresByKind: [String: Int]
+    ) {
+        self.totalProbes = totalProbes
+        self.successCount = successCount
+        self.failureCount = failureCount
+        self.successRate = successRate
+        self.totalScanDurationMs = totalScanDurationMs
+        self.minLatencyMs = minLatencyMs
+        self.maxLatencyMs = maxLatencyMs
+        self.avgLatencyMs = avgLatencyMs
+        self.p50LatencyMs = p50LatencyMs
+        self.p90LatencyMs = p90LatencyMs
+        self.p95LatencyMs = p95LatencyMs
+        self.failuresByKind = failuresByKind
+    }
 }
 
 public struct ReportGenerator {
-    public static func generate(from observations: [ServerHealthObservation]) -> AcceptanceReport {
+    public static func generate(from observations: [ServerHealthObservation], totalScanDurationMs: Int? = nil) -> AcceptanceReport {
         let total = observations.count
         let successes = observations.filter { $0.outcome == .success }
         let failures = observations.filter { $0.outcome != .success }
@@ -51,6 +80,7 @@ public struct ReportGenerator {
             successCount: successes.count,
             failureCount: failures.count,
             successRate: successRate,
+            totalScanDurationMs: totalScanDurationMs,
             minLatencyMs: minLat,
             maxLatencyMs: maxLat,
             avgLatencyMs: avgLat,
@@ -82,6 +112,7 @@ public struct ReportGenerator {
             successCount: successes.count,
             failureCount: failures.count,
             successRate: successRate,
+            totalScanDurationMs: nil,
             minLatencyMs: minLat,
             maxLatencyMs: maxLat,
             avgLatencyMs: avgLat,
@@ -113,6 +144,7 @@ public struct ReportGenerator {
             successCount: baseReport.successCount,
             failureCount: baseReport.failureCount,
             successRate: baseReport.successRate,
+            totalScanDurationMs: nil,
             minLatencyMs: baseReport.minLatencyMs,
             maxLatencyMs: baseReport.maxLatencyMs,
             avgLatencyMs: baseReport.avgLatencyMs,
@@ -136,6 +168,9 @@ public struct ReportGenerator {
         print("Successes:            \(report.successCount)")
         print("Failures:             \(report.failureCount)")
         print("Success Rate:         \(String(format: "%.2f%%", report.successRate * 100))")
+        if let totalMs = report.totalScanDurationMs {
+            print("Total Scan Duration:  \(String(format: "%.2f s", Double(totalMs) / 1000.0)) (\(totalMs) ms)")
+        }
         print("---------------------------------------------------")
         if let avg = report.avgLatencyMs {
             print("Latency Statistics (Successes Only):")
