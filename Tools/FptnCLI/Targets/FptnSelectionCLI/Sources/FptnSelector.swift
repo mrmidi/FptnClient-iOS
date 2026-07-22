@@ -97,10 +97,10 @@ struct FptnSelectorApp {
         print("Password:      \(token.password)")
         print("Server Count:  \(token.servers.count)")
         print("-----------------------------------------------------------")
-        print(String(format: "%-25s | %-20s | %-32s", "Server Name", "Host:Port", "MD5 Fingerprint"))
+        print(String(format: "%-25@ | %-20@ | %-32@", "Server Name" as NSString, "Host:Port" as NSString, "MD5 Fingerprint" as NSString))
         print("-----------------------------------------------------------")
         for s in token.servers {
-            print(String(format: "%-25s | %-20s | %-32s", s.name, "\(s.host):\(s.port)", s.md5Fingerprint))
+            print(String(format: "%-25@ | %-20@ | %-32@", s.name as NSString, "\(s.host):\(s.port)" as NSString, s.md5Fingerprint as NSString))
         }
         print("===========================================================\n")
     }
@@ -316,7 +316,7 @@ struct FptnSelectorApp {
             ReportGenerator.renderToConsole(report: acceptance)
 
             print("\n================ DETAILED SERVER REPORT ================")
-            print(String(format: "%-25s | %-20s | %-12s | %-12s", "Server Name", "Host:Port", "Status", "Latency"))
+            print(String(format: "%-25@ | %-20@ | %-12@ | %-12@", "Server Name" as NSString, "Host:Port" as NSString, "Status" as NSString, "Latency" as NSString))
             print("--------------------------------------------------------------------------------")
             for server in config.servers.sorted(by: { $0.name < $1.name }) {
                 let obs = report.observations.first(where: { $0.serverID == server.id })
@@ -335,7 +335,7 @@ struct FptnSelectorApp {
                     statusStr = "SKIPPED"
                     latencyStr = "N/A"
                 }
-                print(String(format: "%-25s | %-20s | %-12s | %-12s", server.name, "\(server.host):\(server.port)", statusStr, latencyStr))
+                print(String(format: "%-25@ | %-20@ | %-12@ | %-12@", server.name as NSString, "\(server.host):\(server.port)" as NSString, statusStr as NSString, latencyStr as NSString))
             }
             print("========================================================\n")
 
