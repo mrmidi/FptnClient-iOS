@@ -39,6 +39,12 @@ struct WebsocketClientStatus: Sendable {
     let stopOrigin: WebsocketStopOrigin
     let stopCleanupCompleted: Bool
     let activeOperations: UInt32
+    let outboundAdmissionCopyBytes: UInt64
+    let outboundRejectedBeforeCopyBytes: UInt64
+    let inboundZeroCopyBytes: UInt64
+    let inboundBatchesDelivered: UInt64
+    let livePacketLeases: UInt64
+    let peakPacketLeases: UInt64
 }
 
 struct InboundPacketBatch {
@@ -226,7 +232,13 @@ final class WebsocketClientBridge {
             disconnectCode: WebsocketDisconnectCode(bridgeValue: raw.disconnect_code),
             stopOrigin: WebsocketStopOrigin(bridgeValue: raw.stop_origin),
             stopCleanupCompleted: raw.stop_cleanup_completed,
-            activeOperations: raw.active_operations
+            activeOperations: raw.active_operations,
+            outboundAdmissionCopyBytes: raw.outbound_admission_copy_bytes,
+            outboundRejectedBeforeCopyBytes: raw.outbound_rejected_before_copy_bytes,
+            inboundZeroCopyBytes: raw.inbound_zero_copy_bytes,
+            inboundBatchesDelivered: raw.inbound_batches_delivered,
+            livePacketLeases: raw.live_packet_leases,
+            peakPacketLeases: raw.peak_packet_leases
         )
     }
 }
