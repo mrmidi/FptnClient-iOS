@@ -35,15 +35,9 @@ constexpr const int kDefaultIdleTimeoutSeconds = 60;
 
 struct WebsocketClientWrapper {
     struct CopyCounters {
-        std::atomic<uint64_t> outbound_admission_copy_operations{0};
-        std::atomic<uint64_t> outbound_admission_copy_bytes{0};
-        std::atomic<uint64_t> outbound_rejected_before_copy_packets{0};
-        std::atomic<uint64_t> outbound_rejected_before_copy_bytes{0};
         std::atomic<uint64_t> inbound_zero_copy_packets{0};
         std::atomic<uint64_t> inbound_zero_copy_bytes{0};
         std::atomic<uint64_t> inbound_batches_delivered{0};
-        std::atomic<uint64_t> live_packet_leases{0};
-        std::atomic<uint64_t> peak_packet_leases{0};
     };
     WebsocketSwiftBridge::IPPacketBatchCallback packet_callback;
     WebsocketSwiftBridge::ConnectionCallback connected_callback;
@@ -57,6 +51,7 @@ struct WebsocketClientWrapper {
     int idle_timeout_seconds;
     // PR1C: terminal reason stored after Run() returns.
     std::uint32_t final_terminal_reason{0};
+    fptn::protocol::https::PacketCopyCounters final_copy_counters{};
 
     std::string server_ip;
     int server_port;
@@ -229,35 +224,35 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(
     return CensorshipStrategy::kSni;
 }
 
-struct OwnedPacketLease {
-    OwnedPacketLease(fptn::common::network::IPPacketPtr value,
-                     std::shared_ptr<WebsocketClientWrapper::CopyCounters> counters)
-        : packet(std::move(value)), counters(std::move(counters)) {}
-    ~OwnedPacketLease() { counters->live_packet_leases.fetch_sub(1, std::memory_order_relaxed); }
-    fptn::common::network::IPPacketPtr packet;
-    std::shared_ptr<WebsocketClientWrapper::CopyCounters> counters;
-};
+std::atomic<uint64_t> g_live_packet_leases{0};
+std::atomic<uint64_t> g_peak_packet_leases{0};
 
 extern "C" void fptn_release_owned_packet(void* owner) noexcept {
-    delete static_cast<OwnedPacketLease*>(owner);
+    delete static_cast<fptn::common::network::IPPacket*>(owner);
+    g_live_packet_leases.fetch_sub(1, std::memory_order_relaxed);
 }
 
 void packet_callback_adapter(fptn::common::network::BatchIPPacketPtr packets,
                              void* user_data) {
     auto wrapper = static_cast<WebsocketClientWrapper*>(user_data);
     if (wrapper && wrapper->packet_callback && !packets.empty()) {
+        // Keep every packet under RAII ownership until all descriptor
+        // allocations have succeeded. This makes an exception during batch
+        // construction leak-free without a per-packet lease wrapper.
+        fptn::common::network::BatchIPPacketPtr leases;
+        leases.reserve(packets.size());
         std::vector<FptnOwnedPacketDescriptor> descriptors;
         descriptors.reserve(packets.size());
         std::uint64_t bytes = 0;
         for (auto& packet : packets) {
             if (!packet || packet->Data().empty()) continue;
-            auto* lease = new OwnedPacketLease(std::move(packet), wrapper->copy_counters);
-            const auto& data = lease->packet->Data();
+            leases.push_back(std::move(packet));
+            const auto& data = leases.back()->Data();
             descriptors.push_back({
                 const_cast<std::uint8_t*>(data.data()),
                 static_cast<std::uint32_t>(data.size()),
-                static_cast<std::uint8_t>(lease->packet->IsIPv6() ? 6 : 4),
-                lease
+                static_cast<std::uint8_t>(leases.back()->IsIPv6() ? 6 : 4),
+                leases.back().get()
             });
             bytes += data.size();
         }
@@ -266,9 +261,9 @@ void packet_callback_adapter(fptn::common::network::BatchIPPacketPtr packets,
         counters.inbound_zero_copy_packets.fetch_add(descriptors.size(), std::memory_order_relaxed);
         counters.inbound_zero_copy_bytes.fetch_add(bytes, std::memory_order_relaxed);
         counters.inbound_batches_delivered.fetch_add(1, std::memory_order_relaxed);
-        const auto live = counters.live_packet_leases.fetch_add(descriptors.size(), std::memory_order_relaxed) + descriptors.size();
-        auto peak = counters.peak_packet_leases.load(std::memory_order_relaxed);
-        while (live > peak && !counters.peak_packet_leases.compare_exchange_weak(peak, live, std::memory_order_relaxed)) {}
+        const auto live = g_live_packet_leases.fetch_add(descriptors.size(), std::memory_order_relaxed) + descriptors.size();
+        auto peak = g_peak_packet_leases.load(std::memory_order_relaxed);
+        while (live > peak && !g_peak_packet_leases.compare_exchange_weak(peak, live, std::memory_order_relaxed)) {}
         wrapper->received_packet_count.fetch_add(descriptors.size());
         wrapper->received_byte_count.fetch_add(bytes);
         wrapper->callback_enter_count.fetch_add(1);
@@ -278,6 +273,9 @@ void packet_callback_adapter(fptn::common::network::BatchIPPacketPtr packets,
         // fired on packet #1 and every 500th packet. These added
         // non-trivial per-batch overhead on the receive hot path.
         // Counters above remain for getStatus() reporting.
+        for (auto& lease : leases) {
+            lease.release();
+        }
         wrapper->packet_callback(descriptors.data(),
                                  static_cast<uint32_t>(descriptors.size()),
                                  wrapper->context);
@@ -373,12 +371,16 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
         }
 
         const auto reason = client ? client->GetTerminalReason() : 0;
+        const auto copy_counters = client
+            ? client->GetPacketCopyCounters()
+            : fptn::protocol::https::PacketCopyCounters{};
         {
             std::unique_lock<std::mutex> lock(wrapper->mutex);
             if (wrapper->client == client) {
                 wrapper->client.reset();
             }
             wrapper->final_terminal_reason = reason;
+            wrapper->final_copy_counters = copy_counters;
         }
         disconnected_callback_adapter(true, "WebSocket client stopped", wrapper);
     } catch (const std::exception& ex) {
@@ -540,15 +542,7 @@ std::uint8_t WebsocketSwiftBridge::sendPacket(const uint8_t* packet_data, uint32
         return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::transport_stopped);
     }
     try {
-        const auto result = client->TrySendPacketBytes(packet_data, length);
-        if (result == fptn::protocol::https::SendResult::accepted) {
-            wrapper_->copy_counters->outbound_admission_copy_operations.fetch_add(1, std::memory_order_relaxed);
-            wrapper_->copy_counters->outbound_admission_copy_bytes.fetch_add(length, std::memory_order_relaxed);
-        } else {
-            wrapper_->copy_counters->outbound_rejected_before_copy_packets.fetch_add(1, std::memory_order_relaxed);
-            wrapper_->copy_counters->outbound_rejected_before_copy_bytes.fetch_add(length, std::memory_order_relaxed);
-        }
-        return static_cast<std::uint8_t>(result);
+        return static_cast<std::uint8_t>(client->TrySendPacketBytes(packet_data, length));
     } catch (...) {
         return static_cast<std::uint8_t>(fptn::protocol::https::SendResult::invalid_packet);
     }
@@ -612,16 +606,21 @@ WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
         status.live_clients = fptn::protocol::https::WebsocketClient::GetLiveClients();
         status.active_reader_coroutines = fptn::protocol::https::WebsocketClient::GetActiveReaderCoroutines();
         status.active_sender_coroutines = fptn::protocol::https::WebsocketClient::GetActiveSenderCoroutines();
+        const auto native_copy_counters = wrapper_->client
+            ? wrapper_->client->GetPacketCopyCounters()
+            : wrapper_->final_copy_counters;
         const auto& counters = *wrapper_->copy_counters;
-        status.outbound_admission_copy_operations = counters.outbound_admission_copy_operations.load(std::memory_order_relaxed);
-        status.outbound_admission_copy_bytes = counters.outbound_admission_copy_bytes.load(std::memory_order_relaxed);
-        status.outbound_rejected_before_copy_packets = counters.outbound_rejected_before_copy_packets.load(std::memory_order_relaxed);
-        status.outbound_rejected_before_copy_bytes = counters.outbound_rejected_before_copy_bytes.load(std::memory_order_relaxed);
+        status.outbound_admission_copy_operations = native_copy_counters.outbound_admission_copy_operations;
+        status.outbound_admission_copy_bytes = native_copy_counters.outbound_admission_copy_bytes;
+        status.outbound_rejected_before_copy_packets = native_copy_counters.outbound_rejected_before_copy_packets;
+        status.outbound_rejected_before_copy_bytes = native_copy_counters.outbound_rejected_before_copy_bytes;
+        status.outbound_copied_but_rejected_packets = native_copy_counters.outbound_copied_but_rejected_packets;
+        status.outbound_copied_but_rejected_bytes = native_copy_counters.outbound_copied_but_rejected_bytes;
         status.inbound_zero_copy_packets = counters.inbound_zero_copy_packets.load(std::memory_order_relaxed);
         status.inbound_zero_copy_bytes = counters.inbound_zero_copy_bytes.load(std::memory_order_relaxed);
         status.inbound_batches_delivered = counters.inbound_batches_delivered.load(std::memory_order_relaxed);
-        status.live_packet_leases = counters.live_packet_leases.load(std::memory_order_relaxed);
-        status.peak_packet_leases = counters.peak_packet_leases.load(std::memory_order_relaxed);
+        status.live_packet_leases = g_live_packet_leases.load(std::memory_order_relaxed);
+        status.peak_packet_leases = g_peak_packet_leases.load(std::memory_order_relaxed);
     } catch (const std::exception& ex) {
         status.last_error = ex.what();
     } catch (...) {

@@ -41,6 +41,7 @@ struct WebsocketClientStatus: Sendable {
     let activeOperations: UInt32
     let outboundAdmissionCopyBytes: UInt64
     let outboundRejectedBeforeCopyBytes: UInt64
+    let outboundCopiedButRejectedBytes: UInt64
     let inboundZeroCopyBytes: UInt64
     let inboundBatchesDelivered: UInt64
     let livePacketLeases: UInt64
@@ -66,7 +67,6 @@ final class WebsocketClientBridge {
     private let connectedCallback: ConnectionCallback
     private let disconnectedCallback: DisconnectionCallback
     private let ipAssignedCallback: IPAssignedCallback
-    private let diagnosticsID = UUID().uuidString
 
     // PR2: one-shot lifecycle latch. Once stop() wins, start() is
     // permanently rejected. Prevents resurrection after shutdown.
@@ -144,14 +144,6 @@ final class WebsocketClientBridge {
         }
 
         logger.trace("WebsocketClientBridge created")
-        TunnelDiagnosticsStore.shared.recordProviderEvent(
-            category: "bridge",
-            message: "create id=\(diagnosticsID) strategy=\(censorshipStrategy)"
-        )
-    }
-
-    deinit {
-        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "deinit id=\(diagnosticsID)")
     }
 
     // MARK: - Control
@@ -165,7 +157,6 @@ final class WebsocketClientBridge {
         let ok = clientBridge.start()
         lifecycle = ok ? .started : .stopped
         logger.debug("WebSocket start → \(ok)")
-        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "start id=\(diagnosticsID) ok=\(ok)")
         return ok
     }
 
@@ -178,7 +169,6 @@ final class WebsocketClientBridge {
         lifecycle = .stopped
         let ok = clientBridge.stop(origin.rawValue)
         logger.debug("WebSocket stop → \(ok) origin=\(origin)")
-        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge", message: "stop id=\(diagnosticsID) ok=\(ok) origin=\(origin)")
         return ok
     }
 
@@ -235,6 +225,7 @@ final class WebsocketClientBridge {
             activeOperations: raw.active_operations,
             outboundAdmissionCopyBytes: raw.outbound_admission_copy_bytes,
             outboundRejectedBeforeCopyBytes: raw.outbound_rejected_before_copy_bytes,
+            outboundCopiedButRejectedBytes: raw.outbound_copied_but_rejected_bytes,
             inboundZeroCopyBytes: raw.inbound_zero_copy_bytes,
             inboundBatchesDelivered: raw.inbound_batches_delivered,
             livePacketLeases: raw.live_packet_leases,
@@ -265,14 +256,7 @@ private extension WebsocketClientBridge {
         }
         return InboundPacketBatch(packets: packets, protocols: protocols)
     }
-    func recordConnectedCallback() {
-        TunnelDiagnosticsStore.shared.recordProviderEvent(category: "bridge_callback", message: "connected id=\(diagnosticsID)")
-    }
+    func recordConnectedCallback() {}
 
-    func recordDisconnectedCallback(wasConnected: Bool, reason: String) {
-        TunnelDiagnosticsStore.shared.recordProviderEvent(
-            category: "bridge_callback",
-            message: "disconnected id=\(diagnosticsID) was_connected=\(wasConnected) reason=\(reason)"
-        )
-    }
+    func recordDisconnectedCallback(wasConnected: Bool, reason: String) {}
 }

@@ -62,6 +62,8 @@ struct WebsocketClientBridgeStatus {
     uint64_t outbound_admission_copy_bytes;
     uint64_t outbound_rejected_before_copy_packets;
     uint64_t outbound_rejected_before_copy_bytes;
+    uint64_t outbound_copied_but_rejected_packets;
+    uint64_t outbound_copied_but_rejected_bytes;
     uint64_t inbound_zero_copy_packets;
     uint64_t inbound_zero_copy_bytes;
     uint64_t inbound_batches_delivered;

@@ -41,6 +41,7 @@ struct WebsocketClientStatus: Sendable {
     let activeOperations: UInt32
     let outboundAdmissionCopyBytes: UInt64
     let outboundRejectedBeforeCopyBytes: UInt64
+    let outboundCopiedButRejectedBytes: UInt64
     let inboundZeroCopyBytes: UInt64
     let inboundBatchesDelivered: UInt64
     let livePacketLeases: UInt64
@@ -240,6 +241,7 @@ final class WebsocketClientBridge {
             activeOperations: raw.active_operations,
             outboundAdmissionCopyBytes: raw.outbound_admission_copy_bytes,
             outboundRejectedBeforeCopyBytes: raw.outbound_rejected_before_copy_bytes,
+            outboundCopiedButRejectedBytes: raw.outbound_copied_but_rejected_bytes,
             inboundZeroCopyBytes: raw.inbound_zero_copy_bytes,
             inboundBatchesDelivered: raw.inbound_batches_delivered,
             livePacketLeases: raw.live_packet_leases,
