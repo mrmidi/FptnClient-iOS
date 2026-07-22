@@ -10,6 +10,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #include <stdbool.h>
 #include <stdint.h>
 #include <string>
+#include <swift/bridging>
 
 // Forward declaration of internal wrapper implementation
 struct WebsocketClientWrapper;
@@ -30,7 +31,9 @@ struct WebsocketClientBridgeStatus {
     bool in_packet_callback;
 };
 
-class WebsocketSwiftBridge {
+// PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,
+// removing the implicitly-unwrapped-optional workaround in Swift wrappers.
+class SWIFT_NONCOPYABLE WebsocketSwiftBridge {
 public:
     // Callbacks
     using IPPacketCallback = void (*)(const uint8_t* packet_data, uint32_t length, void* context);

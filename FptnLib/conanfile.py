@@ -40,11 +40,10 @@ class FptnLib(ConanFile):
 
     def generate(self):
         tc = CMakeToolchain(self)
-        # Force C++20 — upstream fptn uses coroutines (co_await/co_return)
-        # and abseil requires std::partial_ordering (C++20). CMake's
-        # variable_watch can't prevent CMakeLists.txt from overriding
-        # CMAKE_CXX_STANDARD via set(), so we inject -std=c++20 into the
-        # C compiler flags that Conan generates and remove the watch.
+        # PR0: CMakeLists.txt sets -std=c++23, aligned with Conan
+        # profiles (compiler.cppstd=23) and the fptn submodule.
+        # Remove Conan's cmake_std_management block so it does not fight
+        # the explicit standard selection in CMakeLists.txt.
         try:
             tc.blocks.remove("cmake_std_management")
         except KeyError:

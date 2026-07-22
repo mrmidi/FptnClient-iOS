@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project Overview
 
-FptnVPN is an iOS VPN client app that connects to FPTN servers. It uses a pre-built C++ native framework (`fptn_native_lib.framework`) for HTTPS and WebSocket communication, wrapped through an Objective-C++ bridge layer.
+FptnVPN is an iOS VPN client app that connects to FPTN servers. It uses a pre-built C++ native framework (`fptn_native_lib.framework`) for HTTPS and WebSocket communication, accessed via Swift C++ interop (C++23, `SWIFT_OBJC_INTEROP_MODE: objcxx`).
 
 ## Build
 
@@ -57,8 +57,8 @@ Open `FptnVPN.xcodeproj` in Xcode. Tests are in `FptnVPNTests` (Swift Testing fr
 
 ### App Targets
 
-- **FptnVPN** — Main SwiftUI app. Bundle ID: `org.fptn.FptnVPN`
-- **FptnVPNTunnel** — `NEAppProxyProvider` network extension. Bundle ID: `org.fptn.FptnVPN.FptnVPNTunnel`. Currently a stub — VPN traffic is handled in the main app via WebSocket.
+- **FptnVPN** — Main SwiftUI app. Bundle ID: `net.mrmidi.FptnVPN`
+- **FptnVPNTunnel** — `NEPacketTunnelProvider` network extension. Bundle ID: `net.mrmidi.FptnVPN.FptnVPNTunnel`. Handles VPN traffic via WebSocket through the native C++ bridge.
 - **FptnLib** — C++ shared library (`fptn_native_lib.framework`). Built with CMake/Conan; not a Swift package.
 
 ### Authentication & Token Format
@@ -75,15 +75,16 @@ Users receive a token from `@fptn_bot` (Telegram). Token format: `fptn:<base64-e
 
 ### C++ Bridge Layer
 
-The native library is accessed through a two-level bridge:
+The native library is accessed through Swift C++ interop (no Objective-C++ `.mm` files). C++ classes are imported via bridging headers and used directly from Swift:
 
-- **Obj-C++ layer** (`FptnVPN/Cpp/Bridges/*.mm`): wraps C API from `fptn_native_lib` headers
-  - `HttpsClientBridge.mm` — wraps `WrapperHttpsClientBridge.h`
-  - `WebsocketClientBridge.mm` — wraps `WrapperWebsocketClientBridge.h`
-- **Swift wrapper layer** (`FptnVPN/Cpp/Wrappers/*.swift`): exposes Obj-C++ classes to Swift
-  - `HttpsClientSwift.swift` — thin Swift class over the Obj-C `HttpsClientSwift`
-  - `WebScoketClientBridge.swift` — Swift `WebsocketClientBridge` + private `NativeWebsocketClientBridge`
-- **Bridging header**: `FptnVPN/Cpp/FptnVPN-Bridging-Header.h` imports framework headers
+- **C++ classes** (compiled into `fptn_native_lib.framework`):
+  - `SwiftApiClient` (`FptnLib/src/https/SwiftApiClient.h`) — HTTPS API client
+  - `WebsocketSwiftBridge` (`FptnLib/src/websocket/WrapperWebsocketClientBridge.h`) — WebSocket transport with C function-pointer callbacks
+- **Swift wrapper layer** (`FptnVPN/Cpp/Wrappers/*.swift`, `FptnVPNTunnel/Cpp/*.swift`):
+  - `ApiClientBridge.swift` — Swift wrapper over `SwiftApiClient`
+  - `WebScoketClientBridge.swift` — Swift `WebsocketClientBridge` wrapping `WebsocketSwiftBridge`, passes `Unmanaged` context pointers for C callbacks
+- **Bridging headers**: `FptnVPN/Cpp/FptnVPN-Bridging-Header.h` (app), `FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h` (tunnel) — `#include` the C++ headers from the framework
+- Both C++ classes are annotated `SWIFT_NONCOPYABLE` (move-only, imported as `~Copyable` in Swift)
 
 ### Key Models
 
