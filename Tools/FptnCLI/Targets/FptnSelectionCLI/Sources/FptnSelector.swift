@@ -49,13 +49,17 @@ struct FptnSelectorApp {
         FPTN Server Selector CLI
 
         Usage:
-          fptn-selector auto-select --config <path> [--output <jsonl-path>]
-          fptn-selector manual-bootstrap --config <path> --server <host:port> [--output <jsonl-path>]
-          fptn-selector scan-all --config <path> [--output <jsonl-path>]
+          fptn-selector auto-select --config <path> [--token <token>] [--output <jsonl-path>]
+          fptn-selector manual-bootstrap --config <path> --server <host:port> [--token <token>] [--output <jsonl-path>]
+          fptn-selector scan-all --config <path> [--token <token>] [--output <jsonl-path>]
           fptn-selector diagnostic --config <path>
           fptn-selector simulate --scenario <path>
-          fptn-selector matrix --config <path> --iterations <n> [--output <jsonl-path>]
+          fptn-selector matrix --config <path> --iterations <n> [--token <token>] [--output <jsonl-path>]
           fptn-selector soak-sim --iterations <n>
+
+        Authentication:
+          Pass --token <token> or --token="fptn:..." on the command line.
+          Alternatively set FPTN_TOKEN or FPTN_USERNAME/FPTN_PASSWORD environment variables.
         """)
     }
 
@@ -70,7 +74,7 @@ struct FptnSelectorApp {
 
         do {
             let config = try CLIConfig.load(from: configPath)
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            guard let credentials = SecureCredentialProvider.getCredentials(args: args) else {
                 print("Error: Failed to obtain credentials.")
                 return
             }
@@ -142,7 +146,7 @@ struct FptnSelectorApp {
                 print("Error: Server \(targetServerID) not found in config.")
                 return
             }
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            guard let credentials = SecureCredentialProvider.getCredentials(args: args) else {
                 print("Error: Failed to obtain credentials.")
                 return
             }
@@ -199,7 +203,7 @@ struct FptnSelectorApp {
 
         do {
             let config = try CLIConfig.load(from: configPath)
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            guard let credentials = SecureCredentialProvider.getCredentials(args: args) else {
                 print("Error: Failed to obtain credentials.")
                 return
             }
@@ -407,7 +411,7 @@ struct FptnSelectorApp {
 
         do {
             let config = try CLIConfig.load(from: configPath)
-            guard let credentials = SecureCredentialProvider.getCredentials() else {
+            guard let credentials = SecureCredentialProvider.getCredentials(args: args) else {
                 print("Error: Failed to obtain credentials.")
                 return
             }

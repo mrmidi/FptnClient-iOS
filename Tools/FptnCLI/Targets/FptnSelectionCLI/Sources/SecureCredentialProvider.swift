@@ -10,38 +10,64 @@ import FptnSharedCore
 import Compression
 
 public struct SecureCredentialProvider {
-    public static func getCredentials() -> Credentials? {
+    public static func getCredentials(args: [String] = CommandLine.arguments) -> Credentials? {
+        // 1. Try command-line --token flag (e.g., --token <val> or --token=<val>)
+        if let tokenStr = getCLIArgValue(for: "--token", args: args) {
+            if let creds = parseToken(tokenStr) {
+                return creds
+            }
+        }
+
+        // 2. Try command-line --username and --password flags
+        if let user = getCLIArgValue(for: "--username", args: args),
+           let pass = getCLIArgValue(for: "--password", args: args) {
+            return Credentials(username: user, password: pass)
+        }
+
         let env = ProcessInfo.processInfo.environment
-        
-        // 1. Try FPTN_TOKEN first
+
+        // 3. Try FPTN_TOKEN env var
         if let tokenStr = env["FPTN_TOKEN"] {
             if let creds = parseToken(tokenStr) {
                 return creds
             }
         }
-        
-        // 2. Try FPTN_USERNAME and FPTN_PASSWORD
+
+        // 4. Try FPTN_USERNAME and FPTN_PASSWORD env vars
         if let user = env["FPTN_USERNAME"], let pass = env["FPTN_PASSWORD"] {
             return Credentials(username: user, password: pass)
         }
-        
-        // 3. Fallback to interactive stdin prompts
+
+        // 5. Fallback to interactive stdin prompts
         guard isatty(STDIN_FILENO) != 0 else {
             return nil
         }
-        
+
         print("Please enter FPTN Username: ", terminator: "")
         guard let username = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !username.isEmpty else {
             return nil
         }
-        
+
         // Use standard getpass to read password securely without echo
         guard let passCPtr = getpass("Please enter FPTN Password: "),
               let password = String(validatingUTF8: passCPtr) else {
             return nil
         }
-        
+
         return Credentials(username: username, password: password)
+    }
+
+    private static func getCLIArgValue(for flag: String, args: [String]) -> String? {
+        let prefix = "\(flag)="
+        for arg in args {
+            if arg.hasPrefix(prefix) {
+                return String(arg.dropFirst(prefix.count)).trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+            }
+        }
+        if let idx = args.firstIndex(of: flag), idx + 1 < args.count {
+            return args[idx + 1].trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+        }
+        return nil
     }
     
     public static func parseToken(_ token: String) -> Credentials? {

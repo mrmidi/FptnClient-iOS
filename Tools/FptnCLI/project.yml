@@ -48,7 +48,11 @@ targets:
       base:
         SWIFT_OBJC_BRIDGING_HEADER: Targets/FptnSelectionCLI/Cpp/FptnSelectionCLI-Bridging-Header.h
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../Fptn-macOS/Cpp
-        LD_RUNPATH_SEARCH_PATHS: "@loader_path/../../../../../../Fptn-macOS/Cpp"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../../../../Fptn-macOS/Cpp"
+          - "@loader_path/../../../../Fptn-macOS/Cpp"
+          - "@loader_path/../../../../../../Fptn-macOS/Cpp"
+          - "$(SRCROOT)/../../Fptn-macOS/Cpp"
 
   CLIIntegrationTests:
     type: bundle.unit-test
