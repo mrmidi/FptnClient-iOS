@@ -17,8 +17,8 @@ class LifecycleStore final {
 
   ~LifecycleStore() noexcept = default;
 
-  LifecycleStore(LifecycleStore&&) noexcept = default;
-  LifecycleStore& operator=(LifecycleStore&&) noexcept = default;
+  LifecycleStore(LifecycleStore&&) = delete;
+  LifecycleStore& operator=(LifecycleStore&&) = delete;
   LifecycleStore(const LifecycleStore&) = delete;
   LifecycleStore& operator=(const LifecycleStore&) = delete;
 

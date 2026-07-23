@@ -139,7 +139,7 @@ fptn_lifecycle_store_create(const char* path) {
 
 extern "C" void
 fptn_lifecycle_store_destroy(void* handle) {
-  delete handle;
+  delete static_cast<FptnLifecycleStoreHandle*>(handle);
 }
 
 extern "C" int

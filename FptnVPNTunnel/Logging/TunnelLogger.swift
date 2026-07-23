@@ -134,22 +134,14 @@ struct TunnelLogHandler: Logging.LogHandler {
         set { metadata[key] = newValue }
     }
 
-    func log(
-        level: Logging.Logger.Level,
-        message: Logging.Logger.Message,
-        metadata: Logging.Logger.Metadata?,
-        source: String,
-        file: String,
-        function: String,
-        line: UInt
-    ) {
+    func log(event: Logging.LogEvent) {
         let text = SensitiveLogRedactor.redact(
-            format(level: level, message: message, file: file, line: line)
+            format(level: event.level, message: event.message, file: event.file, line: event.line)
         )
 
         // 1. os_log — attach Xcode to the FptnVPNTunnel process to see this
         let osType: OSLogType
-        switch level {
+        switch event.level {
         case .trace, .debug:    osType = .debug
         case .info, .notice:    osType = .info
         case .warning, .error:  osType = .error

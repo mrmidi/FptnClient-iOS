@@ -71,21 +71,13 @@ struct AppLogHandler: Logging.LogHandler {
         set { metadata[key] = newValue }
     }
 
-    func log(
-        level: Logging.Logger.Level,
-        message: Logging.Logger.Message,
-        metadata: Logging.Logger.Metadata?,
-        source: String,
-        file: String,
-        function: String,
-        line: UInt
-    ) {
+    func log(event: Logging.LogEvent) {
         let text = SensitiveLogRedactor.redact(
-            format(level: level, message: message, file: file, line: line)
+            format(level: event.level, message: event.message, file: event.file, line: event.line)
         )
 
         // 1. os_log — appears in Xcode console when attached to this process
-        let osType = level.osLogType
+        let osType = event.level.osLogType
         os_log("%{public}@", log: osLog, type: osType, text)
 
         // 2. Ring buffer → background flush to shared file

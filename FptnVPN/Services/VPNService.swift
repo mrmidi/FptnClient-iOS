@@ -96,7 +96,7 @@ final class VPNService: ObservableObject {
         let sharedLogLevel = SharedLogLevel(rawValue: level.rawValue)
         let msg = TunnelControlMessage(action: .setLogLevel, logLevel: sharedLogLevel)
         if let data = try? JSONEncoder().encode(msg) {
-            try? await session.sendProviderMessage(data)
+            try? session.sendProviderMessage(data)
         }
     }
 
@@ -497,7 +497,7 @@ final class VPNService: ObservableObject {
         if let session = manager.connection as? NETunnelProviderSession {
             let message = TunnelControlMessage(action: .prepareStop, initiator: .appDisconnect)
             if let data = try? JSONEncoder().encode(message) {
-                try? await session.sendProviderMessage(data)
+                try? session.sendProviderMessage(data)
             }
         }
         manager.connection.stopVPNTunnel()

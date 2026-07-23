@@ -1,0 +1,9 @@
+If:
+  PathMatch: TunnelDiagnosticsCore/.*
+
+CompileFlags:
+  Add:
+    - -std=c++23
+    - -xc++
+    - -ITunnelDiagnosticsCore/include
+  Compiler: clang++

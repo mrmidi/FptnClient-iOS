@@ -293,6 +293,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         TunnelCrashSignalInstaller.installIfPossible()
 
         // PR3: initialize binary flight recorder + lifecycle snapshot store.
+        var didCreateFlightRecorder = false
         if flightRecorder == nil,
            let container = FileManager.default.containerURL(
                forSecurityApplicationGroupIdentifier: "group.net.mrmidi.FptnVPN") {
@@ -302,18 +303,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             let snapPath = diagDir.appendingPathComponent("lifecycle-snapshot.bin").path
             flightRecorder = TunnelFlightRecorder(path: ringPath)
             lifecycleStore = TunnelLifecycleSnapshotStore(path: snapPath)
-            let identity = ProviderProcessIdentity.shared
-            flightRecorder?.record(.processStarted,
-                value0: identity.pid,
-                value1: UInt64(Date().timeIntervalSince1970 * 1_000_000_000),
-                value2: identity.processSequence,
-                synchronize: true)
+            didCreateFlightRecorder = true
         }
 
         tunnelStartedMachTime = mach_continuous_time()
         physicalFootprintPeakBytes = 0
         latestEventSequence = 0
         logger.info("PacketTunnelProvider startTunnel")
+
+        if didCreateFlightRecorder {
+            let identity = ProviderProcessIdentity.shared
+            if let seq = flightRecorder?.record(.processStarted,
+                value0: identity.pid,
+                value1: UInt64(Date().timeIntervalSince1970 * 1_000_000_000),
+                value2: identity.processSequence,
+                synchronize: true), seq > 0 {
+                diagnosticsLock.lock()
+                latestEventSequence = seq
+                diagnosticsLock.unlock()
+            }
+        }
+
         recordProviderEvent(category: "lifecycle", message: "startTunnel", flightEvent: .startTunnel)
         _ = options
 
@@ -330,7 +340,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         tunnelSessionToken = Self.sessionToken(for: runtimeConfig.episodeID)
-        flightRecorder?.recordForSession(.startTunnel, sessionToken: tunnelSessionToken, synchronize: true)
+        if let seq = flightRecorder?.recordForSession(.startTunnel, sessionToken: tunnelSessionToken, synchronize: true), seq > 0 {
+            diagnosticsLock.lock()
+            latestEventSequence = seq
+            diagnosticsLock.unlock()
+        }
 
         setTunnelLogLevel(rawValue: runtimeConfig.logLevel)
         logger.info("Tunnel started (level=\(runtimeConfig.logLevel))")
@@ -1491,15 +1505,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         packetCount writtenPacketCount: Int64,
         byteCount: Int64,
         accepted: Bool
-    ) -> Int64 {
+    ) {
         let now = Date()
         var previousInboundActivityAt: Date?
-        var packetCount: Int64 = 0
 
         stateLock.lock()
         previousInboundActivityAt = counters.lastInboundActivityAt
         counters.transportReceivedPackets += writtenPacketCount
-        packetCount = counters.transportReceivedPackets
         counters.transportReceivedBytes += byteCount
         if accepted {
             counters.packetFlowWritePackets += writtenPacketCount
@@ -1517,7 +1529,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             packetCount: writtenPacketCount,
             byteCount: byteCount
         )
-        return packetCount
     }
 
     private func ipProtocolNumber(for packet: Data) -> NSNumber {
@@ -1865,7 +1876,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         // stateLock during the C++ getStatus() call.
         let client: WebsocketClientBridge?
         let savedNativeStatus: WebsocketClientStatus?
-        let savedNativeGeneration: Int?
         let state: TunnelRuntimeState
         let reasserting: Bool
         let reconnAttempt: Int
@@ -1892,7 +1902,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.lock()
         client = wsClient
         savedNativeStatus = lastNativeStatus
-        savedNativeGeneration = lastNativeStatusGeneration
         state = runtimeState
         reasserting = runtimeState == .reasserting || runtimeState == .waitingForNetwork
         reconnAttempt = reconnectAttempt
@@ -2099,7 +2108,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         if readPending { flags |= TunnelSnapshotFlag.packetReadPending.rawValue }
         if status?.stopCleanupCompleted == true { flags |= TunnelSnapshotFlag.nativeStopCleanupCompleted.rawValue }
 
-        lifecycleStore?.write(
+        let wroteSnapshot = lifecycleStore?.write(
             pid: UInt32(identity.pid),
             processToken: identity.processToken,
             processSequence: identity.processSequence,
@@ -2127,7 +2136,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             outboundQueuedBytesPeak: status?.queuedBytesPeak ?? 0,
             latestEventSequence: eventSeq,
             synchronize: synchronize
-        )
+        ) ?? true
+
+        if !wroteSnapshot {
+            recordProviderEvent(
+                category: "diagnostics",
+                message: "lifecycle snapshot write failed",
+                flightEvent: .snapshotWriteFailed
+            )
+        }
     }
 
     private func providerMemorySnapshot(status: WebsocketClientStatus?) -> TunnelMemoryPressureSnapshot {

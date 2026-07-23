@@ -18,8 +18,8 @@ class FlightRecorder final {
 
   ~FlightRecorder() noexcept = default;
 
-  FlightRecorder(FlightRecorder&&) noexcept = default;
-  FlightRecorder& operator=(FlightRecorder&&) noexcept = default;
+  FlightRecorder(FlightRecorder&&) = delete;
+  FlightRecorder& operator=(FlightRecorder&&) = delete;
   FlightRecorder(const FlightRecorder&) = delete;
   FlightRecorder& operator=(const FlightRecorder&) = delete;
 
