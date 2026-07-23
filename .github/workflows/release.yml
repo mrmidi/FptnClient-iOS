@@ -185,6 +185,22 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks
 
+      - name: Compute release version
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Tag '$TAG' is not a semantic version (expected vX.Y or vX.Y.Z)." >&2
+            exit 1
+          fi
+
+          echo "APP_MARKETING_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "APP_BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "Releasing MARKETING_VERSION=$VERSION CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER"
+
       - name: Generate Xcode project
         run: xcodegen generate
 
@@ -229,7 +245,9 @@ jobs:
             -allowProvisioningUpdates \
             "${AUTH_ARGS[@]}" \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            CODE_SIGN_STYLE=Automatic
+            CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$APP_MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$APP_BUILD_NUMBER"
 
           xcodebuild -exportArchive \
             -archivePath "$IOS_ARCHIVE" \
