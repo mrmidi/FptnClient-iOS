@@ -43,6 +43,7 @@ extension Color {
     static let appMutedControl = Color(uiColor: .tertiarySystemFill)
     static let appSeparator = Color(uiColor: .separator)
     static let appSuccess = Color(uiColor: .systemGreen)
+    static let appWarning = Color(uiColor: .systemOrange)
     static let appError = Color(uiColor: .systemRed)
 }
 

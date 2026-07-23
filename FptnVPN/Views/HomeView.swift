@@ -18,6 +18,7 @@ struct HomeView: View {
     @State private var showingSettings = false
     @State private var showingTools = false
     @State private var showingLogs = false
+    @State private var showingTelemetry = false
 
     var body: some View {
         VStack {
@@ -230,6 +231,18 @@ struct HomeView: View {
                 }
                 .sheet(isPresented: $showingLogs) {
                     LogsView()
+                }
+                Spacer()
+                Button {
+                    showingTelemetry = true
+                } label: {
+                    VStack {
+                        Image(systemName: "waveform.path.ecg")
+                        Text("Telemetry").font(.caption)
+                    }
+                }
+                .sheet(isPresented: $showingTelemetry) {
+                    TelemetryView()
                 }
                 Spacer()
                 Button {

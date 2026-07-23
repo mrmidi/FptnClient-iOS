@@ -33,6 +33,9 @@ settings:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_SIGNPOSTS
     Release:
       DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+      # TEMPORARY: signposts on in Release for Instruments profiling.
+      # Revert once the profiling pass is done — see PR3A.
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_SIGNPOSTS
     Measurement:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_MEASUREMENT_BUILD FPTN_SIGNPOSTS
 

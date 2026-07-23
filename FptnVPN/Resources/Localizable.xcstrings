@@ -24,6 +24,16 @@
     "%@" : {
 
     },
+    "%@ · %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%@ / %@" : {
       "localizations" : {
         "en" : {
@@ -308,6 +318,9 @@
         }
       }
     },
+    "Bandwidth" : {
+
+    },
     "Best" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -590,6 +603,16 @@
         }
       }
     },
+    "Current %@ · Peak %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Current %1$@ · Peak %2$@"
+          }
+        }
+      }
+    },
     "Custom DNS" : {
 
     },
@@ -793,6 +816,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "например rutube.ru"
+          }
+        }
+      }
+    },
+    "Episode %@ · Generation %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Episode %1$@ · Generation %2$@"
           }
         }
       }
@@ -1103,6 +1136,9 @@
         }
       }
     },
+    "Memory" : {
+
+    },
     "Method" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1137,6 +1173,9 @@
         }
       }
     },
+    "Network" : {
+
+    },
     "No domains" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1153,6 +1192,9 @@
           }
         }
       }
+    },
+    "No events yet" : {
+
     },
     "No logs for selected filters" : {
       "extractionState" : "manual",
@@ -1358,6 +1400,16 @@
         }
       }
     },
+    "Peak ↓ %@  ↑ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Peak ↓ %1$@  ↑ %2$@"
+          }
+        }
+      }
+    },
     "Per-App VPN" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1443,6 +1495,9 @@
         }
       }
     },
+    "Recent Events" : {
+
+    },
     "Recent only (24h)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1493,6 +1548,9 @@
           }
         }
       }
+    },
+    "Recovery" : {
+
     },
     "Restrict VPN to specific apps or exclude selected apps from the tunnel." : {
       "extractionState" : "manual",
@@ -1806,6 +1864,9 @@
         }
       }
     },
+    "Telemetry" : {
+
+    },
     "The VPN will be disconnected before scanning so probes reach the server directly." : {
 
     },
@@ -1945,6 +2006,12 @@
         }
       }
     },
+    "Tunnel download / upload · not raw interface traffic" : {
+
+    },
+    "Tunnel Health" : {
+
+    },
     "Tunnel idle timeout" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1978,6 +2045,9 @@
           }
         }
       }
+    },
+    "View all logs" : {
+
     },
     "VPN applies only to the selected apps." : {
       "extractionState" : "manual",
