@@ -34,7 +34,7 @@ final class VPNService: ObservableObject {
 
     private var packetTunnelProvider: NETunnelProviderManager?
     private var tunnelStatusObserver: NSObjectProtocol?
-    private var isUserInitiatedDisconnect: Bool = true
+    private var isDisconnectRequested: Bool = true
     private var activeCoordinator: (any ConnectionLifecycleCoordinating)?
     private var activeEpisodeID: ConnectionEpisodeID?
     private var connectionTask: Task<Void, Never>?
@@ -42,6 +42,8 @@ final class VPNService: ObservableObject {
     private var previousTrafficSample: TrafficSample?
     private var lastTrafficPollingFailureAt: Date?
     private var connectionGeneration: UInt64 = 0
+    private var ipcRequestIDCounter: UInt64 = 0
+    private let requestFailureClassifier = ProviderRequestFailureClassifier()
 
     private let tokenService = TokenService.shared
     private let healthStore = VPNService.makeHealthStore()
@@ -73,7 +75,7 @@ final class VPNService: ObservableObject {
         connectionTask?.cancel()
         connectionTask = Task { [weak self] in
             guard let self else { return }
-            isUserInitiatedDisconnect = false
+            isDisconnectRequested = false
             await performConnect(generation: generation)
         }
     }
@@ -82,7 +84,7 @@ final class VPNService: ObservableObject {
         connectionGeneration &+= 1
         connectionTask?.cancel()
         connectionTask = nil
-        isUserInitiatedDisconnect = true
+        isDisconnectRequested = true
         connection.isConnected = false
         connection.isConnecting = false
         connection.isReconnecting = false
@@ -93,7 +95,7 @@ final class VPNService: ObservableObject {
             if let activeCoordinator {
                 await activeCoordinator.disconnect(reason: .userInitiated)
             } else {
-                await stopObservedTunnel()
+                await stopObservedTunnel(initiator: .user, reason: .userRequested)
             }
         }
     }
@@ -340,7 +342,7 @@ final class VPNService: ObservableObject {
             connection.runtimeState = .stopping
             stopTrafficPolling(clearHistory: false)
         case .disconnected, .invalid:
-            if !isUserInitiatedDisconnect, let activeEpisodeID {
+            if !isDisconnectRequested, let activeEpisodeID {
                 await activeCoordinator?.handle(.tunnelDisconnected(activeEpisodeID, .remoteClosed))
             }
             activeEpisodeID = nil
@@ -393,11 +395,26 @@ final class VPNService: ObservableObject {
     private func refreshTrafficSnapshot() async {
         guard connection.isConnected,
               !connection.isReconnecting,
+              !isDisconnectRequested,
               let manager = packetTunnelProvider,
               manager.connection.status == .connected,
               let session = manager.connection as? NETunnelProviderSession else {
             return
         }
+
+        ipcRequestIDCounter &+= 1
+        let requestID = ipcRequestIDCounter
+        let t0 = ContinuousClock().now
+        let statusAtSend = manager.connection.status.diagnosticStatus
+        let reqContext = ProviderRequestContext(
+            requestID: requestID,
+            action: .getStatus,
+            episodeID: activeEpisodeID?.rawValue,
+            appConnectAttemptID: nil,
+            statusAtSend: statusAtSend,
+            disconnectRequestedAtSend: isDisconnectRequested,
+            startedAt: t0
+        )
 
         do {
             let status = try await Self.sendProviderMessage(
@@ -410,7 +427,22 @@ final class VPNService: ObservableObject {
             }
             applyStatusSnapshot(status, sampledAt: Date())
         } catch {
-            logTrafficPollingFailureIfNeeded(error)
+            let statusAtComp = (packetTunnelProvider?.connection.status ?? .invalid).diagnosticStatus
+            let t1 = ContinuousClock().now
+            let completion = ProviderRequestCompletion(
+                statusAtCompletion: statusAtComp,
+                currentEpisodeID: activeEpisodeID?.rawValue,
+                result: .missingResponse,
+                completedAt: t1
+            )
+            if let classification = requestFailureClassifier.classify(context: reqContext, completion: completion) {
+                switch classification {
+                case .expectedShutdownRace, .staleResponse:
+                    logger.debug("Provider request failed [reqID=\(requestID) action=getStatus statusAtSend=\(statusAtSend) statusAtCompletion=\(statusAtComp)]: classification=\(classification.rawValue)")
+                case .stopIntentNotAcknowledged, .unexpectedNoResponse, .malformedProviderReply:
+                    logger.warning("Provider request failed [reqID=\(requestID) action=getStatus statusAtSend=\(statusAtSend) statusAtCompletion=\(statusAtComp)]: classification=\(classification.rawValue)")
+                }
+            }
         }
     }
 
