@@ -477,13 +477,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
         #endif
 
-        updateRuntimeState(.stopping, reason: "stopTunnel(\(description))")
         logger.warning(
-            "PacketTunnelProvider stopTunnel reason=\(reason.rawValue) (\(description)) initiator=\(initiator.rawValue)"
+            "PacketTunnelProvider stopTunnel systemReason=\(TunnelStopReasonDescription.describe(rawValue: reason.rawValue)) recordedInitiator=\(initiator.rawValue)\(currentDiagnosticContext().formatted())"
         )
         recordProviderEvent(
             category: "lifecycle",
-            message: "stopTunnel reason=\(reason.rawValue) (\(description)) initiator=\(initiator.rawValue)",
+            message: "stopTunnel systemReason=\(TunnelStopReasonDescription.describe(rawValue: reason.rawValue)) recordedInitiator=\(initiator.rawValue)",
             runtimeState: "stopping",
             flightEvent: .stopTunnelEntered
         )
