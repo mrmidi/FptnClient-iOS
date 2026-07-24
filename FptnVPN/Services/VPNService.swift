@@ -268,6 +268,8 @@ final class VPNService: ObservableObject {
 
     // MARK: - Status observation
 
+    private let statusTransitionTracker = TunnelStatusTransitionTracker()
+
     private func observeTunnelStatus(_ manager: NETunnelProviderManager) {
         if let previous = tunnelStatusObserver {
             NotificationCenter.default.removeObserver(previous)
@@ -279,7 +281,8 @@ final class VPNService: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.syncTunnelStatus()
+                guard let self, let conn = self.packetTunnelProvider?.connection else { return }
+                await self.handleTunnelStatusUpdate(conn.status, source: .notification)
             }
         }
     }
@@ -289,9 +292,20 @@ final class VPNService: ObservableObject {
             clearConnectionState()
             return
         }
+        await handleTunnelStatusUpdate(tunnelConnection.status, source: .initialSync)
+    }
 
-        let status = tunnelConnection.status
-        logger.info("Tunnel status changed: \(status.rawValue)")
+    private func handleTunnelStatusUpdate(_ status: NEVPNStatus, source: TunnelStatusObservationSource) async {
+        guard let tunnelConnection = packetTunnelProvider?.connection else {
+            clearConnectionState()
+            return
+        }
+
+        let systemStatus = status.diagnosticStatus
+        if let event = statusTransitionTracker.observe(systemStatus, source: source) {
+            let epContext = activeEpisodeID.map { " [episode=\($0.rawValue.uuidString.prefix(8))]" } ?? ""
+            logger.info("\(event.formattedMessage)\(epContext)")
+        }
 
         switch status {
         case .connected:
@@ -581,3 +595,22 @@ final class VPNService: ObservableObject {
         return FileBackedServerHealthStore(fileURL: directory.appendingPathComponent("server-health.json"))
     }
 }
+
+extension NEVPNStatus {
+    var diagnosticStatus: TunnelSystemStatus {
+        switch self {
+        case .invalid: .invalid
+        case .disconnected: .disconnected
+        case .connecting: .connecting
+        case .connected: .connected
+        case .reasserting: .reasserting
+        case .disconnecting: .disconnecting
+        @unknown default: .unknown
+        }
+    }
+
+    var diagnosticName: String {
+        diagnosticStatus.description
+    }
+}
+
