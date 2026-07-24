@@ -242,7 +242,7 @@ struct HomeView: View {
                     }
                 }
                 .sheet(isPresented: $showingTelemetry) {
-                    TelemetryView()
+                    TelemetryView(vpnService: viewModel.vpnService)
                 }
                 Spacer()
                 Button {

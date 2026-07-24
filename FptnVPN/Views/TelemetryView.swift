@@ -10,9 +10,14 @@ import SwiftUI
 /// one level down behind Tunnel Health. See TelemetryChartsView / TelemetryHealthView
 /// for the rest of the screen; this file owns the header, metric grid, and totals.
 struct TelemetryView: View {
-    @StateObject private var viewModel = TelemetryViewModel()
+    @StateObject private var viewModel: TelemetryViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+
+    init(vpnService: VPNService) {
+        _viewModel = StateObject(wrappedValue: TelemetryViewModel(vpnService: vpnService))
+    }
 
     var body: some View {
         NavigationStack {
@@ -45,8 +50,14 @@ struct TelemetryView: View {
                         .foregroundStyle(Color.appAccent)
                 }
             }
-            .onAppear { viewModel.start() }
+            .onAppear {
+                viewModel.start()
+                viewModel.setScenePhase(scenePhase)
+            }
             .onDisappear { viewModel.stop() }
+            .onChange(of: scenePhase) { _, newPhase in
+                viewModel.setScenePhase(newPhase)
+            }
         }
     }
 
@@ -84,7 +95,7 @@ struct TelemetryView: View {
     }
 
     private var memoryTint: Color {
-        let mb = viewModel.snapshot.memoryPhysicalMB
+        guard let mb = viewModel.snapshot.memoryPhysicalMB else { return .appSecondaryText }
         if mb >= TelemetrySnapshot.memoryCriticalMB { return .appError }
         if mb >= TelemetrySnapshot.memoryWarningMB { return .appWarning }
         return .appSuccess
@@ -116,11 +127,11 @@ private struct ConnectionHeaderCard: View {
             }
 
             if snapshot.connectionState == .connected {
-                Text("\(snapshot.serverName) \u{00B7} \(snapshot.interfaceName) \u{00B7} \(TelemetryFormat.duration(snapshot.connectedDuration))")
+                Text("\(snapshot.serverName ?? "Auto") \u{00B7} \(snapshot.interfaceName ?? TelemetryFormat.unavailable) \u{00B7} \(TelemetryFormat.duration(snapshot.connectedDuration))")
                     .font(.subheadline)
                     .foregroundStyle(Color.appSecondaryText)
 
-                Text("Episode \(snapshot.episodeID) \u{00B7} Generation \(snapshot.generation)")
+                Text("Session \(snapshot.sessionTokenHex ?? TelemetryFormat.unavailable) \u{00B7} Gen \(TelemetryFormat.count(snapshot.websocketGeneration))")
                     .font(.caption)
                     .foregroundStyle(Color.appSecondaryText.opacity(0.8))
             } else {
@@ -261,8 +272,8 @@ private struct SessionTotalsCard: View {
             VStack(spacing: 10) {
                 totalRow("Downloaded", TelemetryFormat.dataVolume(snapshot.sessionDownloadBytes))
                 totalRow("Uploaded", TelemetryFormat.dataVolume(snapshot.sessionUploadBytes))
-                totalRow("Average download", TelemetryFormat.mbps(snapshot.averageDownloadMbps))
-                totalRow("Average upload", TelemetryFormat.mbps(snapshot.averageUploadMbps))
+                totalRow("Peak download", TelemetryFormat.mbps(snapshot.downloadPeakMbps))
+                totalRow("Peak upload", TelemetryFormat.mbps(snapshot.uploadPeakMbps))
                 totalRow("Connected time", TelemetryFormat.duration(snapshot.connectedDuration))
                 totalRow("Reconnects", "\(snapshot.reconnectCount)")
             }
@@ -323,10 +334,10 @@ struct StatusPill: View {
 }
 
 #Preview("Telemetry \u{2013} Connected") {
-    TelemetryView()
+    TelemetryView(vpnService: VPNService())
 }
 
 #Preview("Telemetry \u{2013} Connected Dark") {
-    TelemetryView()
+    TelemetryView(vpnService: VPNService())
         .preferredColorScheme(.dark)
 }

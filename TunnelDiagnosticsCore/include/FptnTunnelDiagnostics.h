@@ -105,6 +105,14 @@ fptn_lifecycle_store_write(
     uint64_t outbound_queued_bytes,
     uint64_t outbound_queued_bytes_peak,
     uint64_t latest_event_sequence,
+    uint64_t session_accepted_upload_bytes,
+    uint64_t session_accepted_download_bytes,
+    uint64_t peak_upload_bytes_per_second,
+    uint64_t peak_download_bytes_per_second,
+    uint64_t queue_full_count,
+    uint64_t live_packet_leases,
+    uint64_t peak_packet_leases,
+    uint32_t peak_bandwidth_nominal_window_seconds,
     int synchronize);
 
 // ── Decoded snapshot (returned by reader) ────────────────────────────
@@ -139,6 +147,14 @@ typedef struct {
     uint64_t outbound_queued_bytes;
     uint64_t outbound_queued_bytes_peak;
     uint64_t latest_event_sequence;
+    uint64_t session_accepted_upload_bytes;
+    uint64_t session_accepted_download_bytes;
+    uint64_t peak_upload_bytes_per_second;
+    uint64_t peak_download_bytes_per_second;
+    uint64_t queue_full_count;
+    uint64_t live_packet_leases;
+    uint64_t peak_packet_leases;
+    uint32_t peak_bandwidth_nominal_window_seconds;
 } FptnDecodedLifecycleSnapshot;
 
 // Reads the latest valid snapshot from a double-buffered file.

@@ -820,16 +820,6 @@
         }
       }
     },
-    "Episode %@ · Generation %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Episode %1$@ · Generation %2$@"
-          }
-        }
-      }
-    },
     "Error" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1721,6 +1711,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Серверы"
+          }
+        }
+      }
+    },
+    "Session %@ · Gen %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Session %1$@ · Gen %2$@"
           }
         }
       }

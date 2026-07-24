@@ -53,6 +53,14 @@ final class TunnelLifecycleSnapshotStore: @unchecked Sendable {
         outboundQueuedBytes: UInt64 = 0,
         outboundQueuedBytesPeak: UInt64 = 0,
         latestEventSequence: UInt64 = 0,
+        sessionAcceptedUploadBytes: UInt64 = 0,
+        sessionAcceptedDownloadBytes: UInt64 = 0,
+        peakUploadBytesPerSecond: UInt64 = 0,
+        peakDownloadBytesPerSecond: UInt64 = 0,
+        queueFullCount: UInt64 = 0,
+        livePacketLeases: UInt64 = 0,
+        peakPacketLeases: UInt64 = 0,
+        peakBandwidthNominalWindowSeconds: UInt32 = 0,
         synchronize: Bool = false
     ) -> Bool {
         fptn_lifecycle_store_write(
@@ -68,6 +76,10 @@ final class TunnelLifecycleSnapshotStore: @unchecked Sendable {
             activeBridges, activeNativeClients, nativeActiveOperations,
             activeReaderCoroutines, activeSenderCoroutines, activeReadLoops,
             outboundQueuedBytes, outboundQueuedBytesPeak, latestEventSequence,
+            sessionAcceptedUploadBytes, sessionAcceptedDownloadBytes,
+            peakUploadBytesPerSecond, peakDownloadBytesPerSecond,
+            queueFullCount, livePacketLeases, peakPacketLeases,
+            peakBandwidthNominalWindowSeconds,
             synchronize ? 1 : 0
         ) != 0
     }

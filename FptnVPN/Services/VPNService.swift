@@ -15,9 +15,22 @@ import FptnServerSelection
 import FptnConnectionOrchestration
 import FptnNativeBootstrap
 
+/// The provider's live tunnel status plus when the app received it, so the
+/// Telemetry screen can tell "fresh" from "the provider went quiet." Distinct
+/// from `VPNConnection`, which stays a lean UI model for the Home screen.
+struct LiveTunnelStatus: Sendable {
+    let snapshot: TunnelStatusSnapshotV1
+    let receivedAt: Date
+}
+
 @MainActor
 final class VPNService: ObservableObject {
     @Published var connection = VPNConnection()
+    /// Live provider status from the 1 Hz `getStatus` poll (memory, queue,
+    /// packet leases, session identity). `nil` while disconnected or before the
+    /// first successful poll — the Telemetry screen falls back to the durable
+    /// binary snapshot then.
+    @Published private(set) var liveStatus: LiveTunnelStatus?
 
     private var packetTunnelProvider: NETunnelProviderManager?
     private var tunnelStatusObserver: NSObjectProtocol?
@@ -355,6 +368,7 @@ final class VPNService: ObservableObject {
         trafficPollingTask?.cancel()
         trafficPollingTask = nil
         previousTrafficSample = nil
+        liveStatus = nil
         connection.downloadSpeed = 0
         connection.uploadSpeed = 0
         if clearHistory {
@@ -372,32 +386,48 @@ final class VPNService: ObservableObject {
         }
 
         do {
-            let snapshot = try await Self.sendProviderMessage(
+            let status = try await Self.sendProviderMessage(
                 TunnelControlMessage(action: .getStatus),
                 via: session,
-                expecting: TunnelTrafficSnapshotV1.self
+                expecting: TunnelStatusSnapshotV1.self
             )
             guard !Task.isCancelled, connection.isConnected, !connection.isReconnecting else {
                 return
             }
-            applyTrafficSnapshot(snapshot, sampledAt: Date())
+            applyStatusSnapshot(status, sampledAt: Date())
         } catch {
             logTrafficPollingFailureIfNeeded(error)
         }
     }
 
-    private func applyTrafficSnapshot(
-        _ snapshot: TunnelTrafficSnapshotV1,
+    private func applyStatusSnapshot(
+        _ status: TunnelStatusSnapshotV1,
         sampledAt: Date
     ) {
+        // Publish the full live status for the Telemetry screen (memory, queue,
+        // leases, identity). The Home screen keeps consuming the lean
+        // VPNConnection fields below.
+        liveStatus = LiveTunnelStatus(snapshot: status, receivedAt: sampledAt)
+
+        let snapshot = status.traffic
+        // Exact, provider-reported values — no diffing needed, unlike the
+        // current-speed calc below which still needs two samples.
+        connection.sessionUploadBytes = snapshot.sessionUploadBytes
+        connection.sessionDownloadBytes = snapshot.sessionDownloadBytes
+        connection.peakUploadBytesPerSecond = snapshot.peakUploadBytesPerSecond
+        connection.peakDownloadBytesPerSecond = snapshot.peakDownloadBytesPerSecond
+        connection.peakBandwidthNominalWindowSeconds = snapshot.peakBandwidthNominalWindowSeconds
+        connection.trafficMetricsSampledAt = snapshot.sampleMonotonicTime
+        connection.trafficMetricsAvailable = true
+
         let current = TrafficSample(snapshot: snapshot, timestamp: sampledAt)
         guard let previous = previousTrafficSample else {
             previousTrafficSample = current
             return
         }
 
-        guard current.outboundPacketBytes >= previous.outboundPacketBytes,
-              current.inboundPacketBytes >= previous.inboundPacketBytes else {
+        guard current.uploadBytes >= previous.uploadBytes,
+              current.downloadBytes >= previous.downloadBytes else {
             // The provider has started a fresh session; establish a new
             // baseline rather than presenting an invalid negative rate.
             previousTrafficSample = current
@@ -407,8 +437,8 @@ final class VPNService: ObservableObject {
         let elapsed = current.timestamp.timeIntervalSince(previous.timestamp)
         guard elapsed > 0 else { return }
 
-        let uploadBytes = current.outboundPacketBytes - previous.outboundPacketBytes
-        let downloadBytes = current.inboundPacketBytes - previous.inboundPacketBytes
+        let uploadBytes = current.uploadBytes - previous.uploadBytes
+        let downloadBytes = current.downloadBytes - previous.downloadBytes
         connection.uploadSpeed = Double(uploadBytes) / elapsed
         connection.downloadSpeed = Double(downloadBytes) / elapsed
         connection.speedHistory.append(
@@ -461,13 +491,13 @@ final class VPNService: ObservableObject {
     }
 
     private struct TrafficSample {
-        let outboundPacketBytes: UInt64
-        let inboundPacketBytes: UInt64
+        let uploadBytes: UInt64
+        let downloadBytes: UInt64
         let timestamp: Date
 
         init(snapshot: TunnelTrafficSnapshotV1, timestamp: Date) {
-            self.outboundPacketBytes = snapshot.outboundPacketBytes
-            self.inboundPacketBytes = snapshot.inboundPacketBytes
+            self.uploadBytes = snapshot.sessionUploadBytes
+            self.downloadBytes = snapshot.sessionDownloadBytes
             self.timestamp = timestamp
         }
     }

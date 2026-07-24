@@ -162,8 +162,16 @@ SnapshotBytes EncodeSnapshot(const Snapshot& snap) noexcept {
   //   [156..163] outbound_queued_bytes
   //   [164..171] outbound_queued_bytes_peak
   //   [172..179] latest_event_sequence
+  //   [180..187] session_accepted_upload_bytes
+  //   [188..195] session_accepted_download_bytes
+  //   [196..203] peak_upload_bytes_per_second
+  //   [204..211] peak_download_bytes_per_second
+  //   [212..219] queue_full_count
+  //   [220..227] live_packet_leases
+  //   [228..235] peak_packet_leases
+  //   [236..239] peak_bandwidth_nominal_window_seconds
 
-  constexpr std::uint16_t kUsedBytes = 180;
+  constexpr std::uint16_t kUsedBytes = 240;
 
   WriteU32(&bytes[0], kSnapshotMagic);
   WriteU16(&bytes[4], kSchemaVersion);
@@ -199,8 +207,16 @@ SnapshotBytes EncodeSnapshot(const Snapshot& snap) noexcept {
   WriteU64(&bytes[156], snap.outbound_queued_bytes);
   WriteU64(&bytes[164], snap.outbound_queued_bytes_peak);
   WriteU64(&bytes[172], snap.latest_event_sequence);
+  WriteU64(&bytes[180], snap.session_accepted_upload_bytes);
+  WriteU64(&bytes[188], snap.session_accepted_download_bytes);
+  WriteU64(&bytes[196], snap.peak_upload_bytes_per_second);
+  WriteU64(&bytes[204], snap.peak_download_bytes_per_second);
+  WriteU64(&bytes[212], snap.queue_full_count);
+  WriteU64(&bytes[220], snap.live_packet_leases);
+  WriteU64(&bytes[228], snap.peak_packet_leases);
+  WriteU32(&bytes[236], snap.peak_bandwidth_nominal_window_seconds);
 
-  // CRC32 over bytes 20..179 (skipping magic/version/size/sequence/checksum).
+  // CRC32 over bytes 20..239 (skipping magic/version/size/sequence/checksum).
   const std::uint32_t crc = Crc32(&bytes[20], kUsedBytes - 20);
   WriteU32(&bytes[16], crc);
 
@@ -209,7 +225,7 @@ SnapshotBytes EncodeSnapshot(const Snapshot& snap) noexcept {
 
 bool DecodeSnapshot(std::span<const std::byte> bytes, std::size_t length,
                     Snapshot& output) noexcept {
-  if (length < 180) {
+  if (length < 240) {
     return false;
   }
 
@@ -224,7 +240,7 @@ bool DecodeSnapshot(std::span<const std::byte> bytes, std::size_t length,
   }
 
   const std::uint16_t used_bytes = ReadU16(&bytes[6]);
-  if (used_bytes < 180 || static_cast<std::size_t>(used_bytes) > length) {
+  if (used_bytes < 240 || static_cast<std::size_t>(used_bytes) > length) {
     return false;
   }
 
@@ -264,6 +280,14 @@ bool DecodeSnapshot(std::span<const std::byte> bytes, std::size_t length,
   output.outbound_queued_bytes = ReadU64(&bytes[156]);
   output.outbound_queued_bytes_peak = ReadU64(&bytes[164]);
   output.latest_event_sequence = ReadU64(&bytes[172]);
+  output.session_accepted_upload_bytes = ReadU64(&bytes[180]);
+  output.session_accepted_download_bytes = ReadU64(&bytes[188]);
+  output.peak_upload_bytes_per_second = ReadU64(&bytes[196]);
+  output.peak_download_bytes_per_second = ReadU64(&bytes[204]);
+  output.queue_full_count = ReadU64(&bytes[212]);
+  output.live_packet_leases = ReadU64(&bytes[220]);
+  output.peak_packet_leases = ReadU64(&bytes[228]);
+  output.peak_bandwidth_nominal_window_seconds = ReadU32(&bytes[236]);
 
   return true;
 }

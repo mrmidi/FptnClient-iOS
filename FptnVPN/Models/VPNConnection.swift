@@ -30,6 +30,18 @@ struct VPNConnection: Sendable {
     var speedHistory: [SpeedSample] = []
     var connectionMode: ConnectionMode = .auto
 
+    // Exact, provider-reported session traffic (see TunnelTrafficSnapshotV1).
+    // Unlike downloadSpeed/uploadSpeed above (derived client-side from
+    // consecutive polls), these values come directly from the provider and
+    // cover time the app itself was backgrounded and not polling.
+    var sessionUploadBytes: UInt64 = 0
+    var sessionDownloadBytes: UInt64 = 0
+    var peakUploadBytesPerSecond: UInt64 = 0
+    var peakDownloadBytesPerSecond: UInt64 = 0
+    var peakBandwidthNominalWindowSeconds: UInt32 = 0
+    var trafficMetricsSampledAt: UInt64 = 0
+    var trafficMetricsAvailable: Bool = false
+
     var connectionDurationString: String {
         guard let connectedAt else { return "00:00:00" }
         let duration = Int(Date().timeIntervalSince(connectedAt))

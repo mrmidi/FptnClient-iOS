@@ -102,12 +102,27 @@ struct Snapshot {
   std::uint64_t outbound_queued_bytes = 0;
   std::uint64_t outbound_queued_bytes_peak = 0;
   std::uint64_t latest_event_sequence = 0;
+  // Schema v2: exact session traffic totals (provider-computed, see
+  // PacketTunnelProvider's generation-finalization accounting), sampled
+  // peak bandwidth, and tunnel-health counters not previously persisted.
+  std::uint64_t session_accepted_upload_bytes = 0;
+  std::uint64_t session_accepted_download_bytes = 0;
+  std::uint64_t peak_upload_bytes_per_second = 0;
+  std::uint64_t peak_download_bytes_per_second = 0;
+  std::uint64_t queue_full_count = 0;
+  std::uint64_t live_packet_leases = 0;
+  std::uint64_t peak_packet_leases = 0;
+  std::uint32_t peak_bandwidth_nominal_window_seconds = 0;
 };
 
 // PR3: disk format constants.
 inline constexpr std::uint32_t kFlightRingMagic = 0x46505452;  // "FPTR"
 inline constexpr std::uint32_t kSnapshotMagic = 0x4650544E;    // "FPTN"
-inline constexpr std::uint16_t kSchemaVersion = 1;
+// Schema v2: added session traffic totals/peaks and queue/lease health
+// counters (see Snapshot fields above). No dual-decode path — a v1 record
+// left over from before this change simply fails DecodeSnapshot's version
+// check and is treated the same as "no snapshot yet."
+inline constexpr std::uint16_t kSchemaVersion = 2;
 inline constexpr std::size_t kFlightRecordSize = 72;
 inline constexpr std::size_t kFlightRingHeaderSize = 64;
 inline constexpr std::size_t kFlightRingCapacity = 120;

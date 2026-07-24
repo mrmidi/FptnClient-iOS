@@ -87,6 +87,14 @@ struct TunnelDiagnosticsDecoder: Sendable {
         let monotonicTime: UInt64
         let wallTimeNs: UInt64
         let latestEventSequence: UInt64
+        let sessionAcceptedUploadBytes: UInt64
+        let sessionAcceptedDownloadBytes: UInt64
+        let peakUploadBytesPerSecond: UInt64
+        let peakDownloadBytesPerSecond: UInt64
+        let queueFullCount: UInt64
+        let livePacketLeases: UInt64
+        let peakPacketLeases: UInt64
+        let peakBandwidthNominalWindowSeconds: UInt32
 
         var isControlledStop: Bool {
             // 1 = appDisconnect, 3 = systemStop (TunnelStopInitiator)
@@ -189,7 +197,15 @@ struct TunnelDiagnosticsDecoder: Sendable {
             outboundQueuedBytesPeak: snap.outbound_queued_bytes_peak,
             monotonicTime: snap.snapshot_mach_continuous_time,
             wallTimeNs: snap.snapshot_wall_time_ns,
-            latestEventSequence: snap.latest_event_sequence
+            latestEventSequence: snap.latest_event_sequence,
+            sessionAcceptedUploadBytes: snap.session_accepted_upload_bytes,
+            sessionAcceptedDownloadBytes: snap.session_accepted_download_bytes,
+            peakUploadBytesPerSecond: snap.peak_upload_bytes_per_second,
+            peakDownloadBytesPerSecond: snap.peak_download_bytes_per_second,
+            queueFullCount: snap.queue_full_count,
+            livePacketLeases: snap.live_packet_leases,
+            peakPacketLeases: snap.peak_packet_leases,
+            peakBandwidthNominalWindowSeconds: snap.peak_bandwidth_nominal_window_seconds
         )
     }
 

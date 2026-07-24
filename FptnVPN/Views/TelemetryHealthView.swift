@@ -33,13 +33,13 @@ private struct TunnelHealthSection: View {
         TelemetrySectionCard(title: "") {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(spacing: 8) {
-                    counterRow("Outbound queue", "\(snapshot.outboundQueueBytes / 1000) KB")
-                    counterRow("Queue peak", "\(snapshot.outboundQueuePeakBytes / 1000) KB")
-                    counterRow("Queue-full events", "\(snapshot.queueFullEvents)")
-                    counterRow("Live packet leases", "\(snapshot.livePacketLeases)")
-                    counterRow("Peak packet leases", "\(snapshot.peakPacketLeases)")
-                    counterRow("Native operations", "\(snapshot.nativeOperations)")
-                    counterRow("WebSocket generation", "\(snapshot.websocketGeneration)")
+                    counterRow("Outbound queue", kilobytes(snapshot.outboundQueueBytes))
+                    counterRow("Queue peak", kilobytes(snapshot.outboundQueuePeakBytes))
+                    counterRow("Queue-full events", TelemetryFormat.count(snapshot.queueFullEvents))
+                    counterRow("Live packet leases", TelemetryFormat.count(snapshot.livePacketLeases))
+                    counterRow("Peak packet leases", TelemetryFormat.count(snapshot.peakPacketLeases))
+                    counterRow("Native operations", TelemetryFormat.count(snapshot.nativeOperations))
+                    counterRow("WebSocket generation", TelemetryFormat.count(snapshot.websocketGeneration))
                 }
                 .padding(.top, 10)
             } label: {
@@ -67,6 +67,11 @@ private struct TunnelHealthSection: View {
                 .foregroundStyle(Color.appPrimaryText)
         }
     }
+
+    private func kilobytes(_ bytes: Int?) -> String {
+        guard let bytes else { return TelemetryFormat.unavailable }
+        return "\(bytes / 1000) KB"
+    }
 }
 
 // MARK: - Network + recovery
@@ -80,12 +85,12 @@ private struct NetworkSection: View {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(spacing: 8) {
-                        counterRow("Default path", snapshot.defaultPathAvailable ? "Available" : "Unavailable")
-                        counterRow("Interface", snapshot.interfaceName)
-                        counterRow("Expensive", snapshot.isExpensive ? "Yes" : "No")
-                        counterRow("Constrained", snapshot.isConstrained ? "Yes" : "No")
-                        counterRow("IPv4", snapshot.ipv4Available ? "Available" : "Unavailable")
-                        counterRow("IPv6", snapshot.ipv6Available ? "Available" : "Unavailable")
+                        counterRow("Default path", TelemetryFormat.flag(snapshot.defaultPathAvailable, whenTrue: "Available", whenFalse: "Unavailable"))
+                        counterRow("Interface", snapshot.interfaceName ?? TelemetryFormat.unavailable)
+                        counterRow("Expensive", TelemetryFormat.flag(snapshot.isExpensive, whenTrue: "Yes", whenFalse: "No"))
+                        counterRow("Constrained", TelemetryFormat.flag(snapshot.isConstrained, whenTrue: "Yes", whenFalse: "No"))
+                        counterRow("IPv4", TelemetryFormat.flag(snapshot.ipv4Available, whenTrue: "Available", whenFalse: "Unavailable"))
+                        counterRow("IPv6", TelemetryFormat.flag(snapshot.ipv6Available, whenTrue: "Available", whenFalse: "Unavailable"))
                     }
 
                     Divider().background(Color.appSeparator)
@@ -106,7 +111,7 @@ private struct NetworkSection: View {
                         .font(.system(.subheadline, design: .rounded, weight: .semibold))
                         .foregroundStyle(Color.appPrimaryText)
                     Spacer()
-                    StatusPill(label: snapshot.interfaceName, tint: .appAccent)
+                    StatusPill(label: snapshot.interfaceName ?? TelemetryFormat.unavailable, tint: .appAccent)
                 }
             }
             .tint(Color.appAccent)
@@ -189,11 +194,8 @@ private struct RecentEventsSection: View {
 
 #Preview("Tunnel Health") {
     ScrollView {
-        TelemetryHealthView(viewModel: {
-            let vm = TelemetryViewModel()
-            return vm
-        }())
-        .padding()
+        TelemetryHealthView(viewModel: TelemetryViewModel(vpnService: VPNService()))
+            .padding()
     }
     .background(Color.appBackground)
 }

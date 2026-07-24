@@ -471,6 +471,101 @@ struct FptnVPNTests {
         #expect(decoded.accessToken == "tok_test")
     }
 
+    // Schema v2 lifecycle snapshot: exact session traffic totals, peak
+    // bandwidth, and queue/lease health round-trip through the C ABI.
+    @Test func lifecycleSnapshotV2RoundTripsTrafficAndHealthFields() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        let snapshotPath = root.appendingPathComponent("lifecycle-snapshot.bin").path
+        let store = try #require(TunnelLifecycleSnapshotStore(path: snapshotPath))
+
+        let wrote = store.write(
+            pid: 123,
+            processToken: 1,
+            processSequence: 1,
+            processStartedMachTime: 1,
+            tunnelSessionToken: 42,
+            tunnelStartedMachTime: 1,
+            sessionAcceptedUploadBytes: 111_222,
+            sessionAcceptedDownloadBytes: 333_444,
+            peakUploadBytesPerSecond: 5_000,
+            peakDownloadBytesPerSecond: 60_000,
+            queueFullCount: 3,
+            livePacketLeases: 4,
+            peakPacketLeases: 9,
+            peakBandwidthNominalWindowSeconds: 15,
+            synchronize: true
+        )
+        #expect(wrote)
+
+        let decoder = TunnelDiagnosticsDecoder(
+            ringPath: root.appendingPathComponent("flight-ring.bin").path,
+            snapshotPath: snapshotPath
+        )
+        let snapshot = try #require(decoder.readLifecycleSnapshot())
+
+        #expect(snapshot.sessionAcceptedUploadBytes == 111_222)
+        #expect(snapshot.sessionAcceptedDownloadBytes == 333_444)
+        #expect(snapshot.peakUploadBytesPerSecond == 5_000)
+        #expect(snapshot.peakDownloadBytesPerSecond == 60_000)
+        #expect(snapshot.queueFullCount == 3)
+        #expect(snapshot.livePacketLeases == 4)
+        #expect(snapshot.peakPacketLeases == 9)
+        #expect(snapshot.peakBandwidthNominalWindowSeconds == 15)
+    }
+
+    // No dual-decode path: a record whose schema_version doesn't match
+    // kSchemaVersion (2) must be rejected outright, not decoded as v1.
+    @Test func lifecycleSnapshotRejectsWrongSchemaVersion() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        let snapshotPath = root.appendingPathComponent("lifecycle-snapshot.bin").path
+        let store = try #require(TunnelLifecycleSnapshotStore(path: snapshotPath))
+        #expect(store.write(
+            pid: 1, processToken: 1, processSequence: 1, processStartedMachTime: 1,
+            tunnelSessionToken: 1, tunnelStartedMachTime: 1, synchronize: true
+        ))
+
+        // schema_version is a little-endian u16 at byte offset 4 of whichever
+        // 512-byte slot the store picked for this write (LifecycleStore
+        // alternates slots and a fresh file may start at either one).
+        // Corrupt it at both possible slot offsets so the test doesn't
+        // depend on that internal choice — the untouched slot is still
+        // all-zero and already fails the magic check on its own.
+        var data = try Data(contentsOf: URL(fileURLWithPath: snapshotPath))
+        #expect(data.count >= 1024)
+        data[4] = 0xFF
+        data[5] = 0xFF
+        data[516] = 0xFF
+        data[517] = 0xFF
+        try data.write(to: URL(fileURLWithPath: snapshotPath))
+
+        let decoder = TunnelDiagnosticsDecoder(
+            ringPath: root.appendingPathComponent("flight-ring.bin").path,
+            snapshotPath: snapshotPath
+        )
+        #expect(decoder.readLifecycleSnapshot() == nil)
+    }
+
+    // A record too short to contain the v2 layout (240 bytes) must be
+    // rejected, not partially decoded with garbage trailing fields.
+    @Test func lifecycleSnapshotRejectsTruncatedRecord() throws {
+        let root = try temporaryDiagnosticsDirectory()
+        let snapshotPath = root.appendingPathComponent("lifecycle-snapshot.bin").path
+        let store = try #require(TunnelLifecycleSnapshotStore(path: snapshotPath))
+        #expect(store.write(
+            pid: 1, processToken: 1, processSequence: 1, processStartedMachTime: 1,
+            tunnelSessionToken: 1, tunnelStartedMachTime: 1, synchronize: true
+        ))
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: snapshotPath))
+        try data.prefix(64).write(to: URL(fileURLWithPath: snapshotPath))
+
+        let decoder = TunnelDiagnosticsDecoder(
+            ringPath: root.appendingPathComponent("flight-ring.bin").path,
+            snapshotPath: snapshotPath
+        )
+        #expect(decoder.readLifecycleSnapshot() == nil)
+    }
+
     private func temporaryDiagnosticsDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("FptnVPNTests-\(UUID().uuidString)", isDirectory: true)

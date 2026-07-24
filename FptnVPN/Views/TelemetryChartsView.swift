@@ -58,11 +58,12 @@ private struct MemoryChartCard: View {
         return max(TelemetrySnapshot.memoryChartCeilingMB, sampleMax * 1.1)
     }
 
-    private var currentTint: Color {
-        if snapshot.memoryPhysicalMB >= TelemetrySnapshot.memoryCriticalMB { return .appError }
-        if snapshot.memoryPhysicalMB >= TelemetrySnapshot.memoryWarningMB { return .appWarning }
-        return .appSuccess
-    }
+    // Fixed line tint. Severity is conveyed by the target band + warning/
+    // critical rule lines and the metric card above — the historical line must
+    // not be repainted by whatever the *current* value happens to be, which
+    // would (mis)colour minutes of healthy history red the instant memory
+    // spikes.
+    private let lineTint = Color.appAccent
 
     var body: some View {
         TelemetrySectionCard(title: "") {
@@ -90,7 +91,7 @@ private struct MemoryChartCard: View {
 
     @ViewBuilder
     private var chartBody: some View {
-        if samples.isEmpty {
+        if samples.count < 2 {
             EmptyChartPlaceholder(
                 title: "Waiting for memory samples",
                 detail: "Memory is sampled by the tunnel while connected"
@@ -118,20 +119,24 @@ private struct MemoryChartCard: View {
                     )
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [currentTint.opacity(0.28), currentTint.opacity(0.0)],
+                            colors: [lineTint.opacity(0.28), lineTint.opacity(0.0)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
-                    .interpolationMethod(.catmullRom)
+                    // Linear, not catmullRom: a monotone/spline overshoots
+                    // between the sparse memory samples, inventing peaks and
+                    // dips that were never measured — misleading on a vitals
+                    // chart. Straight segments only connect real samples.
+                    .interpolationMethod(.linear)
 
                     LineMark(
                         x: .value("Time", sample.timestamp),
                         y: .value("MB", sample.physicalMB)
                     )
-                    .foregroundStyle(currentTint)
+                    .foregroundStyle(lineTint)
                     .lineStyle(StrokeStyle(lineWidth: 1.8))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.linear)
                 }
             }
             .chartXAxis(.hidden)
@@ -153,9 +158,9 @@ private struct MemoryChartCard: View {
 
     private var legend: some View {
         HStack(spacing: 14) {
-            legendItem(color: .appSuccess.opacity(0.5), label: "Target 20\u{2013}25 MB", isLine: false)
-            legendItem(color: .appWarning, label: "Warning 30 MB", isLine: true)
-            legendItem(color: .appError, label: "Critical 42 MB", isLine: true)
+            legendItem(color: .appSuccess.opacity(0.5), label: "Target \(Int(TelemetrySnapshot.memoryTargetRange.lowerBound))\u{2013}\(Int(TelemetrySnapshot.memoryTargetRange.upperBound)) MB", isLine: false)
+            legendItem(color: .appWarning, label: "Warning \(Int(TelemetrySnapshot.memoryWarningMB)) MB", isLine: true)
+            legendItem(color: .appError, label: "Critical \(Int(TelemetrySnapshot.memoryCriticalMB)) MB", isLine: true)
             Spacer()
         }
         .font(.caption2)
@@ -225,7 +230,7 @@ private struct BandwidthChartCard: View {
 
     @ViewBuilder
     private var chartBody: some View {
-        if samples.isEmpty {
+        if samples.count < 2 {
             EmptyChartPlaceholder(title: "No tunnel traffic yet", detail: nil)
         } else {
             Chart {
@@ -235,7 +240,7 @@ private struct BandwidthChartCard: View {
                         y: .value("Mbps", sample.downloadMbps)
                     )
                     .foregroundStyle(LinearGradient(colors: [Color.appAccent.opacity(0.12), .clear], startPoint: .top, endPoint: .bottom))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.linear)
 
                     LineMark(
                         x: .value("Time", sample.timestamp),
@@ -243,7 +248,7 @@ private struct BandwidthChartCard: View {
                     )
                     .foregroundStyle(Color.appAccent)
                     .lineStyle(StrokeStyle(lineWidth: 1.4))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.linear)
 
                     LineMark(
                         x: .value("Time", sample.timestamp),
@@ -251,7 +256,7 @@ private struct BandwidthChartCard: View {
                     )
                     .foregroundStyle(Self.uploadTint)
                     .lineStyle(StrokeStyle(lineWidth: 2.4))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.linear)
                 }
 
                 if let last = samples.last {

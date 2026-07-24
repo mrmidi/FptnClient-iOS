@@ -173,6 +173,14 @@ fptn_lifecycle_store_write(
     uint64_t outbound_queued_bytes,
     uint64_t outbound_queued_bytes_peak,
     uint64_t latest_event_sequence,
+    uint64_t session_accepted_upload_bytes,
+    uint64_t session_accepted_download_bytes,
+    uint64_t peak_upload_bytes_per_second,
+    uint64_t peak_download_bytes_per_second,
+    uint64_t queue_full_count,
+    uint64_t live_packet_leases,
+    uint64_t peak_packet_leases,
+    uint32_t peak_bandwidth_nominal_window_seconds,
     int synchronize) {
   auto* st = static_cast<FptnLifecycleStoreHandle*>(handle); if (!st || !st->store) return false;
 
@@ -205,6 +213,14 @@ fptn_lifecycle_store_write(
   snap.outbound_queued_bytes = outbound_queued_bytes;
   snap.outbound_queued_bytes_peak = outbound_queued_bytes_peak;
   snap.latest_event_sequence = latest_event_sequence;
+  snap.session_accepted_upload_bytes = session_accepted_upload_bytes;
+  snap.session_accepted_download_bytes = session_accepted_download_bytes;
+  snap.peak_upload_bytes_per_second = peak_upload_bytes_per_second;
+  snap.peak_download_bytes_per_second = peak_download_bytes_per_second;
+  snap.queue_full_count = queue_full_count;
+  snap.live_packet_leases = live_packet_leases;
+  snap.peak_packet_leases = peak_packet_leases;
+  snap.peak_bandwidth_nominal_window_seconds = peak_bandwidth_nominal_window_seconds;
 
   return st->store->Write(snap, synchronize != 0) ? 1 : 0;
 }
@@ -250,6 +266,14 @@ fptn_lifecycle_store_read_latest(
   output->outbound_queued_bytes = snap.outbound_queued_bytes;
   output->outbound_queued_bytes_peak = snap.outbound_queued_bytes_peak;
   output->latest_event_sequence = snap.latest_event_sequence;
+  output->session_accepted_upload_bytes = snap.session_accepted_upload_bytes;
+  output->session_accepted_download_bytes = snap.session_accepted_download_bytes;
+  output->peak_upload_bytes_per_second = snap.peak_upload_bytes_per_second;
+  output->peak_download_bytes_per_second = snap.peak_download_bytes_per_second;
+  output->queue_full_count = snap.queue_full_count;
+  output->live_packet_leases = snap.live_packet_leases;
+  output->peak_packet_leases = snap.peak_packet_leases;
+  output->peak_bandwidth_nominal_window_seconds = snap.peak_bandwidth_nominal_window_seconds;
 
   return FPTN_READ_OK;
 }

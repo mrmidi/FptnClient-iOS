@@ -111,6 +111,9 @@ private struct TunnelRuntimeSnapshot: Codable {
     let nativeStopOrigin: UInt16
     let nativeActiveOperations: UInt32
     let nativeStopCleanupCompleted: Bool
+    let nativeOutboundAdmissionCopyBytes: UInt64
+    let nativeLivePacketLeases: UInt64
+    let nativePeakPacketLeases: UInt64
 }
 
 private struct TunnelConfiguration {
@@ -209,6 +212,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var physicalFootprintPeakBytes: UInt64 = 0
     private var latestEventSequence: UInt64 = 0
 
+    // Exact session upload accounting + sampled peak bandwidth. All under
+    // diagnosticsLock. See exactSessionUploadBytes()/updateTrafficRateTracking()
+    // — upload totals are never reconstructed from periodic deltas (that
+    // loses bytes across a reconnect); each websocket generation's final
+    // native admission count is folded in exactly once, in
+    // replaceWebSocketClient, at the same point lastNativeStatus is already
+    // captured.
+    private var completedGenerationUploadBytes: UInt64 = 0
+    private var lastFinalizedUploadGeneration: Int = -1
+    private var peakUploadBytesPerSecond: UInt64 = 0
+    private var peakDownloadBytesPerSecond: UInt64 = 0
+    private var previousSessionUploadBytes: UInt64 = 0
+    private var previousSessionDownloadBytes: Int64 = 0
+    private var previousRateSampleMachTime: UInt64 = 0  // 0 = "no baseline yet"
+
     // PR3A: Instruments signpost state (Debug/Measurement only).
     // Protected by signpostLock — never hold stateLock while emitting.
     #if FPTN_SIGNPOSTS
@@ -274,6 +292,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let pathChangeBackpressureDelaySeconds: TimeInterval = 1
     private let memoryWarningLogIntervalSeconds: TimeInterval = 60
     private let pathHandoffHintWindowSeconds: TimeInterval = 10
+    // The durable binary lifecycle snapshot is written on this coarse cadence.
+    private let telemetryIntervalSeconds: TimeInterval = 15
+    // Peak bandwidth is sampled on this fine cadence so a short burst (e.g. a
+    // speedtest) isn't diluted into a 15s window average. This runs on a
+    // provider-owned timer so it keeps sampling while the app is backgrounded.
+    private let rateSampleIntervalSeconds: TimeInterval = 1
+    // Confined to eventQueue (the telemetry timer's queue); no lock needed.
+    private var telemetryTickCount: UInt64 = 0
 
     deinit {
         recordProviderEvent(category: "lifecycle", message: "PacketTunnelProvider deinit", flightEvent: .tunnelStopped)
@@ -307,8 +333,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         tunnelStartedMachTime = mach_continuous_time()
+        diagnosticsLock.lock()
         physicalFootprintPeakBytes = 0
         latestEventSequence = 0
+        completedGenerationUploadBytes = 0
+        lastFinalizedUploadGeneration = -1
+        peakUploadBytesPerSecond = 0
+        peakDownloadBytesPerSecond = 0
+        previousSessionUploadBytes = 0
+        previousSessionDownloadBytes = 0
+        previousRateSampleMachTime = 0
+        diagnosticsLock.unlock()
         logger.info("PacketTunnelProvider startTunnel")
 
         if didCreateFlightRecorder {
@@ -447,6 +482,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stopTelemetry()
         finishStart(with: makeError("Tunnel stopped before startup completed"))
         replaceWebSocketClient(with: nil, stopCurrent: true)
+        // Final synchronized write, after the last generation's exact upload
+        // total has been finalized above — without this, the persisted
+        // "last session" totals can be stale by up to one telemetry
+        // interval on an otherwise orderly stop.
+        writeLifecycleSnapshot(synchronize: true)
 
         #if FPTN_SIGNPOSTS
         signpostLock.lock()
@@ -501,7 +541,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }
             completionHandler?(encodeResponse(TunnelControlResponse(ok: true, message: "stop_initiator_recorded")))
         case .getStatus:
-            completionHandler?(try? JSONEncoder().encode(currentTrafficSnapshot()))
+            completionHandler?(try? JSONEncoder().encode(currentStatusSnapshot()))
         }
     }
 
@@ -1311,6 +1351,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             lastNativeStatusGeneration = generation
             stateLock.unlock()
 
+            // Fold this generation's exact native admission count into the
+            // session total exactly once. This is the only place a
+            // generation's upload bytes are finalized — see
+            // exactSessionUploadBytes(), which adds the *live* generation's
+            // current count on top of this accumulator.
+            diagnosticsLock.lock()
+            if generation != lastFinalizedUploadGeneration {
+                completedGenerationUploadBytes += finalStatus.outboundAdmissionCopyBytes
+                lastFinalizedUploadGeneration = generation
+            }
+            diagnosticsLock.unlock()
+
             if finalStatus.activeOperations != 0 || !finalStatus.stopCleanupCompleted {
                 logInvariantOnce(.incompleteNativeTeardown)
             }
@@ -1779,10 +1831,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             return
         }
 
+        telemetryTickCount = 0
         let timer = DispatchSource.makeTimerSource(queue: eventQueue)
-        timer.schedule(deadline: .now() + .seconds(15), repeating: .seconds(15))
+        let interval = Int(rateSampleIntervalSeconds)
+        timer.schedule(deadline: .now() + .seconds(interval), repeating: .seconds(interval))
         timer.setEventHandler { [weak self] in
-            self?.emitTelemetry()
+            self?.handleTelemetryTick()
         }
         telemetryTimer = timer
         stateLock.unlock()
@@ -1800,18 +1854,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         timer?.cancel()
     }
 
-    private func emitTelemetry() {
+    /// Fires every `rateSampleIntervalSeconds` (1s) on eventQueue. Peak
+    /// bandwidth is sampled every tick so short bursts aren't averaged away;
+    /// the heavier durable snapshot write + memory-pressure evaluation stay on
+    /// the coarser `telemetryIntervalSeconds` (15s) cadence.
+    private func handleTelemetryTick() {
+        telemetryTickCount &+= 1
+        let ticksPerDurableWrite = max(1, UInt64(telemetryIntervalSeconds / rateSampleIntervalSeconds))
+        let isDurableTick = telemetryTickCount % ticksPerDurableWrite == 0
+
         #if FPTN_MEASUREMENT_BUILD
-        // PR-1 (Measurement Safety): sample only Mach memory counters.
-        // Avoids constructing the full TunnelRuntimeSnapshot (native
-        // status query, ISO-8601 dates, string copies, packet counters)
-        // on every 15-second tick during memory profiling.
+        // PR-1 (Measurement Safety): sample only Mach memory counters, and
+        // only on the coarse cadence — no per-second work during profiling.
+        guard isDurableTick else { return }
         let memory = TunnelMemoryPressureSnapshot(
             residentBytes: residentMemoryBytes(),
             physFootprintBytes: physFootprintBytes()
         )
         evaluateMemoryPressure(memory: memory)
         #else
+        updateTrafficRateTracking()
+        guard isDurableTick else { return }
         let snapshot = currentSnapshot()
         let memory = TunnelMemoryPressureSnapshot(
             residentBytes: snapshot.memoryResidentBytes,
@@ -1820,6 +1883,68 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         writeLifecycleSnapshot()
         evaluateMemoryPressure(memory: memory)
         #endif
+    }
+
+    /// Exact session upload total, computed on demand — never cached or
+    /// accumulated from periodic deltas (that would lose bytes at reconnect
+    /// boundaries). `completedGenerationUploadBytes` only ever gains a
+    /// generation's bytes once (see replaceWebSocketClient); this adds the
+    /// live generation's current count on top, querying wsClient directly
+    /// rather than the currentSnapshot()/writeLifecycleSnapshot() pattern of
+    /// falling back to lastNativeStatus — that fallback intentionally keeps
+    /// reporting a torn-down generation's last-known status for diagnostic
+    /// display, which would double-count here.
+    private func exactSessionUploadBytes() -> UInt64 {
+        stateLock.lock()
+        let client = wsClient
+        stateLock.unlock()
+        let liveGenerationBytes = client?.status.outboundAdmissionCopyBytes ?? 0
+
+        diagnosticsLock.lock()
+        let completed = completedGenerationUploadBytes
+        diagnosticsLock.unlock()
+
+        return completed + liveGenerationBytes
+    }
+
+    /// Samples the exact session totals against the previous 15s tick to
+    /// track peak bandwidth. Uses mach_continuous_time() rather than Date()
+    /// so a wall-clock adjustment (NTP, timezone/DST) can't corrupt the
+    /// rate. The dispatch timer isn't a strict 15.000s cadence (it can drift
+    /// or be coalesced), hence "nominal" window in the wire type.
+    private func updateTrafficRateTracking() {
+        let currentUpload = exactSessionUploadBytes()
+        stateLock.lock()
+        // Download = bytes received from the server this session, regardless of
+        // local packet-flow backpressure. transportReceivedBytes is the honest
+        // "downloaded" figure; packetFlowWriteBytes would undercount whenever a
+        // writePackets() is rejected downstream.
+        let currentDownload = counters.transportReceivedBytes
+        stateLock.unlock()
+        let now = mach_continuous_time()
+
+        diagnosticsLock.lock()
+        if previousRateSampleMachTime != 0 {
+            let elapsedSeconds = Self.machTicksToSeconds(now - previousRateSampleMachTime)
+            if elapsedSeconds > 0 {
+                let uploadDelta = currentUpload >= previousSessionUploadBytes
+                    ? currentUpload - previousSessionUploadBytes : 0
+                let downloadDelta = currentDownload >= previousSessionDownloadBytes
+                    ? UInt64(currentDownload - previousSessionDownloadBytes) : 0
+                peakUploadBytesPerSecond = max(peakUploadBytesPerSecond, UInt64(Double(uploadDelta) / elapsedSeconds))
+                peakDownloadBytesPerSecond = max(peakDownloadBytesPerSecond, UInt64(Double(downloadDelta) / elapsedSeconds))
+            }
+        }
+        previousSessionUploadBytes = currentUpload
+        previousSessionDownloadBytes = currentDownload
+        previousRateSampleMachTime = now
+        diagnosticsLock.unlock()
+    }
+
+    private static func machTicksToSeconds(_ ticks: UInt64) -> TimeInterval {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return Double(ticks) * Double(info.numer) / Double(info.denom) / 1_000_000_000
     }
 
     // MARK: - State helpers
@@ -1981,23 +2106,85 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             nativeDisconnectCode: status?.disconnectCode.rawValue ?? 0,
             nativeStopOrigin: status?.stopOrigin.rawValue ?? 0,
             nativeActiveOperations: status?.activeOperations ?? 0,
-            nativeStopCleanupCompleted: status?.stopCleanupCompleted ?? false
+            nativeStopCleanupCompleted: status?.stopCleanupCompleted ?? false,
+            nativeOutboundAdmissionCopyBytes: status?.outboundAdmissionCopyBytes ?? 0,
+            nativeLivePacketLeases: status?.livePacketLeases ?? 0,
+            nativePeakPacketLeases: status?.peakPacketLeases ?? 0
         )
     }
 
     /// This is an IPC response for the foreground app, not diagnostics
-    /// telemetry. Keep it small and restricted to monotonically increasing
-    /// byte counters so the UI can calculate its own transfer rates without
-    /// duplicating the provider's binary lifecycle/flight-recorder data.
+    /// telemetry. Session totals and peak bandwidth are computed
+    /// provider-side (not left for the UI to reconstruct from repeated
+    /// polls) because only the provider observes traffic while the app is
+    /// backgrounded — see exactSessionUploadBytes()/updateTrafficRateTracking().
     private func currentTrafficSnapshot() -> TunnelTrafficSnapshotV1 {
         stateLock.lock()
-        let outboundBytes = counters.packetFlowReadBytes
-        let inboundBytes = counters.transportReceivedBytes
+        // Download = received-from-server (see updateTrafficRateTracking).
+        let downloadBytes = max(0, counters.transportReceivedBytes)
         stateLock.unlock()
 
+        let uploadBytes = exactSessionUploadBytes()
+
+        diagnosticsLock.lock()
+        let peakUpload = peakUploadBytesPerSecond
+        let peakDownload = peakDownloadBytesPerSecond
+        diagnosticsLock.unlock()
+
         return TunnelTrafficSnapshotV1(
-            outboundPacketBytes: UInt64(max(0, outboundBytes)),
-            inboundPacketBytes: UInt64(max(0, inboundBytes))
+            sessionUploadBytes: uploadBytes,
+            sessionDownloadBytes: UInt64(downloadBytes),
+            peakUploadBytesPerSecond: peakUpload,
+            peakDownloadBytesPerSecond: peakDownload,
+            peakBandwidthNominalWindowSeconds: UInt32(rateSampleIntervalSeconds),
+            sessionStartMonotonicTime: tunnelStartedMachTime,
+            sampleMonotonicTime: mach_continuous_time()
+        )
+    }
+
+    /// The full live status returned to the app on the 1 Hz `getStatus` poll.
+    /// Folds `currentTrafficSnapshot()` together with memory, outbound-queue,
+    /// packet-lease and session-identity counters — the same values the durable
+    /// binary snapshot carries — so the foreground Telemetry screen is driven
+    /// by this live feed rather than the coarse 15s snapshot. See
+    /// TunnelStatusSnapshotV1.
+    private func currentStatusSnapshot() -> TunnelStatusSnapshotV1 {
+        let traffic = currentTrafficSnapshot()
+
+        stateLock.lock()
+        let client = wsClient
+        let savedNativeStatus = lastNativeStatus
+        let generation = websocketGeneration
+        let reconnAttempt = reconnectAttempt
+        let sessionToken = tunnelSessionToken
+        stateLock.unlock()
+
+        // Query native status outside stateLock; fall back to Mach counters.
+        let status = client?.status ?? savedNativeStatus
+        let footprint = status?.memoryPhysFootprintBytes ?? physFootprintBytes() ?? 0
+        let resident = status?.memoryResidentBytes ?? residentMemoryBytes() ?? 0
+
+        diagnosticsLock.lock()
+        if footprint > physicalFootprintPeakBytes {
+            physicalFootprintPeakBytes = footprint
+        }
+        let peakFootprint = physicalFootprintPeakBytes
+        diagnosticsLock.unlock()
+
+        return TunnelStatusSnapshotV1(
+            traffic: traffic,
+            memoryFootprintBytes: footprint,
+            memoryResidentBytes: resident,
+            memoryFootprintPeakBytes: peakFootprint,
+            outboundQueuedBytes: status?.queuedBytes ?? 0,
+            outboundQueuedBytesPeak: status?.queuedBytesPeak ?? 0,
+            queueFullCount: status?.queueFullCount ?? 0,
+            livePacketLeases: status?.livePacketLeases ?? 0,
+            peakPacketLeases: status?.peakPacketLeases ?? 0,
+            nativeActiveOperations: status?.activeOperations ?? 0,
+            sessionToken: sessionToken,
+            websocketGeneration: UInt32(generation),
+            reconnectAttempt: UInt32(max(0, reconnAttempt))
         )
     }
 
@@ -2064,6 +2251,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let stopReasonRaw: Int?
         let client: WebsocketClientBridge?
         let savedNativeStatus: WebsocketClientStatus?
+        let downloadBytes: Int64
 
         stateLock.lock()
         generation = websocketGeneration
@@ -2077,6 +2265,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stopReasonRaw = lastStopReasonRawValue
         client = wsClient
         savedNativeStatus = lastNativeStatus
+        // Download = received-from-server (see updateTrafficRateTracking).
+        downloadBytes = counters.transportReceivedBytes
         stateLock.unlock()
 
         // Query native status outside stateLock.
@@ -2087,6 +2277,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let footprint = status?.memoryPhysFootprintBytes ?? physFootprintBytes() ?? 0
         let resident = status?.memoryResidentBytes ?? residentMemoryBytes() ?? 0
 
+        // exactSessionUploadBytes() locks stateLock/diagnosticsLock itself —
+        // must be called outside both, never nested inside them.
+        let uploadBytes = exactSessionUploadBytes()
+
         // Protect peak + sequence under diagnosticsLock.
         diagnosticsLock.lock()
         if footprint > physicalFootprintPeakBytes {
@@ -2094,6 +2288,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
         let peakBytes = physicalFootprintPeakBytes
         let eventSeq = latestEventSequence
+        let peakUpload = peakUploadBytesPerSecond
+        let peakDownload = peakDownloadBytesPerSecond
         diagnosticsLock.unlock()
 
         let hasBridge = client != nil
@@ -2135,6 +2331,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             outboundQueuedBytes: status?.queuedBytes ?? 0,
             outboundQueuedBytesPeak: status?.queuedBytesPeak ?? 0,
             latestEventSequence: eventSeq,
+            sessionAcceptedUploadBytes: uploadBytes,
+            sessionAcceptedDownloadBytes: UInt64(max(0, downloadBytes)),
+            peakUploadBytesPerSecond: peakUpload,
+            peakDownloadBytesPerSecond: peakDownload,
+            queueFullCount: status?.queueFullCount ?? 0,
+            livePacketLeases: status?.livePacketLeases ?? 0,
+            peakPacketLeases: status?.peakPacketLeases ?? 0,
+            peakBandwidthNominalWindowSeconds: UInt32(rateSampleIntervalSeconds),
             synchronize: synchronize
         ) ?? true
 
