@@ -69,6 +69,9 @@ struct WebsocketClientBridgeStatus {
     uint64_t inbound_batches_delivered;
     uint64_t live_packet_leases;
     uint64_t peak_packet_leases;
+    // PR6: inbound in-flight backpressure gauges (byte-accurate).
+    uint64_t live_lease_bytes;
+    uint64_t peak_lease_bytes;
 };
 
 // PR0: SWIFT_NONCOPYABLE makes Swift import this as ~Copyable,

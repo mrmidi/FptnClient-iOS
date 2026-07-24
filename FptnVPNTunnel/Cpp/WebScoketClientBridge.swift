@@ -46,6 +46,8 @@ struct WebsocketClientStatus: Sendable {
     let inboundBatchesDelivered: UInt64
     let livePacketLeases: UInt64
     let peakPacketLeases: UInt64
+    let liveLeaseBytes: UInt64
+    let peakLeaseBytes: UInt64
 }
 
 struct InboundPacketBatch {
@@ -229,7 +231,9 @@ final class WebsocketClientBridge {
             inboundZeroCopyBytes: raw.inbound_zero_copy_bytes,
             inboundBatchesDelivered: raw.inbound_batches_delivered,
             livePacketLeases: raw.live_packet_leases,
-            peakPacketLeases: raw.peak_packet_leases
+            peakPacketLeases: raw.peak_packet_leases,
+            liveLeaseBytes: raw.live_lease_bytes,
+            peakLeaseBytes: raw.peak_lease_bytes
         )
     }
 }

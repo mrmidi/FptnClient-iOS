@@ -226,9 +226,17 @@ fptn::protocol::https::CensorshipStrategy parse_censorship_strategy(
 
 std::atomic<uint64_t> g_live_packet_leases{0};
 std::atomic<uint64_t> g_peak_packet_leases{0};
+// PR6: byte-accurate companion to the lease count. Feeds RunReader's inbound
+// backpressure watermark and getStatus() reporting.
+std::atomic<uint64_t> g_live_lease_bytes{0};
+std::atomic<uint64_t> g_peak_lease_bytes{0};
 
 extern "C" void fptn_release_owned_packet(void* owner) noexcept {
-    delete static_cast<fptn::common::network::IPPacket*>(owner);
+    auto* packet = static_cast<fptn::common::network::IPPacket*>(owner);
+    if (packet) {
+        g_live_lease_bytes.fetch_sub(packet->Data().size(), std::memory_order_relaxed);
+    }
+    delete packet;
     g_live_packet_leases.fetch_sub(1, std::memory_order_relaxed);
 }
 
@@ -264,6 +272,9 @@ void packet_callback_adapter(fptn::common::network::BatchIPPacketPtr packets,
         const auto live = g_live_packet_leases.fetch_add(descriptors.size(), std::memory_order_relaxed) + descriptors.size();
         auto peak = g_peak_packet_leases.load(std::memory_order_relaxed);
         while (live > peak && !g_peak_packet_leases.compare_exchange_weak(peak, live, std::memory_order_relaxed)) {}
+        const auto live_bytes = g_live_lease_bytes.fetch_add(bytes, std::memory_order_relaxed) + bytes;
+        auto peak_bytes = g_peak_lease_bytes.load(std::memory_order_relaxed);
+        while (live_bytes > peak_bytes && !g_peak_lease_bytes.compare_exchange_weak(peak_bytes, live_bytes, std::memory_order_relaxed)) {}
         wrapper->received_packet_count.fetch_add(descriptors.size());
         wrapper->received_byte_count.fetch_add(bytes);
         wrapper->callback_enter_count.fetch_add(1);
@@ -348,6 +359,13 @@ void client_run_thread(WebsocketClientWrapper* wrapper) {
             };
             client_config.new_ip_pkt_batch_callback = [wrapper](auto packets) {
                 packet_callback_adapter(std::move(packets), wrapper);
+            };
+            // PR6: feed the reader's inbound backpressure gate with the current
+            // leased-but-undrained byte count (process-wide, matching the lease
+            // gauges above).
+            client_config.inbound_inflight_bytes = []() -> std::size_t {
+                return static_cast<std::size_t>(
+                    g_live_lease_bytes.load(std::memory_order_relaxed));
             };
 
             client = std::make_shared<fptn::protocol::https::WebsocketClient>(
@@ -621,6 +639,8 @@ WebsocketClientBridgeStatus WebsocketSwiftBridge::getStatus() const {
         status.inbound_batches_delivered = counters.inbound_batches_delivered.load(std::memory_order_relaxed);
         status.live_packet_leases = g_live_packet_leases.load(std::memory_order_relaxed);
         status.peak_packet_leases = g_peak_packet_leases.load(std::memory_order_relaxed);
+        status.live_lease_bytes = g_live_lease_bytes.load(std::memory_order_relaxed);
+        status.peak_lease_bytes = g_peak_lease_bytes.load(std::memory_order_relaxed);
     } catch (const std::exception& ex) {
         status.last_error = ex.what();
     } catch (...) {

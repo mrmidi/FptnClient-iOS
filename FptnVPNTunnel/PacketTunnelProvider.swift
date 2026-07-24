@@ -1234,13 +1234,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private func handleIncomingPacketBatchFromServer(_ batch: InboundPacketBatch, generation: Int) {
         guard generation == currentWebSocketGeneration(), shouldHandlePackets(),
               !batch.packets.isEmpty else { return }
-        let bytes = batch.packets.reduce(into: Int64.zero) { $0 += Int64($1.count) }
-        let accepted = packetFlow.writePackets(batch.packets, withProtocols: batch.protocols)
-        recordPacketFlowWrite(
-            packetCount: Int64(batch.packets.count),
-            byteCount: bytes,
-            accepted: accepted
-        )
+        // The batch is delivered synchronously on the native WebSocket reader
+        // thread, which has no runloop and therefore no autorelease-pool drain.
+        // Wrap the writePackets bridging so the [Data]->NSArray<NSData*>
+        // temporaries — each retaining a zero-copy native packet lease — are
+        // released per batch instead of accumulating for the whole session.
+        autoreleasepool {
+            let bytes = batch.packets.reduce(into: Int64.zero) { $0 += Int64($1.count) }
+            let accepted = packetFlow.writePackets(batch.packets, withProtocols: batch.protocols)
+            recordPacketFlowWrite(
+                packetCount: Int64(batch.packets.count),
+                byteCount: bytes,
+                accepted: accepted
+            )
+        }
     }
 
     private func shouldContinueReadLoop() -> Bool {
