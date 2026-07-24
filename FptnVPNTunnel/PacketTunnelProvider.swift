@@ -267,6 +267,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var lastStopReasonRawValue: Int?
     private var counters = PacketCounters()
     private var lastMemoryWarningAt: Date?
+
+    private func currentDiagnosticContext(
+        wsGen: Int? = nil,
+        reconnectAtt: Int? = nil
+    ) -> DiagnosticLogContext {
+        let ep = configuration?.episodeID
+        let gen = wsGen ?? websocketGeneration
+        let rec = reconnectAtt ?? reconnectAttempt
+        return DiagnosticLogContext(
+            episodeID: ep,
+            websocketGeneration: gen > 0 ? gen : nil,
+            reconnectAttempt: rec > 0 ? rec : nil
+        )
+    }
     // PR4b: track last recorded pressure level so warning→emergency
     // transitions are always recorded even inside the log throttle.
     private var lastRecordedMemoryLevel: TunnelMemoryPressureLevel = .normal
