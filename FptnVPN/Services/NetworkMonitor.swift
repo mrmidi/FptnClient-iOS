@@ -77,22 +77,52 @@ final class NetworkMonitor: @unchecked Sendable {
 
     // MARK: - Private
 
+    private let classifier = NetworkPathEpisodeClassifier(scope: .app)
+    private var pendingOutageTask: Task<Void, Never>?
+
     private func handlePathUpdate(_ path: NWPath) {
-        let connected = path.status == .satisfied
-        let expensive = path.isExpensive
+        let obs = NetworkPathObservation(
+            satisfied: path.status == .satisfied,
+            usesWiFi: path.usesInterfaceType(.wifi),
+            usesCellular: path.usesInterfaceType(.cellular),
+            usesWiredEthernet: path.usesInterfaceType(.wiredEthernet),
+            expensive: path.isExpensive,
+            constrained: path.isConstrained,
+            supportsIPv4: path.supportsIPv4,
+            supportsIPv6: path.supportsIPv6
+        )
+
+        let (effect, scope) = classifier.handleUpdate(obs, now: ContinuousClock().now)
 
         lock.lock()
-        let wasConnected = _isConnected
-        _isConnected = connected
-        _isExpensive = expensive
+        _isConnected = obs.satisfied
+        _isExpensive = obs.expensive
         let pending = continuations
         continuations.removeAll()
         lock.unlock()
 
-        if connected && !wasConnected {
-            logger.info("Network path available (expensive=\(expensive)")
-        } else if !connected && wasConnected {
-            logger.warning("Network path lost")
+        switch effect {
+        case .transitionRecorded(let observation):
+            pendingOutageTask?.cancel()
+            pendingOutageTask = nil
+            logger.info("Network path available [scope=\(scope.rawValue) expensive=\(observation.expensive)]")
+        case .scheduleConfirmation(let episodeID, _):
+            pendingOutageTask?.cancel()
+            pendingOutageTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, !Task.isCancelled else { return }
+                let (timerEffect, timerScope) = self.classifier.evaluateConfirmationTimer(episodeID: episodeID, now: ContinuousClock().now)
+                if timerEffect == .confirmedOutage(episodeID: episodeID) {
+                    logger.warning("Default network path remained unsatisfied after 2.0s [scope=\(timerScope.rawValue) classification=confirmedOutage]")
+                }
+            }
+        case .recovered(let classification, let duration):
+            pendingOutageTask?.cancel()
+            pendingOutageTask = nil
+            let durMs = Int(duration.components.seconds * 1000 + Double(duration.components.attoseconds) / 1e15)
+            logger.info("Default network path recovered after \(durMs)ms [scope=\(scope.rawValue) classification=\(classification.rawValue)]")
+        case .duplicateIgnored, .cancelConfirmation, .confirmedOutage:
+            break
         }
 
         for (_, cont) in pending {

@@ -1695,6 +1695,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         monitor?.cancel()
     }
 
+    private let pathClassifier = NetworkPathEpisodeClassifier(scope: .tunnel)
+    private var pendingPathOutageWorkItem: DispatchWorkItem?
+
     private func handleNetworkPathChanged(_ path: NWPath) {
         let isSatisfied = path.status == .satisfied
         let pathSummary = networkPathSummary(path)
@@ -1724,7 +1727,42 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         guard didPathChange || shouldScheduleReconnect else { return }
 
-        logger.info("Network path satisfied=\(isSatisfied) network=\(pathSummary)")
+        let obs = NetworkPathObservation(
+            satisfied: isSatisfied,
+            usesWiFi: path.usesInterfaceType(.wifi),
+            usesCellular: path.usesInterfaceType(.cellular),
+            usesWiredEthernet: path.usesInterfaceType(.wiredEthernet),
+            expensive: path.isExpensive,
+            constrained: path.isConstrained,
+            supportsIPv4: path.supportsIPv4,
+            supportsIPv6: path.supportsIPv6
+        )
+        let (effect, scope) = pathClassifier.handleUpdate(obs, now: ContinuousClock().now)
+        switch effect {
+        case .transitionRecorded(let observation):
+            pendingPathOutageWorkItem?.cancel()
+            pendingPathOutageWorkItem = nil
+            logger.info("Network path satisfied=\(observation.satisfied) network=\(pathSummary) [scope=\(scope.rawValue)\(self.currentDiagnosticContext().formatted())]")
+        case .scheduleConfirmation(let episodeID, _):
+            pendingPathOutageWorkItem?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                let (timerEffect, timerScope) = self.pathClassifier.evaluateConfirmationTimer(episodeID: episodeID, now: ContinuousClock().now)
+                if timerEffect == .confirmedOutage(episodeID: episodeID) {
+                    logger.warning("Default network path remained unsatisfied after 2.0s [scope=\(timerScope.rawValue) classification=confirmedOutage\(self.currentDiagnosticContext().formatted())]")
+                }
+            }
+            pendingPathOutageWorkItem = item
+            eventQueue.asyncAfter(deadline: .now() + .seconds(2), execute: item)
+        case .recovered(let classification, let duration):
+            pendingPathOutageWorkItem?.cancel()
+            pendingPathOutageWorkItem = nil
+            let durMs = Int(duration.components.seconds * 1000 + Double(duration.components.attoseconds) / 1e15)
+            logger.info("Default network path recovered after \(durMs)ms [scope=\(scope.rawValue) classification=\(classification.rawValue)\(self.currentDiagnosticContext().formatted())]")
+        case .duplicateIgnored, .cancelConfirmation, .confirmedOutage:
+            break
+        }
+
         recordProviderEvent(category: "path", message: "path_satisfied=\(isSatisfied) network=\(pathSummary)", pathSatisfied: isSatisfied, flightEvent: .pathChanged)
         updateDiagnosticsHeartbeat(lastEvent: "path_satisfied=\(isSatisfied) network=\(pathSummary)")
         if didPathChange {
