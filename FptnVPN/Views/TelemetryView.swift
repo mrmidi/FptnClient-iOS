@@ -79,14 +79,14 @@ struct TelemetryView: View {
             )
             MetricCard(
                 title: "Download",
-                value: TelemetryFormat.mbps(viewModel.snapshot.downloadMbps),
+                value: TelemetryFormat.bitrate(viewModel.snapshot.downloadMbps),
                 caption: "\(TelemetryFormat.dataVolume(viewModel.snapshot.sessionDownloadBytes)) this session",
                 tint: .appAccent,
                 icon: "arrow.down"
             )
             MetricCard(
                 title: "Upload",
-                value: TelemetryFormat.mbps(viewModel.snapshot.uploadMbps),
+                value: TelemetryFormat.bitrate(viewModel.snapshot.uploadMbps),
                 caption: "\(TelemetryFormat.dataVolume(viewModel.snapshot.sessionUploadBytes)) this session",
                 tint: .appAccent,
                 icon: "arrow.up"
@@ -171,20 +171,23 @@ private struct ConnectionHeaderCard: View {
 
 private struct LiveIndicator: View {
     let availability: TelemetryAvailability
-    @State private var pulse = false
 
     var body: some View {
         HStack(spacing: 5) {
-            Circle()
-                .fill(availability.tint)
-                .frame(width: 6, height: 6)
-                .opacity(availability == .live ? (pulse ? 1 : 0.35) : 1)
-                .animation(availability == .live ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true) : .default, value: pulse)
+            if availability == .live {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 6))
+                    .foregroundStyle(availability.tint)
+                    .symbolEffect(.pulse, options: .repeating)
+            } else {
+                Circle()
+                    .fill(availability.tint)
+                    .frame(width: 6, height: 6)
+            }
             Text(availability == .live ? "Live" : availability.title)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(availability.tint)
         }
-        .onAppear { pulse = true }
     }
 }
 
@@ -272,8 +275,8 @@ private struct SessionTotalsCard: View {
             VStack(spacing: 10) {
                 totalRow("Downloaded", TelemetryFormat.dataVolume(snapshot.sessionDownloadBytes))
                 totalRow("Uploaded", TelemetryFormat.dataVolume(snapshot.sessionUploadBytes))
-                totalRow("Peak download", TelemetryFormat.mbps(snapshot.downloadPeakMbps))
-                totalRow("Peak upload", TelemetryFormat.mbps(snapshot.uploadPeakMbps))
+                totalRow("Peak download", TelemetryFormat.bitrate(snapshot.downloadPeakMbps))
+                totalRow("Peak upload", TelemetryFormat.bitrate(snapshot.uploadPeakMbps))
                 totalRow("Connected time", TelemetryFormat.duration(snapshot.connectedDuration))
                 totalRow("Reconnects", "\(snapshot.reconnectCount)")
             }

@@ -1757,7 +1757,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         case .recovered(let classification, let duration):
             pendingPathOutageWorkItem?.cancel()
             pendingPathOutageWorkItem = nil
-            let durMs = Int(duration.components.seconds * 1000 + Double(duration.components.attoseconds) / 1e15)
+            let durMs = Int(duration.components.seconds) * 1000 + Int(duration.components.attoseconds / 1_000_000_000_000_000)
             logger.info("Default network path recovered after \(durMs)ms [scope=\(scope.rawValue) classification=\(classification.rawValue)\(self.currentDiagnosticContext().formatted())]")
         case .duplicateIgnored, .cancelConfirmation, .confirmedOutage:
             break

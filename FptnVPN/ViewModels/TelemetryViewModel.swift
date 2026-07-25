@@ -29,8 +29,15 @@ final class TelemetryViewModel: ObservableObject {
     @Published private(set) var snapshot = TelemetrySnapshot()
     @Published private(set) var memorySamples: [MemorySample] = []
     @Published private(set) var bandwidthSamples: [BandwidthSample] = []
+    @Published private(set) var displayMemorySamples: [MemorySample] = []
+    @Published private(set) var displayBandwidthSamples: [BandwidthSample] = []
     @Published private(set) var events: [TelemetryEvent] = []
-    @Published var selectedWindow: TelemetryTimeWindow = .fiveMinutes
+    @Published var selectedWindow: TelemetryTimeWindow = .fiveMinutes {
+        didSet {
+            guard oldValue != selectedWindow else { return }
+            updateDisplaySamples()
+        }
+    }
     @Published var isHealthExpanded = false
     @Published var isNetworkExpanded = false
 
@@ -49,6 +56,7 @@ final class TelemetryViewModel: ObservableObject {
 
     private let maximumBandwidthSamples = 3_600  // 1/sec, ~1 hour
     private let maximumMemorySamples = 720        // ~5s cadence, ~1 hour
+    private let maxChartDisplayPoints = 120       // Cap rendered marks per chart
     /// Memory now arrives at 1 Hz on the live feed; chart it at most this often
     /// so the buffer still spans ~an hour and the line stays readable.
     private let memorySampleMinInterval: TimeInterval = 5
@@ -65,6 +73,8 @@ final class TelemetryViewModel: ObservableObject {
         guard cancellables.isEmpty else { return }
         memorySamples = []
         bandwidthSamples = []
+        displayMemorySamples = []
+        displayBandwidthSamples = []
         events = []
         currentSegmentID = 0
         isAwaitingFreshBaselineAfterGap = false
@@ -82,6 +92,13 @@ final class TelemetryViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] status in
                 self?.handleLiveStatus(status)
+            }
+            .store(in: &cancellables)
+
+        vpnService?.$trafficTick
+            .receive(on: RunLoop.main)
+            .sink { [weak self] tick in
+                self?.handleTrafficTick(tick)
             }
             .store(in: &cancellables)
 
@@ -123,19 +140,98 @@ final class TelemetryViewModel: ObservableObject {
     }
 
     func filteredMemorySamples() -> [MemorySample] {
-        guard let duration = selectedWindow.duration else { return memorySamples }
-        let cutoff = Date().addingTimeInterval(-duration)
-        return memorySamples.filter { $0.timestamp >= cutoff }
+        displayMemorySamples
     }
 
     func filteredBandwidthSamples() -> [BandwidthSample] {
-        guard let duration = selectedWindow.duration else { return bandwidthSamples }
-        let cutoff = Date().addingTimeInterval(-duration)
-        return bandwidthSamples.filter { $0.timestamp >= cutoff }
+        displayBandwidthSamples
+    }
+
+    private func updateDisplaySamples() {
+        updateDisplayMemorySamples()
+        updateDisplayBandwidthSamples()
+    }
+
+    private func updateDisplayMemorySamples() {
+        let rawFiltered: [MemorySample]
+        if let duration = selectedWindow.duration {
+            let cutoff = Date().addingTimeInterval(-duration)
+            rawFiltered = memorySamples.filter { $0.timestamp >= cutoff }
+        } else {
+            rawFiltered = memorySamples
+        }
+        // Peak-preserving rather than min/max: memory moves smoothly, so an
+        // envelope would only add visual noise, but the chart's whole job is
+        // catching an approach to the extension's memory ceiling — so when a
+        // bucket must collapse, it collapses to its highest reading.
+        displayMemorySamples = bucketed(rawFiltered, maxPoints: maxChartDisplayPoints) { bucket in
+            bucket.max { $0.physicalMB < $1.physicalMB }.map { [$0] } ?? []
+        }
+    }
+
+    private func updateDisplayBandwidthSamples() {
+        let rawFiltered: [BandwidthSample]
+        if let duration = selectedWindow.duration {
+            let cutoff = Date().addingTimeInterval(-duration)
+            rawFiltered = bandwidthSamples.filter { $0.timestamp >= cutoff }
+        } else {
+            rawFiltered = bandwidthSamples
+        }
+        // Min/max envelope: tunnel traffic is on/off, so a bucket's lowest and
+        // highest readings are both real and both meaningful. Each bucket
+        // yields up to two points, hence the halved budget.
+        displayBandwidthSamples = bucketed(rawFiltered, maxPoints: maxChartDisplayPoints / 2) { bucket in
+            guard let low = bucket.min(by: { $0.downloadMbps < $1.downloadMbps }),
+                  let high = bucket.max(by: { $0.downloadMbps < $1.downloadMbps }) else { return [] }
+            // Whole samples, never synthesized pairs — so the upload value
+            // plotted at a given instant is the one actually measured there.
+            if low.id == high.id { return [low] }
+            return low.timestamp <= high.timestamp ? [low, high] : [high, low]
+        }
+    }
+
+    /// Splits samples into equal-width *time* buckets and lets `reduce` choose
+    /// which real samples represent each one.
+    ///
+    /// Replaces index decimation (keep every Nth sample), which is only
+    /// faithful for smoothly-varying data: on bursty traffic it keeps whatever
+    /// happened to land on the stride and silently drops the peaks between,
+    /// so the rendered shape depends on sample alignment rather than on what
+    /// was measured. Bucketing by time also makes the x-axis honest when the
+    /// sample rate isn't uniform.
+    private func bucketed<T: TimestampedSample>(
+        _ samples: [T],
+        maxPoints: Int,
+        reduce: ([T]) -> [T]
+    ) -> [T] {
+        guard samples.count > maxPoints, maxPoints >= 2,
+              let first = samples.first, let last = samples.last else { return samples }
+
+        let span = last.timestamp.timeIntervalSince(first.timestamp)
+        guard span > 0 else { return samples }
+
+        let bucketCount = maxPoints
+        let bucketWidth = span / Double(bucketCount)
+        var buckets: [[T]] = Array(repeating: [], count: bucketCount)
+        for sample in samples {
+            let offset = sample.timestamp.timeIntervalSince(first.timestamp)
+            let index = min(bucketCount - 1, max(0, Int(offset / bucketWidth)))
+            buckets[index].append(sample)
+        }
+
+        var result = buckets.flatMap { $0.isEmpty ? [] : reduce($0) }
+        // The newest sample anchors the chart's endpoint marker, so it must
+        // survive the reduction even when its bucket elected something else.
+        if let newest = samples.last, result.last?.id != newest.id {
+            result.append(newest)
+        }
+        return result
     }
 
     // MARK: - Live connection updates (already-real 1 Hz poll via VPNService)
 
+    /// Identity, state and the exact provider-reported totals. Chart samples
+    /// deliberately do NOT come from here — see `handleTrafficTick`.
     private func handleConnectionUpdate(_ connection: VPNConnection) {
         let now = Date()
 
@@ -143,8 +239,7 @@ final class TelemetryViewModel: ObservableObject {
         next.connectionState = Self.mapConnectionState(connection)
         next.serverName = connection.selectedServer?.name
         next.connectedDuration = connection.connectedAt.map { now.timeIntervalSince($0) } ?? 0
-        next.downloadMbps = connection.downloadSpeed * 8 / 1_000_000
-        next.uploadMbps = connection.uploadSpeed * 8 / 1_000_000
+
         if connection.trafficMetricsAvailable {
             next.sessionUploadBytes = connection.sessionUploadBytes
             next.sessionDownloadBytes = connection.sessionDownloadBytes
@@ -155,22 +250,38 @@ final class TelemetryViewModel: ObservableObject {
         next.lowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
         next.availability = currentAvailability(for: connection)
         next.lastUpdated = now
-        snapshot = next
 
-        guard isForeground, connection.isConnected else { return }
+        // Displayed as-is. `VPNService` already measures this across a rolling
+        // window of exact cumulative counters, so there is nothing left to
+        // smooth here — the trailing average this used to apply was measuring
+        // its own publisher's fan-out, not time.
+        next.downloadMbps = connection.downloadSpeed * 8 / 1_000_000
+        next.uploadMbps = connection.uploadSpeed * 8 / 1_000_000
+        snapshot = next
+    }
+
+    /// The chart's only sample source: exactly one tick per completed traffic
+    /// poll. Foreground-gated and segment-aware, so a backgrounded stretch
+    /// breaks the line instead of being drawn as an interpolated slope.
+    private func handleTrafficTick(_ tick: TrafficTick?) {
+        guard let tick, isForeground else { return }
+
         if isAwaitingFreshBaselineAfterGap {
-            // Reflects the whole gap, not current bandwidth — establishes a
-            // fresh baseline but isn't charted.
+            // First tick after regaining the live feed. Its window may still
+            // straddle the gap, so it establishes the baseline without being
+            // charted.
             isAwaitingFreshBaselineAfterGap = false
             return
         }
+
         bandwidthSamples.append(BandwidthSample(
-            timestamp: now,
-            downloadMbps: next.downloadMbps,
-            uploadMbps: next.uploadMbps,
+            timestamp: tick.receivedAt,
+            downloadMbps: tick.downloadMbps,
+            uploadMbps: tick.uploadMbps,
             segmentID: currentSegmentID
         ))
         trimBandwidthSamples()
+        updateDisplayBandwidthSamples()
     }
 
     private func currentAvailability(for connection: VPNConnection?) -> TelemetryAvailability {
@@ -254,6 +365,7 @@ final class TelemetryViewModel: ObservableObject {
         lastMemorySampleAt = timestamp
         memorySamples.append(MemorySample(timestamp: timestamp, physicalMB: physicalMB, segmentID: currentSegmentID))
         trimMemorySamples()
+        updateDisplayMemorySamples()
     }
 
     private func beginNewSegment() {

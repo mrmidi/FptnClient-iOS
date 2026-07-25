@@ -566,6 +566,32 @@ struct FptnVPNTests {
         #expect(decoder.readLifecycleSnapshot() == nil)
     }
 
+    // Telemetry read "Uploaded 0 MB" during a session that had demonstrably
+    // uploaded (peak upload was 0.6 Mbps at the time). The byte counters were
+    // exact the whole way from the provider; "%.0f MB" was discarding
+    // everything below half a megabyte at the last step.
+    @Test func dataVolumeScalesInsteadOfRoundingSubMegabyteTotalsToZero() {
+        #expect(TelemetryFormat.dataVolume(0) == "0 B")
+        #expect(TelemetryFormat.dataVolume(512) == "512 B")
+        #expect(TelemetryFormat.dataVolume(940_331) == "940 kB")
+        #expect(TelemetryFormat.dataVolume(3_490_000) == "3.5 MB")
+        #expect(TelemetryFormat.dataVolume(1_240_000_000) == "1.24 GB")
+        #expect(TelemetryFormat.dataVolume(nil) == TelemetryFormat.unavailable)
+    }
+
+    // "%.1f Mbps" had 0.05 Mbps of resolution, so a quiet-but-alive tunnel
+    // (keepalives, ACKs, DNS) rendered identically to a dead one. A zero
+    // reading must now mean actually zero.
+    @Test func bitrateDistinguishesLowThroughputFromSilence() {
+        #expect(TelemetryFormat.bitrate(0) == "0 bps")
+        #expect(TelemetryFormat.bitrate(0.0004) == "400 bps")
+        #expect(TelemetryFormat.bitrate(0.04) == "40 kbps")
+        #expect(TelemetryFormat.bitrate(0.94) == "940 kbps")
+        #expect(TelemetryFormat.bitrate(5.42) == "5.4 Mbps")
+        #expect(TelemetryFormat.bitrate(1_200) == "1.20 Gbps")
+        #expect(TelemetryFormat.bitrate(nil) == TelemetryFormat.unavailable)
+    }
+
     private func temporaryDiagnosticsDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("FptnVPNTests-\(UUID().uuidString)", isDirectory: true)

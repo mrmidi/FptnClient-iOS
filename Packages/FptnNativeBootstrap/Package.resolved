@@ -1,13 +1,13 @@
 {
-  "originHash" : "757d68ef5f72c558d8155693e36573291e9e641c759a381fbfc9fe58a8d154c8",
+  "originHash" : "9dc9fd6b22276b29f5abd6b831e1b3af016a3cba92ccb27aa9c6cbdab3ed13ba",
   "pins" : [
     {
       "identity" : "fptnshared",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mrmidi/FptnShared.git",
       "state" : {
-        "revision" : "a24f761d79fcba03c0c57332adc01d515903e5ca",
-        "version" : "0.5.1"
+        "revision" : "0db664fc881786539df2bd0dca414114f867d314",
+        "version" : "0.6.0"
       }
     }
   ],

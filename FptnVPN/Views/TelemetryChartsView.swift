@@ -17,17 +17,39 @@ struct TelemetryChartsView: View {
     var body: some View {
         VStack(spacing: 12) {
             MemoryChartCard(
-                samples: viewModel.filteredMemorySamples(),
+                samples: viewModel.displayMemorySamples,
                 snapshot: viewModel.snapshot,
                 selectedWindow: $viewModel.selectedWindow
             )
             BandwidthChartCard(
-                samples: viewModel.filteredBandwidthSamples(),
+                samples: viewModel.displayBandwidthSamples,
                 snapshot: viewModel.snapshot,
                 selectedWindow: $viewModel.selectedWindow
             )
         }
     }
+}
+
+/// The x range the window picker actually selects.
+///
+/// Without this the charts use `.automatic`, which fits the axis to whatever
+/// samples survived filtering — so 1m / 5m / All only changed the data, never
+/// the scale, and a 90-second session was drawn edge-to-edge under "5m",
+/// implying a spacing between events that wasn't real.
+private func chartXDomain(
+    window: TelemetryTimeWindow,
+    end: Date,
+    earliestSample: Date?
+) -> ClosedRange<Date> {
+    if let duration = window.duration {
+        return end.addingTimeInterval(-duration)...end
+    }
+    // "All" spans the retained buffer. Guard the degenerate range that a
+    // single sample (or none) would otherwise produce.
+    guard let earliest = earliestSample, earliest < end else {
+        return end.addingTimeInterval(-60)...end
+    }
+    return earliest...end
 }
 
 private struct TimeWindowPicker: View {
@@ -113,9 +135,12 @@ private struct MemoryChartCard: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
 
                 ForEach(samples) { sample in
+                    // Keyed by segment so a stretch where the live feed was
+                    // absent breaks the line instead of being bridged.
                     AreaMark(
                         x: .value("Time", sample.timestamp),
-                        y: .value("MB", sample.physicalMB)
+                        y: .value("MB", sample.physicalMB),
+                        series: .value("Segment", sample.segmentID)
                     )
                     .foregroundStyle(
                         LinearGradient(
@@ -132,14 +157,21 @@ private struct MemoryChartCard: View {
 
                     LineMark(
                         x: .value("Time", sample.timestamp),
-                        y: .value("MB", sample.physicalMB)
+                        y: .value("MB", sample.physicalMB),
+                        series: .value("Segment", sample.segmentID)
                     )
                     .foregroundStyle(lineTint)
                     .lineStyle(StrokeStyle(lineWidth: 1.8))
                     .interpolationMethod(.linear)
                 }
             }
+            .transaction { $0.animation = nil }
             .chartXAxis(.hidden)
+            .chartXScale(domain: chartXDomain(
+                window: selectedWindow,
+                end: snapshot.lastUpdated,
+                earliestSample: samples.first?.timestamp
+            ))
             .chartYScale(domain: 0...yCeiling)
             .chartYAxis {
                 AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
@@ -200,7 +232,7 @@ private struct BandwidthChartCard: View {
                             rateLabel(symbol: "arrow.down", value: snapshot.downloadMbps, tint: .appAccent)
                             rateLabel(symbol: "arrow.up", value: snapshot.uploadMbps, tint: Self.uploadTint)
                         }
-                        Text("Peak \u{2193} \(TelemetryFormat.mbps(snapshot.downloadPeakMbps))  \u{2191} \(TelemetryFormat.mbps(snapshot.uploadPeakMbps))")
+                        Text("Peak \u{2193} \(TelemetryFormat.bitrate(snapshot.downloadPeakMbps))  \u{2191} \(TelemetryFormat.bitrate(snapshot.uploadPeakMbps))")
                             .font(.caption2)
                             .foregroundStyle(Color.appSecondaryText)
                     }
@@ -221,7 +253,7 @@ private struct BandwidthChartCard: View {
     private func rateLabel(symbol: String, value: Double, tint: Color) -> some View {
         HStack(spacing: 3) {
             Image(systemName: symbol).font(.caption2.weight(.bold)).foregroundStyle(tint)
-            Text(TelemetryFormat.mbps(value))
+            Text(TelemetryFormat.bitrate(value))
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(Color.appPrimaryText)
@@ -235,16 +267,22 @@ private struct BandwidthChartCard: View {
         } else {
             Chart {
                 ForEach(samples) { sample in
+                    // Series keys carry both direction and segment: direction
+                    // so the two traces stay separate lines, segment so a
+                    // stretch where the live feed was absent breaks them
+                    // rather than being drawn as a slope through no data.
                     AreaMark(
                         x: .value("Time", sample.timestamp),
-                        y: .value("Mbps", sample.downloadMbps)
+                        y: .value("Mbps", sample.downloadMbps),
+                        series: .value("Series", "down-\(sample.segmentID)")
                     )
                     .foregroundStyle(LinearGradient(colors: [Color.appAccent.opacity(0.12), .clear], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.linear)
 
                     LineMark(
                         x: .value("Time", sample.timestamp),
-                        y: .value("Mbps", sample.downloadMbps)
+                        y: .value("Mbps", sample.downloadMbps),
+                        series: .value("Series", "down-\(sample.segmentID)")
                     )
                     .foregroundStyle(Color.appAccent)
                     .lineStyle(StrokeStyle(lineWidth: 1.4))
@@ -252,7 +290,8 @@ private struct BandwidthChartCard: View {
 
                     LineMark(
                         x: .value("Time", sample.timestamp),
-                        y: .value("Mbps", sample.uploadMbps)
+                        y: .value("Mbps", sample.uploadMbps),
+                        series: .value("Series", "up-\(sample.segmentID)")
                     )
                     .foregroundStyle(Self.uploadTint)
                     .lineStyle(StrokeStyle(lineWidth: 2.4))
@@ -268,7 +307,13 @@ private struct BandwidthChartCard: View {
                         .symbolSize(36)
                 }
             }
+            .transaction { $0.animation = nil }
             .chartXAxis(.hidden)
+            .chartXScale(domain: chartXDomain(
+                window: selectedWindow,
+                end: snapshot.lastUpdated,
+                earliestSample: samples.first?.timestamp
+            ))
             .chartYScale(domain: .automatic(includesZero: true))
             .chartYAxis {
                 AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in

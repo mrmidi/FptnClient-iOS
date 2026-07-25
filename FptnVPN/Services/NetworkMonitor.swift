@@ -6,6 +6,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 import Foundation
 import Network
+import FptnSharedTunnel
 
 /// Monitors network path availability using NWPathMonitor.
 ///
@@ -119,7 +120,7 @@ final class NetworkMonitor: @unchecked Sendable {
         case .recovered(let classification, let duration):
             pendingOutageTask?.cancel()
             pendingOutageTask = nil
-            let durMs = Int(duration.components.seconds * 1000 + Double(duration.components.attoseconds) / 1e15)
+            let durMs = Int(duration.components.seconds) * 1000 + Int(duration.components.attoseconds / 1_000_000_000_000_000)
             logger.info("Default network path recovered after \(durMs)ms [scope=\(scope.rawValue) classification=\(classification.rawValue)]")
         case .duplicateIgnored, .cancelConfirmation, .confirmedOutage:
             break

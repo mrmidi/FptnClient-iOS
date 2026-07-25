@@ -23,6 +23,24 @@ struct LiveTunnelStatus: Sendable {
     let receivedAt: Date
 }
 
+/// One tick per traffic poll that produced a usable rate — the Telemetry
+/// chart's sample source.
+///
+/// Deliberately a separate publisher from `connection`. `VPNConnection` is a
+/// struct behind `@Published`, so *every* mutation of it republishes — the
+/// status observer, an error string, a server change. A chart driven off
+/// `$connection` records a bandwidth sample for each of those, inventing
+/// samples that correspond to no measurement. This fires exactly once per
+/// completed poll.
+struct TrafficTick: Sendable {
+    let downloadMbps: Double
+    let uploadMbps: Double
+    /// Width of the window the rate was measured over. Shorter than the
+    /// nominal window right after a gap, while it refills.
+    let windowSeconds: TimeInterval
+    let receivedAt: Date
+}
+
 @MainActor
 final class VPNService: ObservableObject {
     @Published var connection = VPNConnection()
@@ -31,6 +49,9 @@ final class VPNService: ObservableObject {
     /// first successful poll — the Telemetry screen falls back to the durable
     /// binary snapshot then.
     @Published private(set) var liveStatus: LiveTunnelStatus?
+    /// Bandwidth samples for the Telemetry chart. See `TrafficTick` for why
+    /// this isn't folded into `connection`.
+    @Published private(set) var trafficTick: TrafficTick?
 
     private var packetTunnelProvider: NETunnelProviderManager?
     private var tunnelStatusObserver: NSObjectProtocol?
@@ -39,8 +60,20 @@ final class VPNService: ObservableObject {
     private var activeEpisodeID: ConnectionEpisodeID?
     private var connectionTask: Task<Void, Never>?
     private var trafficPollingTask: Task<Void, Never>?
-    private var previousTrafficSample: TrafficSample?
+    /// Rolling window of cumulative-counter readings backing the displayed
+    /// rate. Holds the samples covering `rateWindowSeconds`, plus the one
+    /// immediately older so the window stays fully spanned.
+    private var trafficWindow: [TrafficSample] = []
     private var lastTrafficPollingFailureAt: Date?
+
+    /// The rate shown to the user is measured across this window, not between
+    /// consecutive polls. The provider reports exact cumulative byte counters,
+    /// so `(bytes_now − bytes_then) / elapsed` is exact over *any* span — a
+    /// 1-second diff is equally exact but describes an instant, and chunked
+    /// media traffic is genuinely on/off at that resolution: it reads zero in
+    /// every gap between chunk fetches. Five seconds spans those gaps without
+    /// lagging a real stall.
+    private let rateWindowSeconds: TimeInterval = 5
     private var connectionGeneration: UInt64 = 0
     private var ipcRequestIDCounter: UInt64 = 0
     private let requestFailureClassifier = ProviderRequestFailureClassifier()
@@ -383,13 +416,16 @@ final class VPNService: ObservableObject {
     private func stopTrafficPolling(clearHistory: Bool) {
         trafficPollingTask?.cancel()
         trafficPollingTask = nil
-        previousTrafficSample = nil
+        trafficWindow.removeAll()
         liveStatus = nil
-        connection.downloadSpeed = 0
-        connection.uploadSpeed = 0
+        trafficTick = nil
+        var next = connection
+        next.downloadSpeed = 0
+        next.uploadSpeed = 0
         if clearHistory {
-            connection.speedHistory = []
+            next.speedHistory = []
         }
+        connection = next
     }
 
     private func refreshTrafficSnapshot() async {
@@ -456,48 +492,101 @@ final class VPNService: ObservableObject {
         liveStatus = LiveTunnelStatus(snapshot: status, receivedAt: sampledAt)
 
         let snapshot = status.traffic
-        // Exact, provider-reported values — no diffing needed, unlike the
-        // current-speed calc below which still needs two samples.
-        connection.sessionUploadBytes = snapshot.sessionUploadBytes
-        connection.sessionDownloadBytes = snapshot.sessionDownloadBytes
-        connection.peakUploadBytesPerSecond = snapshot.peakUploadBytesPerSecond
-        connection.peakDownloadBytesPerSecond = snapshot.peakDownloadBytesPerSecond
-        connection.peakBandwidthNominalWindowSeconds = snapshot.peakBandwidthNominalWindowSeconds
-        connection.trafficMetricsSampledAt = snapshot.sampleMonotonicTime
-        connection.trafficMetricsAvailable = true
-
         let current = TrafficSample(snapshot: snapshot, timestamp: sampledAt)
-        guard let previous = previousTrafficSample else {
-            previousTrafficSample = current
-            return
-        }
+        appendToTrafficWindow(current)
+        let rate = currentWindowedRate()
 
-        guard current.uploadBytes >= previous.uploadBytes,
-              current.downloadBytes >= previous.downloadBytes else {
-            // The provider has started a fresh session; establish a new
-            // baseline rather than presenting an invalid negative rate.
-            previousTrafficSample = current
-            return
-        }
+        // ONE mutation, so ONE @Published emission. Assigning the ten fields
+        // individually publishes `connection` ten times per poll: subscribers
+        // see eight of those carrying the *previous* poll's speeds (they're
+        // emitted before downloadSpeed is assigned), and anything sampling the
+        // stream per emission — the Telemetry chart did — records ten points
+        // per second with identical timestamps.
+        var next = connection
+        // Exact, provider-reported values — no diffing needed, unlike the rate.
+        next.sessionUploadBytes = snapshot.sessionUploadBytes
+        next.sessionDownloadBytes = snapshot.sessionDownloadBytes
+        next.peakUploadBytesPerSecond = snapshot.peakUploadBytesPerSecond
+        next.peakDownloadBytesPerSecond = snapshot.peakDownloadBytesPerSecond
+        next.peakBandwidthNominalWindowSeconds = snapshot.peakBandwidthNominalWindowSeconds
+        next.trafficMetricsSampledAt = snapshot.sampleMonotonicTime
+        next.trafficMetricsAvailable = true
 
-        let elapsed = current.timestamp.timeIntervalSince(previous.timestamp)
-        guard elapsed > 0 else { return }
-
-        let uploadBytes = current.uploadBytes - previous.uploadBytes
-        let downloadBytes = current.downloadBytes - previous.downloadBytes
-        connection.uploadSpeed = Double(uploadBytes) / elapsed
-        connection.downloadSpeed = Double(downloadBytes) / elapsed
-        connection.speedHistory.append(
-            SpeedSample(
-                timestamp: current.timestamp,
-                downloadMbps: connection.downloadSpeed * 8 / 1_000_000,
-                uploadMbps: connection.uploadSpeed * 8 / 1_000_000
+        if let rate {
+            next.downloadSpeed = rate.downloadBytesPerSecond
+            next.uploadSpeed = rate.uploadBytesPerSecond
+            next.speedHistory.append(
+                SpeedSample(
+                    timestamp: sampledAt,
+                    downloadMbps: rate.downloadBytesPerSecond * 8 / 1_000_000,
+                    uploadMbps: rate.uploadBytesPerSecond * 8 / 1_000_000
+                )
             )
-        )
-        if connection.speedHistory.count > 300 {
-            connection.speedHistory.removeFirst(connection.speedHistory.count - 300)
+            if next.speedHistory.count > 300 {
+                next.speedHistory.removeFirst(next.speedHistory.count - 300)
+            }
         }
-        previousTrafficSample = current
+        connection = next
+
+        // Only once the window can actually produce a rate; a single reading
+        // is not a measurement, and charting it as zero would be a fabrication.
+        guard let rate else { return }
+        trafficTick = TrafficTick(
+            downloadMbps: rate.downloadBytesPerSecond * 8 / 1_000_000,
+            uploadMbps: rate.uploadBytesPerSecond * 8 / 1_000_000,
+            windowSeconds: rate.windowSeconds,
+            receivedAt: sampledAt
+        )
+    }
+
+    private func appendToTrafficWindow(_ current: TrafficSample) {
+        if let newest = trafficWindow.last {
+            // Counters going backwards means the provider began a fresh
+            // session. A gap longer than the window means polling stopped
+            // (the app was backgrounded and suspended) — spanning it would
+            // report the gap's *average* as the current rate. Both cases
+            // invalidate the window rather than the newest reading.
+            let wentBackwards = current.uploadBytes < newest.uploadBytes
+                || current.downloadBytes < newest.downloadBytes
+            let pollingStalled = current.timestamp.timeIntervalSince(newest.timestamp) > rateWindowSeconds
+            if wentBackwards || pollingStalled {
+                trafficWindow.removeAll(keepingCapacity: true)
+            }
+        }
+        trafficWindow.append(current)
+
+        // Retain one sample older than the cutoff so the window spans the full
+        // `rateWindowSeconds` rather than however much happens to fall inside it.
+        let cutoff = current.timestamp.addingTimeInterval(-rateWindowSeconds)
+        if let firstInside = trafficWindow.firstIndex(where: { $0.timestamp >= cutoff }), firstInside > 1 {
+            trafficWindow.removeFirst(firstInside - 1)
+        }
+    }
+
+    /// Exact rate across the retained window. Returns nil until two readings
+    /// exist — after a reconnect or a foreground return the window rebuilds
+    /// over the following seconds, reporting honest rates over a shorter span
+    /// meanwhile rather than a placeholder zero.
+    private func currentWindowedRate() -> WindowedRate? {
+        guard let oldest = trafficWindow.first,
+              let newest = trafficWindow.last,
+              trafficWindow.count >= 2 else { return nil }
+
+        let elapsed = newest.timestamp.timeIntervalSince(oldest.timestamp)
+        guard elapsed > 0 else { return nil }
+
+        // Monotonicity is enforced on append, so these can't underflow; the
+        // saturating form keeps that true if the invariant ever moves.
+        let downloadBytes = newest.downloadBytes >= oldest.downloadBytes
+            ? newest.downloadBytes - oldest.downloadBytes : 0
+        let uploadBytes = newest.uploadBytes >= oldest.uploadBytes
+            ? newest.uploadBytes - oldest.uploadBytes : 0
+
+        return WindowedRate(
+            downloadBytesPerSecond: Double(downloadBytes) / elapsed,
+            uploadBytesPerSecond: Double(uploadBytes) / elapsed,
+            windowSeconds: elapsed
+        )
     }
 
     private func logTrafficPollingFailureIfNeeded(_ error: Error) {
@@ -536,6 +625,12 @@ final class VPNService: ObservableObject {
         }
     }
 
+    private struct WindowedRate {
+        let downloadBytesPerSecond: Double
+        let uploadBytesPerSecond: Double
+        let windowSeconds: TimeInterval
+    }
+
     private struct TrafficSample {
         let uploadBytes: UInt64
         let downloadBytes: UInt64
@@ -561,7 +656,8 @@ final class VPNService: ObservableObject {
 
     /// Handles an orphaned provider after an app relaunch. Normal disconnects are
     /// routed through the episode-owning coordinator above.
-    private func stopObservedTunnel() async {
+    private func stopObservedTunnel(initiator: DisconnectInitiator, reason: FptnSharedTunnel.DisconnectReason) async {
+        logger.info("stopObservedTunnel initiator=\(initiator.rawValue) reason=\(reason.rawValue)")
         let manager: NETunnelProviderManager?
         if let packetTunnelProvider {
             manager = packetTunnelProvider

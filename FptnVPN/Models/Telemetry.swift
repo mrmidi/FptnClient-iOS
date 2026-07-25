@@ -140,14 +140,24 @@ enum HealthLevel {
 /// samples from different segments — the live source was lost and regained
 /// between them (backgrounded, or the IPC poll went stale), and drawing a
 /// connecting line there would fabricate data for a period nothing observed.
-struct MemorySample: Identifiable {
+/// A chart sample that can be placed on a time axis. Lets the chart's
+/// time-bucketing reduction work over either series without casting.
+protocol TimestampedSample: Identifiable {
+    var timestamp: Date { get }
+    /// Increments whenever the live feed is lost and regained. Samples either
+    /// side of a gap belong to different segments and must not be joined by a
+    /// line, which would draw an interpolated slope through unmeasured time.
+    var segmentID: UInt64 { get }
+}
+
+struct MemorySample: TimestampedSample {
     let id = UUID()
     let timestamp: Date
     let physicalMB: Double
     let segmentID: UInt64
 }
 
-struct BandwidthSample: Identifiable {
+struct BandwidthSample: TimestampedSample {
     let id = UUID()
     let timestamp: Date
     let downloadMbps: Double
@@ -293,17 +303,44 @@ enum TelemetryFormat {
         return String(format: "%.1f MB", value)
     }
 
-    static func mbps(_ value: Double?) -> String {
-        guard let value else { return unavailable }
-        return String(format: "%.1f Mbps", value)
+    /// Takes Mbps, picks the unit that keeps the value legible. Fixed "%.1f
+    /// Mbps" had 0.05 Mbps of resolution, so keepalives, ACKs and DNS — a tunnel
+    /// that is quiet but alive — rendered identically to a dead one. Now a
+    /// zero reading means actually zero.
+    static func bitrate(_ mbps: Double?) -> String {
+        guard let mbps else { return unavailable }
+        let bitsPerSecond = mbps * 1_000_000
+        switch bitsPerSecond {
+        case ..<1:
+            return "0 bps"
+        case ..<1_000:
+            return String(format: "%.0f bps", bitsPerSecond)
+        case ..<1_000_000:
+            return String(format: "%.0f kbps", bitsPerSecond / 1_000)
+        case ..<1_000_000_000:
+            return String(format: "%.1f Mbps", mbps)
+        default:
+            return String(format: "%.2f Gbps", mbps / 1_000)
+        }
     }
 
-    /// Bytes in, human-scaled MB/GB out.
+    /// Exact byte counts in, adaptively scaled SI units out. The counters are
+    /// exact bytes the whole way from the provider (`transportReceivedBytes` ->
+    /// `sessionDownloadBytes`), so this is the only place resolution is ever
+    /// lost — scale rather than round, so sub-megabyte totals can't read as "0 MB".
     static func dataVolume(_ bytes: UInt64?) -> String {
         guard let bytes else { return unavailable }
-        let mb = Double(bytes) / 1_000_000
-        if mb >= 1000 { return String(format: "%.2f GB", mb / 1000) }
-        return String(format: "%.0f MB", mb)
+        let value = Double(bytes)
+        switch value {
+        case ..<1_000:
+            return "\(bytes) B"
+        case ..<1_000_000:
+            return String(format: "%.0f kB", value / 1_000)
+        case ..<1_000_000_000:
+            return String(format: "%.1f MB", value / 1_000_000)
+        default:
+            return String(format: "%.2f GB", value / 1_000_000_000)
+        }
     }
 
     static func count(_ value: Int?) -> String {
