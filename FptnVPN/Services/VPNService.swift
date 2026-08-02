@@ -59,6 +59,8 @@ final class VPNService: ObservableObject {
     private var activeCoordinator: (any ConnectionLifecycleCoordinating)?
     private var activeEpisodeID: ConnectionEpisodeID?
     private var connectionTask: Task<Void, Never>?
+    /// Tail of the connect/disconnect chain. See `enqueueLifecycle`.
+    private var lifecycleTail: Task<Void, Never>?
     private var trafficPollingTask: Task<Void, Never>?
     /// Rolling window of cumulative-counter readings backing the displayed
     /// rate. Holds the samples covering `rateWindowSeconds`, plus the one
@@ -86,8 +88,7 @@ final class VPNService: ObservableObject {
     func syncWithSystem() {
         Task { @MainActor in
             do {
-                let managers = try await NETunnelProviderManager.loadAllFromPreferences()
-                guard let manager = managers.first else {
+                guard let manager = try await NEPreferences.loadFirst() else {
                     packetTunnelProvider = nil
                     clearConnectionState()
                     return
@@ -106,10 +107,12 @@ final class VPNService: ObservableObject {
         connectionGeneration &+= 1
         let generation = connectionGeneration
         connectionTask?.cancel()
-        connectionTask = Task { [weak self] in
+        isDisconnectRequested = false
+        connectionTask = enqueueLifecycle { [weak self] in
             guard let self else { return }
-            isDisconnectRequested = false
-            await performConnect(generation: generation)
+            await self.retireActiveCoordinator(reason: .userInitiated)
+            guard self.isCurrent(generation) else { return }
+            await self.performConnect(generation: generation)
         }
     }
 
@@ -124,18 +127,54 @@ final class VPNService: ObservableObject {
         connection.runtimeState = .stopping
         stopTrafficPolling(clearHistory: false)
 
-        Task {
-            if let activeCoordinator {
-                await activeCoordinator.disconnect(reason: .userInitiated)
+        enqueueLifecycle { [weak self] in
+            guard let self else { return }
+            if self.activeCoordinator != nil {
+                await self.retireActiveCoordinator(reason: .userInitiated)
             } else {
-                await stopObservedTunnel(initiator: .user, reason: .userRequested)
+                await self.stopObservedTunnel(initiator: .user, reason: .userRequested)
             }
         }
     }
 
+    // MARK: - Coordinator lifecycle
+
+    /// Enqueues `work` behind every connect/disconnect already queued.
+    ///
+    /// A coordinator owns its own recovery loop, so one that is still shutting
+    /// down can drive `NETunnelController.start()` underneath the coordinator
+    /// replacing it — two tunnel starts and two preference writes racing. The
+    /// UI state in `disconnect()` is still applied synchronously, so only the
+    /// tunnel work queues; both coordinators check `Task.isCancelled` between
+    /// stages, so a cancelled connect unwinds rather than holding the queue.
+    @discardableResult
+    private func enqueueLifecycle(
+        _ work: @MainActor @escaping () async -> Void
+    ) -> Task<Void, Never> {
+        let previous = lifecycleTail
+        let task = Task { @MainActor in
+            await previous?.value
+            await work()
+        }
+        lifecycleTail = task
+        return task
+    }
+
+    /// Stops the active coordinator and drops it.
+    ///
+    /// Clearing the reference *before* awaiting is what makes this exclusive:
+    /// a second caller finds `nil` and cannot stop the same coordinator twice.
+    private func retireActiveCoordinator(
+        reason: FptnConnectionOrchestration.DisconnectReason
+    ) async {
+        guard let coordinator = activeCoordinator else { return }
+        activeCoordinator = nil
+        activeEpisodeID = nil
+        await coordinator.disconnect(reason: reason)
+    }
+
     static func pushLogLevelToActiveTunnel(_ level: LogLevel) async {
-        let managers = try? await NETunnelProviderManager.loadAllFromPreferences()
-        guard let manager = managers?.first,
+        guard let manager = try? await NEPreferences.loadFirst(),
               let session = manager.connection as? NETunnelProviderSession,
               [.connected, .connecting, .reasserting].contains(manager.connection.status) else {
             return
@@ -311,11 +350,15 @@ final class VPNService: ObservableObject {
             connection.isConnected = false
             connection.isConnecting = false
             connection.selectionProgress = nil
+            // The attempt is over — including any retries the recovery policy
+            // already made — so nothing is left for this coordinator to drive.
+            activeCoordinator = nil
         case .cancelled:
             logger.info("Connection request cancelled")
             connection.isConnected = false
             connection.isConnecting = false
             connection.selectionProgress = nil
+            activeCoordinator = nil
         }
     }
 
@@ -394,7 +437,13 @@ final class VPNService: ObservableObject {
             stopTrafficPolling(clearHistory: false)
         case .disconnected, .invalid:
             if !isDisconnectRequested, let activeEpisodeID {
+                // Unrequested drop: the coordinator stays, since its recovery
+                // policy may still reconnect this episode.
                 await activeCoordinator?.handle(.tunnelDisconnected(activeEpisodeID, .remoteClosed))
+            } else {
+                // Requested stop: the episode is finished, and holding the
+                // coordinator would leave a stale recovery loop able to fire.
+                activeCoordinator = nil
             }
             activeEpisodeID = nil
             clearConnectionState()
@@ -684,7 +733,7 @@ final class VPNService: ObservableObject {
         if let packetTunnelProvider {
             manager = packetTunnelProvider
         } else {
-            manager = try? await NETunnelProviderManager.loadAllFromPreferences().first
+            manager = try? await NEPreferences.loadFirst()
         }
         guard let manager else { return }
 
@@ -703,8 +752,7 @@ final class VPNService: ObservableObject {
 
     private func adoptSystemManager() async {
         do {
-            let managers = try await NETunnelProviderManager.loadAllFromPreferences()
-            guard let manager = managers.first else { return }
+            guard let manager = try await NEPreferences.loadFirst() else { return }
             packetTunnelProvider = manager
             observeTunnelStatus(manager)
             await syncTunnelStatus()

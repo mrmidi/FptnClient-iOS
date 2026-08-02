@@ -39,27 +39,23 @@ public final class NETunnelController: TunnelControlling {
         }
 
         do {
-            let existing = try await NETunnelProviderManager.loadAllFromPreferences()
-            let manager = existing.first ?? NETunnelProviderManager()
+            let manager = try await NEPreferences.saveConfiguration { manager in
+                let config = NETunnelProviderProtocol()
+                config.serverAddress = "FptnVPN"
+                config.providerBundleIdentifier = "net.mrmidi.FptnVPN.FptnVPNTunnel"
+                config.providerConfiguration = [
+                    TunnelProviderConfigurationKey.startupV1: encodedData
+                ]
 
-            let config = NETunnelProviderProtocol()
-            config.serverAddress = "FptnVPN"
-            config.providerBundleIdentifier = "net.mrmidi.FptnVPN.FptnVPNTunnel"
-            config.providerConfiguration = [
-                TunnelProviderConfigurationKey.startupV1: encodedData
-            ]
+                if #available(iOS 16.4, *), SettingsService.shared.routePushThroughTunnel {
+                    config.includeAllNetworks = true
+                    config.excludeAPNs = false
+                }
 
-            if #available(iOS 16.4, *), SettingsService.shared.routePushThroughTunnel {
-                config.includeAllNetworks = true
-                config.excludeAPNs = false
+                manager.protocolConfiguration = config
+                manager.localizedDescription = "FPTN"
+                manager.isEnabled = true
             }
-
-            manager.protocolConfiguration = config
-            manager.localizedDescription = "FPTN"
-            manager.isEnabled = true
-
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
             try manager.connection.startVPNTunnel()
 
             activeEpisodeID = episodeID
