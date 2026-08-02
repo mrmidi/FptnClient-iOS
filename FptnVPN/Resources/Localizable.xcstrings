@@ -24,6 +24,38 @@
     "%@" : {
 
     },
+    "Best: %@ (%lld ms)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Best: %1$@ (%2$lld ms)"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лучший: %1$@ (%2$lld мс)"
+          }
+        }
+      }
+    },
+    "Scanning servers: %lld / %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scanning servers: %1$lld / %2$lld"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сканирование серверов: %1$lld / %2$lld"
+          }
+        }
+      }
+    },
     "%@ · %@ · %@" : {
       "localizations" : {
         "en" : {
@@ -1696,7 +1728,36 @@
       }
     },
     "Server: %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сервер: %@"
+          }
+        }
+      }
+    },
+    "Server: %@ (Auto)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server: %@ (Auto)"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сервер: %@ (Авто)"
+          }
+        }
+      }
     },
     "Servers" : {
       "extractionState" : "manual",

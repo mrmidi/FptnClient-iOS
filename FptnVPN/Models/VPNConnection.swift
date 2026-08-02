@@ -12,6 +12,18 @@ struct SpeedSample: Sendable {
     let uploadMbps: Double
 }
 
+struct SelectionProgress: Sendable {
+    let completedProbes: Int
+    let totalProbes: Int
+    let bestServerName: String?
+    let bestLatencyMs: Int?
+
+    var progressFraction: Double {
+        guard totalProbes > 0 else { return 0 }
+        return Double(completedProbes) / Double(totalProbes)
+    }
+}
+
 struct VPNConnection: Sendable {
     var isConnected: Bool = false
     var isConnecting: Bool = false
@@ -29,6 +41,7 @@ struct VPNConnection: Sendable {
     var uploadSpeed: Double = 0
     var speedHistory: [SpeedSample] = []
     var connectionMode: ConnectionMode = .auto
+    var selectionProgress: SelectionProgress? = nil
 
     // Exact, provider-reported session traffic (see TunnelTrafficSnapshotV1).
     // Unlike downloadSpeed/uploadSpeed above (derived client-side from
@@ -51,8 +64,13 @@ struct VPNConnection: Sendable {
         return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
-    enum ConnectionMode: Sendable {
+    enum ConnectionMode: Sendable, Equatable {
         case auto
         case manual(VPNServer)
+
+        var isAuto: Bool {
+            if case .auto = self { return true }
+            return false
+        }
     }
 }

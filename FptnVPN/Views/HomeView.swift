@@ -22,6 +22,34 @@ struct HomeView: View {
 
     var body: some View {
         VStack {
+            // Top scan progress view (auto-hides when scanning finishes)
+            if let progress = viewModel.selectionProgress, !viewModel.isConnected {
+                VStack(spacing: 6) {
+                    HStack {
+                        Text(String(format: NSLocalizedString("Scanning servers: %lld / %lld", comment: ""), progress.completedProbes, progress.totalProbes))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(Color.appPrimaryText)
+
+                        Spacer()
+
+                        if let bestName = progress.bestServerName, let bestMs = progress.bestLatencyMs {
+                            Text(String(format: NSLocalizedString("Best: %@ (%lld ms)", comment: ""), bestName, bestMs))
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color.appSuccess)
+                        }
+                    }
+
+                    ProgressView(value: progress.progressFraction)
+                        .tint(Color.appAccent)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             Spacer()
 
             // Connection time
@@ -128,7 +156,10 @@ struct HomeView: View {
 
             // Server name
             if viewModel.isConnected, let serverName = viewModel.selectedServerName {
-                Text("Server: \(serverName)")
+                let displayText = viewModel.connectionMode.isAuto
+                    ? String(format: NSLocalizedString("Server: %@ (Auto)", comment: ""), serverName)
+                    : String(format: NSLocalizedString("Server: %@", comment: ""), serverName)
+                Text(displayText)
                     .foregroundStyle(Color.appPrimaryText)
                     .font(.subheadline)
                     .padding(.bottom, 20)
@@ -266,10 +297,10 @@ struct HomeView: View {
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarBackButtonHidden(true)
         .onAppear { viewModel.syncWithSystem() }
-        .onChange(of: scenePhase) { _, newPhase in
+        .onChange(of: scenePhase) { newPhase in
             if newPhase == .active { viewModel.syncWithSystem() }
         }
-        .onChange(of: showingServerList) { _, isPresented in
+        .onChange(of: showingServerList) { isPresented in
             if !isPresented {
                 viewModel.refreshCachedServerWarning()
             }

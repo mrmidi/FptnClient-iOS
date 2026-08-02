@@ -26,6 +26,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var errorMessage: String? = nil
     @Published private(set) var warningMessage: String? = nil
     @Published private(set) var runtimeStatusMessage: String? = nil
+    @Published private(set) var selectionProgress: SelectionProgress? = nil
 
     // MARK: - Dependencies (injected)
 
@@ -105,6 +106,7 @@ final class HomeViewModel: ObservableObject {
         speedHistory = conn.speedHistory
         errorMessage = conn.errorMessage
         warningMessage = conn.warningMessage
+        selectionProgress = conn.selectionProgress
         if conn.isReconnecting {
             runtimeStatusMessage = conn.lastTransportError ?? "Waiting for tunnel transport to recover."
         } else if !conn.isConnected {

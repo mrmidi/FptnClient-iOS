@@ -31,7 +31,7 @@ struct DebugLogView: View {
                     }
                     .padding(8)
                 }
-                .onChange(of: viewModel.filteredEntries.count) { _, _ in
+                .onChange(of: viewModel.filteredEntries.count) { _ in
                     if isAutoScrolling, let last = viewModel.filteredEntries.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }

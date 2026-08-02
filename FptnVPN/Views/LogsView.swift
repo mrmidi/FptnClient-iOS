@@ -120,7 +120,7 @@ struct LogsView: View {
             }
             .background(Color.appSurface)
             .cornerRadius(12)
-            .onChange(of: viewModel.filteredEntries.count) { _, _ in
+            .onChange(of: viewModel.filteredEntries.count) { _ in
                 guard viewModel.isFollowing, let last = viewModel.filteredEntries.last else { return }
                 withAnimation(.linear(duration: 0.1)) {
                     proxy.scrollTo(last.id, anchor: .bottom)

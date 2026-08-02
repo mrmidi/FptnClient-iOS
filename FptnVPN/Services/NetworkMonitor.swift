@@ -79,6 +79,7 @@ final class NetworkMonitor: @unchecked Sendable {
     // MARK: - Private
 
     private let classifier = NetworkPathEpisodeClassifier(scope: .app)
+    
     private var pendingOutageTask: Task<Void, Never>?
 
     private func handlePathUpdate(_ path: NWPath) {

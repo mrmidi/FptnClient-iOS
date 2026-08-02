@@ -10,6 +10,7 @@ struct LoginView: View {
     @StateObject private var viewModel = LoginViewModel()
     @State private var showingAlert = false
     @State private var autoLoginTask: Task<Void, Never>?
+    @State private var previousToken = ""
 
     var body: some View {
         NavigationStack {
@@ -17,8 +18,8 @@ struct LoginView: View {
                 // Gradient background
                 LinearGradient(
                     gradient: Gradient(colors: [
-                        Color(Color.appBackground),
-                        Color(Color.appBackground).opacity(0.8)
+                        Color.appBackground,
+                        Color.appBackground.opacity(0.8)
                     ]),
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -110,12 +111,14 @@ struct LoginView: View {
                                     .foregroundStyle(Color.appAccent.opacity(0.75))
                                     .frame(width: 20)
                                 
-                                TextField("", text: $viewModel.token, prompt: Text("Paste your token here").foregroundStyle(Color.appSecondaryText))
+                                TextField("", text: $viewModel.token, prompt: Text("Paste your token here").foregroundColor(Color.appSecondaryText))
                                     .foregroundStyle(Color.appPrimaryText)
                                     .textInputAutocapitalization(.never)
                                     .disableAutocorrection(true)
                                     .textFieldStyle(.plain)
-                                    .onChange(of: viewModel.token) { oldValue, newValue in
+                                    .onChange(of: viewModel.token) { newValue in
+                                        let oldValue = previousToken
+                                        previousToken = newValue
                                         autoLoginTask?.cancel()
                                         guard viewModel.shouldAutoLoginAfterTokenChange(from: oldValue, to: newValue) else {
                                             return

@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "FptnNativeBootstrap",
     platforms: [
-        .iOS(.v17),
+        .iOS(.v16),
         .macOS(.v13),
         .tvOS(.v17)
     ],
@@ -12,7 +12,7 @@ let package = Package(
         .library(name: "FptnNativeBootstrap", targets: ["FptnNativeBootstrap"])
     ],
     dependencies: [
-        .package(url: "https://github.com/mrmidi/FptnShared.git", exact: "0.6.0")
+        .package(url: "https://github.com/mrmidi/FptnShared.git", exact: "0.7.3")
     ],
     targets: [
         .target(

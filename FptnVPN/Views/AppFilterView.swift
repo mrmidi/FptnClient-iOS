@@ -22,7 +22,7 @@ struct AppFilterView: View {
                 }
                 .pickerStyle(.inline)
                 .tint(Color.appAccent)
-                .onChange(of: mode) { _, newMode in
+                .onChange(of: mode) { newMode in
                     Task { await AppFilterService.shared.setMode(newMode) }
                 }
             } header: {
@@ -53,7 +53,7 @@ struct AppFilterView: View {
                                 .foregroundStyle(Color.appPrimaryText)
                         }
                         .tint(Color.appAccent)
-                        .onChange(of: app.isSelected) { _, _ in
+                        .onChange(of: app.isSelected) { _ in
                             Task { await AppFilterService.shared.saveApps(apps) }
                         }
                     }

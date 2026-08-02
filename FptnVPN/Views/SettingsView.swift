@@ -70,7 +70,7 @@ struct SettingsView: View {
                             .foregroundStyle(Color.appPrimaryText)
                             .padding(.vertical, 6)
                             .onSubmit { viewModel.saveSni() }
-                            .onChange(of: viewModel.sni) { _, _ in viewModel.saveSni() }
+                            .onChange(of: viewModel.sni) { _ in viewModel.saveSni() }
                     }
                 } header: {
                     Text("DPI Bypass")
@@ -169,7 +169,7 @@ struct SettingsView: View {
                             .keyboardType(.numbersAndPunctuation)
                             .foregroundStyle(Color.appPrimaryText)
                             .padding(.vertical, 6)
-                            .onChange(of: viewModel.customDnsIPv4) { _, newValue in
+                            .onChange(of: viewModel.customDnsIPv4) { newValue in
                                 let filtered = newValue.filter { $0.isNumber || $0 == "." }
                                 if filtered != newValue { viewModel.customDnsIPv4 = filtered }
                                 viewModel.saveCustomDnsIPv4(filtered)

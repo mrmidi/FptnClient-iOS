@@ -256,6 +256,7 @@ final class VPNService: ObservableObject {
             result = await coordinator.connect(request)
 
         case .auto:
+            connection.selectedServer = nil
             let selector = AutoServerSelector(
                 healthStore: healthStore,
                 bootstrapper: bootstrapper
@@ -275,7 +276,18 @@ final class VPNService: ObservableObject {
                     maxReplacementAttempts: max(0, settings.maxReconnectAttempts),
                     delaySeconds: settings.reconnectDelay
                 ),
-                tunnelRuntimeOptions: runtimeOptions
+                tunnelRuntimeOptions: runtimeOptions,
+                onProgress: { [weak self] update in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.isCurrent(generation) else { return }
+                        self.connection.selectionProgress = SelectionProgress(
+                            completedProbes: update.completedProbes,
+                            totalProbes: update.totalProbes,
+                            bestServerName: update.bestServerName,
+                            bestLatencyMs: update.bestLatencyMs
+                        )
+                    }
+                }
             )
             result = await coordinator.connect(request)
         }
@@ -283,21 +295,27 @@ final class VPNService: ObservableObject {
         guard isCurrent(generation) else { return }
 
         switch result {
-        case .started(let episodeID):
+        case .started(let episodeID, let server):
             logger.info("Connection started successfully for episode \(episodeID.rawValue.uuidString)")
             activeEpisodeID = episodeID
+            if let server {
+                connection.selectedServer = server
+            }
             connection.isConnected = false
             connection.isConnecting = true
+            connection.selectionProgress = nil
             await adoptSystemManager()
         case .failed(let failure):
             logger.error("Connection failed: \(failure)")
             connection.errorMessage = "Connection failed: \(failure)"
             connection.isConnected = false
             connection.isConnecting = false
+            connection.selectionProgress = nil
         case .cancelled:
             logger.info("Connection request cancelled")
             connection.isConnected = false
             connection.isConnecting = false
+            connection.selectionProgress = nil
         }
     }
 
@@ -389,8 +407,12 @@ final class VPNService: ObservableObject {
         connection.isConnected = false
         connection.isConnecting = false
         connection.isReconnecting = false
+        connection.selectionProgress = nil
         connection.runtimeState = nil
         connection.connectedAt = nil
+        if case .auto = connection.connectionMode {
+            connection.selectedServer = nil
+        }
         stopTrafficPolling(clearHistory: false)
     }
 

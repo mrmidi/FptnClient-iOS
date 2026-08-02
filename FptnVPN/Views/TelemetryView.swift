@@ -55,7 +55,7 @@ struct TelemetryView: View {
                 viewModel.setScenePhase(scenePhase)
             }
             .onDisappear { viewModel.stop() }
-            .onChange(of: scenePhase) { _, newPhase in
+            .onChange(of: scenePhase) { newPhase in
                 viewModel.setScenePhase(newPhase)
             }
         }
@@ -175,10 +175,16 @@ private struct LiveIndicator: View {
     var body: some View {
         HStack(spacing: 5) {
             if availability == .live {
-                Image(systemName: "circle.fill")
-                    .font(.system(size: 6))
-                    .foregroundStyle(availability.tint)
-                    .symbolEffect(.pulse, options: .repeating)
+                if #available(iOS 17.0, *) {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 6))
+                        .foregroundStyle(availability.tint)
+                        .symbolEffect(.pulse, options: .repeating)
+                } else {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 6))
+                        .foregroundStyle(availability.tint)
+                }
             } else {
                 Circle()
                     .fill(availability.tint)
