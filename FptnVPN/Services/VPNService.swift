@@ -81,7 +81,7 @@ final class VPNService: ObservableObject {
     private let requestFailureClassifier = ProviderRequestFailureClassifier()
 
     private let tokenService = TokenService.shared
-    private let healthStore = VPNService.makeHealthStore()
+    private let healthStore = ServerHealthContext.makeStore()
 
     // MARK: - Public
 
@@ -253,12 +253,10 @@ final class VPNService: ObservableObject {
         }
 
         let settings = SettingsService.shared
-        let bootstrapContext = BootstrapContext(
-            networkClass: .wifi,
-            sni: settings.sni,
-            censorshipStrategy: FptnSharedCore.CensorshipStrategy(storedValue: settings.censorshipStrategy.rawValue),
-            ipv6Available: false,
-            tokenConfigurationID: configurationID(tokenUsername: tokenData.username, servers: servers)
+        let bootstrapContext = ServerHealthContext.makeContext(
+            tokenUsername: tokenData.username,
+            servers: servers,
+            settings: settings
         )
         let credentials = Credentials(username: tokenData.username, password: tokenData.password)
         let runtimeOptions = tunnelRuntimeOptions(settings: settings)
@@ -776,22 +774,7 @@ final class VPNService: ObservableObject {
         )
     }
 
-    private func configurationID(tokenUsername: String, servers: [VPNServer]) -> String {
-        let canonicalServers = servers
-            .map { "\($0.host):\($0.port):\($0.md5Fingerprint):\($0.name)" }
-            .sorted()
-            .joined(separator: "|")
-        let material = "\(tokenUsername)|\(canonicalServers)"
-        return SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
-    }
 
-    private static func makeHealthStore() -> FileBackedServerHealthStore {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let directory = base.appendingPathComponent("FptnVPN", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return FileBackedServerHealthStore(fileURL: directory.appendingPathComponent("server-health.json"))
-    }
 }
 
 extension NEVPNStatus {

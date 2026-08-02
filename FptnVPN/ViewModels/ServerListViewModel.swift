@@ -22,31 +22,72 @@ final class ServerListViewModel: ObservableObject {
     private let tokenService: TokenService
     private let scanner: SlidingWindowPingScanner
     private let latencyCache: ServerLatencyCache
+    private let healthStore: any ServerHealthStore
 
     init(
         tokenService: TokenService = .shared,
         scanner: SlidingWindowPingScanner = SlidingWindowPingScanner(),
-        latencyCache: ServerLatencyCache = .shared
+        latencyCache: ServerLatencyCache = .shared,
+        healthStore: any ServerHealthStore = ServerHealthContext.makeStore()
     ) {
         self.tokenService = tokenService
         self.scanner = scanner
         self.latencyCache = latencyCache
+        self.healthStore = healthStore
     }
 
     func loadServers() async {
         let servers = await tokenService.getServers()
-        let cached = latencyCache.latencies
+        let stored = await storedLatencies(for: servers)
         rows = ServerListRow.sorted(
-            servers.map { ServerListRow(server: $0, latency: cached[$0.id]) }
+            servers.map { ServerListRow(server: $0, latency: stored[$0.id]) }
         )
-        logger.debug("ServerListViewModel loaded \(rows.count) server rows with \(cached.count) cached latencies")
+        logger.debug("ServerListViewModel loaded \(rows.count) server rows with \(stored.count) stored latencies")
+    }
+
+    /// Baseline from the persisted health store — which the connect-time
+    /// auto-select scan writes — overlaid with any fresher handshake probes
+    /// from a pull-to-refresh on this screen.
+    ///
+    /// The two are deliberately kept apart: the health store's EWMA measures a
+    /// full bootstrap (login + DNS) and drives auto-selection, so feeding
+    /// handshake-only probe timings into it would skew server choice.
+    private func storedLatencies(for servers: [VPNServer]) async -> [String: ServerLatencyRecord] {
+        var merged = await healthLatencies(for: servers)
+        for (serverID, probed) in latencyCache.latencies {
+            merged[serverID] = probed
+        }
+        return merged
+    }
+
+    private func healthLatencies(for servers: [VPNServer]) async -> [String: ServerLatencyRecord] {
+        guard !servers.isEmpty, let token = await tokenService.getTokenData() else { return [:] }
+
+        let context = ServerHealthContext.makeContext(
+            tokenUsername: token.username,
+            servers: servers,
+            settings: SettingsService.shared
+        )
+        let keys = ServerHealthContext.keys(for: servers, context: context)
+
+        do {
+            let records = try await healthStore.load(for: keys)
+            return records.values.reduce(into: [:]) { result, record in
+                if let latency = ServerLatencyRecord(health: record) {
+                    result[record.key.serverID] = latency
+                }
+            }
+        } catch {
+            logger.warning("ServerListViewModel failed to load server health: \(error)")
+            return [:]
+        }
     }
 
     func refreshServers() async {
         isRefreshing = true
         progress = nil
         let servers = await tokenService.getServers()
-        var liveLatencies: [String: ServerLatencyRecord] = latencyCache.latencies
+        var liveLatencies = await storedLatencies(for: servers)
 
         rows = ServerListRow.sorted(
             servers.map { ServerListRow(server: $0, latency: liveLatencies[$0.id]) }
