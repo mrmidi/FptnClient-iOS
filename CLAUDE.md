@@ -130,3 +130,4 @@ When changing the native C++ API, edit the sources under `FptnLib/src/`, rebuild
 ### Notes
 
 - `FptnClient-Android/` (Android client) and `FptnLib/fptn` (native submodule) are sibling projects in this tree; the Apple app code is in the `Fptn*` directories.
+@ASC.md

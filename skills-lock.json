@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "asc-crash-triage": {
+      "source": "rorkai/app-store-connect-cli-skills",
+      "sourceType": "github",
+      "skillPath": "skills/asc-crash-triage/SKILL.md",
+      "computedHash": "626cddb06999b0251a38c7ef684732dd276ad513e9ed644759c88a86f12dffb6"
+    }
+  }
+}

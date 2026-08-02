@@ -96,3 +96,7 @@ The native library is accessed through Swift C++ interop (no Objective-C++ `.mm`
 
 - `Color.appBackground`, `Color.cian` — app color palette
 - `AppLinks.telegramBot`, `AppLinks.website` — external links
+
+## asc cli reference
+
+See `ASC.md` for the command catalog and workflows.
