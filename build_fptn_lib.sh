@@ -200,7 +200,7 @@ case "$TARGET" in
         OUTPUT_DIR="build-ios-${BUILD_TYPE}"
         DEST_DIR="${ROOT_DIR}/FptnVPN/Cpp"
         SECONDARY_DEST_DIR=""
-        MIN_PLATFORM_VERSION="17.0"
+        MIN_PLATFORM_VERSION="16.0"
         echo "Building fptn_native_lib for iOS device..."
         ;;
     ios-simulator)
@@ -208,7 +208,7 @@ case "$TARGET" in
         OUTPUT_DIR="build-simulator-${BUILD_TYPE}"
         DEST_DIR="${ROOT_DIR}/FptnVPN/Cpp"
         SECONDARY_DEST_DIR=""
-        MIN_PLATFORM_VERSION="17.0"
+        MIN_PLATFORM_VERSION="16.0"
         echo "Building fptn_native_lib for iOS simulator..."
         ;;
     tvos|tvos-device)

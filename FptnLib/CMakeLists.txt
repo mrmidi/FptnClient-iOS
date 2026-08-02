@@ -10,7 +10,11 @@ add_compile_options(-std=c++23)
 
 # Platform-specific deployment target defaults
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    set(CMAKE_OSX_DEPLOYMENT_TARGET 17.0)
+    # Let the conan profile's os.version win; only fall back if unset.
+    # Setting this unconditionally silently overrode the toolchain.
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET 16.0)
+    endif()
 elseif(APPLE)
     # Keep macOS target explicit and valid for local/App Store builds.
     if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)

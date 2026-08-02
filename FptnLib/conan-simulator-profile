@@ -6,5 +6,5 @@ compiler.cppstd=23
 compiler.libcxx=libc++
 compiler.version=21
 os=iOS
-os.version=17.0
+os.version=16.0
 os.sdk=iphonesimulator
