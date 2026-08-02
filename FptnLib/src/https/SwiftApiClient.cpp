@@ -176,6 +176,69 @@ SwiftApiClient::HandshakeResult SwiftApiClient::testHandshake(int timeout) const
     }
 }
 
+void SwiftApiClient::getAsync(
+    const std::string& path,
+    int timeout,
+    void* context,
+    ResponseCallback callback
+) const {
+    if (!callback) {
+        return;
+    }
+    if (!client_) {
+        callback(context, Response{"", -1, "client not initialized"});
+        return;
+    }
+    client_->SpawnGet(path, timeout,
+        [context, callback](fptn::protocol::https::Response resp) {
+            callback(context, Response{resp.body, resp.code, resp.errmsg});
+        });
+}
+
+void SwiftApiClient::postAsync(
+    const std::string& path,
+    const std::string& body,
+    int timeout,
+    void* context,
+    ResponseCallback callback
+) const {
+    if (!callback) {
+        return;
+    }
+    if (!client_) {
+        callback(context, Response{"", -1, "client not initialized"});
+        return;
+    }
+    client_->SpawnPost(path, body, "application/json", timeout,
+        [context, callback](fptn::protocol::https::Response resp) {
+            callback(context, Response{resp.body, resp.code, resp.errmsg});
+        });
+}
+
+void SwiftApiClient::testHandshakeAsync(
+    int timeout,
+    void* context,
+    HandshakeCallback callback
+) const {
+    if (!callback) {
+        return;
+    }
+    if (!client_) {
+        callback(context, HandshakeResult{false, -1, "client not initialized"});
+        return;
+    }
+    const auto start = std::chrono::steady_clock::now();
+    client_->SpawnTestHandshake(timeout,
+        [context, callback, start](bool reachable) {
+            const auto latency = static_cast<int>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - start).count()
+            );
+            callback(context, HandshakeResult{
+                reachable, latency, reachable ? "" : "Handshake failed"});
+        });
+}
+
 void SwiftApiClient::cancel() const {
     if (client_) {
         client_->Cancel();

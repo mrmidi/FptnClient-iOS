@@ -61,7 +61,7 @@ final class ServerListViewModel: ObservableObject {
                 censorshipStrategy: "SNI",
                 name: server.name
             )
-            let res = bridge.testHandshake(timeout: 3)
+            let res = await bridge.testHandshake(timeout: 3)
             return ServerPingResult(
                 serverID: server.id,
                 isReachable: res.reachable,

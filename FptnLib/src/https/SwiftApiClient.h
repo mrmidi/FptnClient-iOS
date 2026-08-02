@@ -48,6 +48,29 @@ public:
     Response get(const std::string& path, int timeout) const;
     Response post(const std::string& path, const std::string& body, int timeout) const;
     HandshakeResult testHandshake(int timeout) const;
+
+    // Non-blocking forms. The callback fires on one of the native I/O threads
+    // once the request finishes; `context` is passed back untouched so Swift
+    // can round-trip a boxed continuation through it.
+    //
+    // Safe to destroy this object as soon as these return: the operation keeps
+    // its own copy of the underlying client alive.
+    using ResponseCallback = void (*)(void* context, Response response);
+    using HandshakeCallback = void (*)(void* context, HandshakeResult result);
+
+    void getAsync(const std::string& path,
+                  int timeout,
+                  void* context,
+                  ResponseCallback callback) const;
+    void postAsync(const std::string& path,
+                   const std::string& body,
+                   int timeout,
+                   void* context,
+                   ResponseCallback callback) const;
+    void testHandshakeAsync(int timeout,
+                            void* context,
+                            HandshakeCallback callback) const;
+
     void cancel() const;
 
 private:

@@ -66,7 +66,7 @@ final class Prober: Sendable {
             censorshipStrategy: cfg.bypassMethod.rawValue
         )
 
-        let handshake = client.testHandshake(timeout: timeoutSeconds)
+        let handshake = await client.testHandshake(timeout: timeoutSeconds)
         guard handshake.reachable else {
             return ProbeResult(
                 sni: sni,
@@ -80,7 +80,7 @@ final class Prober: Sendable {
             )
         }
 
-        let response = client.get(path: "/api/v1/test/file.bin", timeout: timeoutSeconds)
+        let response = await client.get(path: "/api/v1/test/file.bin", timeout: timeoutSeconds)
         let duration = clock.now - start
         let elapsed = Int(
             Double(duration.components.seconds) * 1000
