@@ -263,9 +263,10 @@ struct FptnSelectorApp {
             let result = await coordinator.connect(request)
 
             switch result {
-            case .started(let episodeID):
-                print("Success: Started session with Episode ID \(episodeID.rawValue.uuidString)")
-                JSONLOutput.printRecord(command: "manual-bootstrap", data: "started: \(episodeID.rawValue.uuidString)", toFile: outputFile)
+            case .started(let episodeID, let server):
+                let via = server.map { " via \($0.name)" } ?? ""
+                print("Success: Started session with Episode ID \(episodeID.rawValue.uuidString)\(via)")
+                JSONLOutput.printRecord(command: "manual-bootstrap", data: "started: \(episodeID.rawValue.uuidString)\(via)", toFile: outputFile)
             case .failed(let error):
                 print("Failure: Connection failed with error: \(error)")
                 JSONLOutput.printRecord(command: "manual-bootstrap", data: "failed: \(error)", toFile: outputFile)
