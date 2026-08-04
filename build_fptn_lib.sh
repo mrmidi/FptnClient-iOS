@@ -79,6 +79,19 @@ case "$SOCKET_BUFFER_BYTES" in
         ;;
 esac
 
+# `set(... CACHE)` in the conan toolchain never overrides an existing cache
+# entry, so a stale CMAKE_OSX_DEPLOYMENT_TARGET (e.g. 17.0) would silently
+# win and bake the wrong minos into the binary. Wipe it on mismatch instead.
+purge_stale_cmake_cache() {
+    local build_dir="$1"
+    if [ -f "${build_dir}/CMakeCache.txt" ] &&
+       ! grep -q "CMAKE_OSX_DEPLOYMENT_TARGET:STRING=${DEPLOYMENT_TARGET}" "${build_dir}/CMakeCache.txt"; then
+        echo "Stale CMake cache (deployment target mismatch); purging ${build_dir}/CMakeCache.txt"
+        rm -f "${build_dir}/CMakeCache.txt"
+        rm -rf "${build_dir}/CMakeFiles"
+    fi
+}
+
 resolve_framework_binary() {
     local framework_path="$1"
     if [ -f "${framework_path}/Versions/1.0.0/fptn_native_lib" ]; then
@@ -201,6 +214,7 @@ case "$TARGET" in
         DEST_DIR="${ROOT_DIR}/FptnVPN/Cpp"
         SECONDARY_DEST_DIR=""
         MIN_PLATFORM_VERSION="16.0"
+        DEPLOYMENT_TARGET="16.0"
         echo "Building fptn_native_lib for iOS device..."
         ;;
     ios-simulator)
@@ -209,6 +223,7 @@ case "$TARGET" in
         DEST_DIR="${ROOT_DIR}/FptnVPN/Cpp"
         SECONDARY_DEST_DIR=""
         MIN_PLATFORM_VERSION="16.0"
+        DEPLOYMENT_TARGET="16.0"
         echo "Building fptn_native_lib for iOS simulator..."
         ;;
     tvos|tvos-device)
@@ -217,6 +232,7 @@ case "$TARGET" in
         DEST_DIR="${ROOT_DIR}/Fptn-tvOS/Cpp"
         SECONDARY_DEST_DIR="${ROOT_DIR}/Fptn-tvOS-Tunnel/Cpp"
         MIN_PLATFORM_VERSION="15.6"
+        DEPLOYMENT_TARGET="15.6"
         echo "Building fptn_native_lib for tvOS device..."
         ;;
     tvos-simulator)
@@ -225,6 +241,7 @@ case "$TARGET" in
         DEST_DIR="${ROOT_DIR}/Fptn-tvOS/Cpp"
         SECONDARY_DEST_DIR="${ROOT_DIR}/Fptn-tvOS-Tunnel/Cpp"
         MIN_PLATFORM_VERSION="15.6"
+        DEPLOYMENT_TARGET="15.6"
         echo "Building fptn_native_lib for tvOS simulator..."
         ;;
     macos)
@@ -233,6 +250,7 @@ case "$TARGET" in
         DEST_DIR="${ROOT_DIR}/Fptn-macOS/Cpp"
         SECONDARY_DEST_DIR=""
         MIN_PLATFORM_VERSION=""
+        DEPLOYMENT_TARGET="13.0"
         echo "Building fptn_native_lib for macOS (universal)..."
         ;;
     *)
@@ -298,9 +316,11 @@ if [ "$TARGET" = "macos" ]; then
     ARM64_DIR="build-macos-${BUILD_TYPE}"
     echo "Building arm64 slice (${BUILD_TYPE})..."
     conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
+    purge_stale_cmake_cache "$ARM64_DIR"
     cd "$ARM64_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+             -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
              -DCMAKE_OSX_ARCHITECTURES=arm64
     rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
     cmake --build . --config "$BUILD_TYPE"
@@ -310,9 +330,11 @@ if [ "$TARGET" = "macos" ]; then
     X86_DIR="build-macos-x86_64-${BUILD_TYPE}"
     echo "Building x86_64 slice (${BUILD_TYPE})..."
     conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
+    purge_stale_cmake_cache "$X86_DIR"
     cd "$X86_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+             -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
              -DCMAKE_OSX_ARCHITECTURES=x86_64
     rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
     cmake --build . --config "$BUILD_TYPE"
@@ -368,8 +390,10 @@ fi
 
 conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
 
+purge_stale_cmake_cache "$OUTPUT_DIR"
+
 cd "$OUTPUT_DIR"
-cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
+cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET"
 rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
 cmake --build . --config "$BUILD_TYPE"
 generate_framework_dsym "fptn_native_lib.framework"
