@@ -27,6 +27,9 @@ class FptnLib(ConanFile):
         "fptn/*:with_gui_client": False,
         # PR1A: iOS socket buffer experiment (0 = kernel default).
         "fptn/*:ios_socket_buffer_bytes": 0,
+        # PR-LW1: optional lwIP flow-proxy stack. build_fptn_lib.sh
+        # overrides this with -o "fptn/*:with_lwip=True" when enabled.
+        "fptn/*:with_lwip": False,
     }
 
     def requirements(self):

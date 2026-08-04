@@ -79,6 +79,22 @@ case "$SOCKET_BUFFER_BYTES" in
         ;;
 esac
 
+# PR-LW1: optional lwIP flow-proxy stack (Apple Network Extension builds).
+# 1 = link the pinned HEV lwIP into the framework (default), 0 = without.
+WITH_LWIP="${FPTN_WITH_LWIP:-1}"
+case "$WITH_LWIP" in
+    0|1) ;;
+    *)
+        echo "error: invalid FPTN_WITH_LWIP=$WITH_LWIP (expected 0 or 1)" >&2
+        exit 1
+        ;;
+esac
+if [ "$WITH_LWIP" = "1" ]; then
+    LWIP_OPTION="True"
+else
+    LWIP_OPTION="False"
+fi
+
 # `set(... CACHE)` in the conan toolchain never overrides an existing cache
 # entry, so a stale CMAKE_OSX_DEPLOYMENT_TARGET (e.g. 17.0) would silently
 # win and bake the wrong minos into the binary. Wipe it on mismatch instead.
@@ -297,6 +313,7 @@ if [ "${FPTN_NATIVE_BUILD_IF_MISSING:-0}" = "1" ]; then
         grep -q "\"build_hash\": \"${current_build_hash}\"" "$manifest_path" 2>/dev/null || return 1
         grep -Fq "\"compiler\": \"${current_compiler_id}\"" "$manifest_path" 2>/dev/null || return 1
         grep -q "\"ios_socket_buffer_bytes\": ${SOCKET_BUFFER_BYTES}" "$manifest_path" 2>/dev/null || return 1
+        grep -q "\"with_lwip\": ${WITH_LWIP}" "$manifest_path" 2>/dev/null || return 1
         return 0
     }
 
@@ -315,7 +332,7 @@ if [ "$TARGET" = "macos" ]; then
     # ── arm64 slice ──────────────────────────────────────────────────────────
     ARM64_DIR="build-macos-${BUILD_TYPE}"
     echo "Building arm64 slice (${BUILD_TYPE})..."
-    conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
+    conan install . --profile:host="conan-macos-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$ARM64_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}" -o "fptn/*:with_lwip=${LWIP_OPTION}"
     purge_stale_cmake_cache "$ARM64_DIR"
     cd "$ARM64_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
@@ -329,7 +346,7 @@ if [ "$TARGET" = "macos" ]; then
     # ── x86_64 slice ─────────────────────────────────────────────────────────
     X86_DIR="build-macos-x86_64-${BUILD_TYPE}"
     echo "Building x86_64 slice (${BUILD_TYPE})..."
-    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
+    conan install . --profile:host="conan-macos-x86_64-profile" --profile:build=conan-macos-profile --build=missing --output-folder="$X86_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}" -o "fptn/*:with_lwip=${LWIP_OPTION}"
     purge_stale_cmake_cache "$X86_DIR"
     cd "$X86_DIR"
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
@@ -388,7 +405,7 @@ if [ "$TARGET" = "macos" ]; then
     exit 0
 fi
 
-conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}"
+conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profile --build=missing --output-folder="$OUTPUT_DIR" -s build_type="$BUILD_TYPE" -o "fptn/*:ios_socket_buffer_bytes=${SOCKET_BUFFER_BYTES}" -o "fptn/*:with_lwip=${LWIP_OPTION}"
 
 purge_stale_cmake_cache "$OUTPUT_DIR"
 
@@ -445,6 +462,7 @@ copy_framework_to_dest() {
   "build_hash": "${build_hash}",
   "compiler": "${compiler_id}",
   "ios_socket_buffer_bytes": ${SOCKET_BUFFER_BYTES},
+  "with_lwip": ${WITH_LWIP},
   "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 MANIFEST
