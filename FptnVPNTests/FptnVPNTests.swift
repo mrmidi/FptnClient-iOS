@@ -592,6 +592,16 @@ struct FptnVPNTests {
         #expect(TelemetryFormat.bitrate(nil) == TelemetryFormat.unavailable)
     }
 
+    @Test func flowDataPlaneModeSelectionAndCapabilities() throws {
+        let legacyOptions = TunnelRuntimeOptions()
+        #expect(legacyOptions.dataPlaneMode == .l3Tunnel)
+
+        let flowOptions = TunnelRuntimeOptions(dataPlaneMode: .flowProxy)
+        #expect(flowOptions.dataPlaneMode == .flowProxy)
+
+        #expect(FPTNTunnelBridge.isFlowSupported())
+    }
+
     private func temporaryDiagnosticsDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("FptnVPNTests-\(UUID().uuidString)", isDirectory: true)

@@ -227,6 +227,26 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Color.appSurface)
 
+                // MARK: Developer
+
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { viewModel.flowDataPlaneEnabled },
+                        set: { viewModel.saveFlowDataPlaneEnabled($0) }
+                    )) {
+                        Text("Flow Data Plane (lwIP)")
+                            .foregroundStyle(Color.appPrimaryText)
+                    }
+                    .tint(Color.appAccent)
+                } header: {
+                    Text("Developer")
+                        .foregroundStyle(Color.appAccent)
+                } footer: {
+                    Text("Experimental lwIP flow proxy data plane mode.")
+                        .foregroundStyle(Color.appSecondaryText)
+                }
+                .listRowBackground(Color.appSurface)
+
                 // MARK: Account
 
                 Section {

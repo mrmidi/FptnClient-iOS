@@ -8,11 +8,16 @@ import Foundation
 import Darwin
 import Network
 import NetworkExtension
+import os.log
 import FptnSharedCore
 import FptnSharedTunnel
 #if FPTN_SIGNPOSTS
-import OSLog
+import os.signpost
 #endif
+
+extension NEPacketTunnelFlow: FPTNPacketFlowIO {}
+extension FPTNTunnelBridge: @unchecked Sendable {}
+extension FPTNApplePacketFlowAdapter: @unchecked Sendable {}
 
 private enum TunnelRuntimeState: String, Codable {
     case idle
@@ -127,6 +132,7 @@ private struct TunnelConfiguration {
     let sni: String
     let md5Fingerprint: String
     let logLevel: String
+    let dataPlaneMode: TunnelDataPlaneMode
     let websocketStrategy: String
     let websocketIdleTimeoutSeconds: Int
     let reconnectEnabled: Bool
@@ -136,12 +142,23 @@ private struct TunnelConfiguration {
     let tunIPv4Gateway: String
     let tunIPv6: String
 
-    init?(providerConfiguration: [String: Any]) {
-        guard let payloadData = providerConfiguration[TunnelProviderConfigurationKey.startupV1] as? Data,
-           payloadData.count <= TunnelStartupConfigurationV1.maximumEncodedSize,
-              let startupV1 = try? JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: payloadData) else {
-            return nil
+    init(providerConfiguration: [String: Any]) throws {
+        guard let payloadData = providerConfiguration[TunnelProviderConfigurationKey.startupV1] as? Data else {
+            throw TunnelConfigError.missingData
         }
+        guard payloadData.count <= TunnelStartupConfigurationV1.maximumEncodedSize else {
+            throw TunnelConfigError.payloadTooLarge
+        }
+        let startupV1: TunnelStartupConfigurationV1
+        do {
+            startupV1 = try JSONDecoder().decode(TunnelStartupConfigurationV1.self, from: payloadData)
+        } catch let payloadError as TunnelStartupPayloadError {
+            if case .unsupportedDataPlaneMode(let rawValue) = payloadError {
+                throw TunnelConfigError.unsupportedDataPlaneMode(rawValue: rawValue, schemaVersion: 1)
+            }
+            throw payloadError
+        }
+        self.dataPlaneMode = startupV1.dataPlaneMode
         self.episodeID = startupV1.episodeID
         self.serverIP = startupV1.serverHost
         self.serverPort = startupV1.serverPort
@@ -168,6 +185,12 @@ private struct TunnelConfiguration {
         self.tunIPv6 = "fd00::1"
         self.websocketStrategy = "\(startupV1.censorshipStrategy.rawValue);idle_timeout=\(startupV1.websocketIdleTimeoutSeconds);tun_ipv6=\(self.tunIPv6)"
     }
+}
+
+private enum TunnelConfigError: Error {
+    case missingData
+    case payloadTooLarge
+    case unsupportedDataPlaneMode(rawValue: String, schemaVersion: Int)
 }
 
 private struct PacketCounters {
@@ -240,6 +263,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     #endif
 
     private var wsClient: WebsocketClientBridge?
+    private var flowBridge: FPTNTunnelBridge?
+    private var flowAdapter: FPTNApplePacketFlowAdapter?
     private var configuration: TunnelConfiguration?
     private var assignedIPv4: String?
     private var assignedIPv6: String?
@@ -376,9 +401,30 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         recordProviderEvent(category: "lifecycle", message: "startTunnel", flightEvent: .startTunnel)
         _ = options
 
-        guard let config = protocolConfiguration as? NETunnelProviderProtocol,
-              let providerConfig = config.providerConfiguration,
-              let runtimeConfig = TunnelConfiguration(providerConfiguration: providerConfig) else {
+        let runtimeConfig: TunnelConfiguration
+        if let config = protocolConfiguration as? NETunnelProviderProtocol,
+           let providerConfig = config.providerConfiguration {
+            do {
+                runtimeConfig = try TunnelConfiguration(providerConfiguration: providerConfig)
+            } catch TunnelConfigError.unsupportedDataPlaneMode(let rawValue, let schemaVersion) {
+                recordProviderEvent(category: "error", message: "unsupportedDataPlaneMode rawValue=\(rawValue) schemaVersion=\(schemaVersion)", flightEvent: .unsupportedDataPlaneMode)
+                let err = makeError("Unsupported data plane mode '\(rawValue)' (schema version \(schemaVersion))")
+                logger.error("startTunnel failed: \(err.localizedDescription)")
+                #if FPTN_SIGNPOSTS
+                endStartupSignpost()
+                #endif
+                completionHandler(err)
+                return
+            } catch {
+                let err = makeError("Missing or incomplete providerConfiguration: \(error)")
+                logger.error("startTunnel failed: \(err.localizedDescription)")
+                #if FPTN_SIGNPOSTS
+                endStartupSignpost()
+                #endif
+                completionHandler(err)
+                return
+            }
+        } else {
             let err = makeError("Missing or incomplete providerConfiguration")
             logger.error("startTunnel failed: \(err.localizedDescription)")
             #if FPTN_SIGNPOSTS
@@ -396,7 +442,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         setTunnelLogLevel(rawValue: runtimeConfig.logLevel)
-        logger.info("Tunnel started (level=\(runtimeConfig.logLevel))")
+        logger.info("Tunnel started (level=\(runtimeConfig.logLevel), mode=\(runtimeConfig.dataPlaneMode.rawValue))")
         logger.info(
             "Tunnel websocket settings idle_timeout=\(runtimeConfig.websocketIdleTimeoutSeconds)s reconnect_enabled=\(runtimeConfig.reconnectEnabled) max_attempts=\(runtimeConfig.maxReconnectAttempts == 0 ? "infinite" : String(runtimeConfig.maxReconnectAttempts)) delay=\(runtimeConfig.reconnectDelaySeconds)s"
         )
@@ -408,15 +454,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         localStopInitiator = nil
         shutdownRequested = false
         isNetworkPathSatisfied = true
-        // PR2: increment session token. Generation resets but session
-        // is process-lifetime unique, preventing cross-session collisions.
         tunnelSession &+= 1
         websocketGeneration = 0
         didApplyNetworkSettings = false
         isReadLoopActive = false
-        // PR2: do NOT reset isPacketReadPending here. An outstanding
-        // readPackets callback from the old session still exists.
-        // Only the owning callback may clear it via token check.
         reconnectAttempt = 0
         lastTransportError = nil
         lastStopReason = nil
@@ -433,7 +474,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         assignedIPv6 = nil
         appliedIPv4 = nil
         appliedIPv6 = nil
-        // PR2: reset per-session state.
         loggedInvariantViolations.removeAll()
         lastNativeStatus = nil
         lastNativeStatusGeneration = nil
@@ -443,7 +483,60 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         updateDiagnosticsHeartbeat(lastEvent: "startTunnel")
         startPathMonitor()
         scheduleStartTimeout(seconds: 15)
-        startWebSocket(using: runtimeConfig, context: "initial_start")
+
+        switch runtimeConfig.dataPlaneMode {
+        case .l3Tunnel:
+            startWebSocket(using: runtimeConfig, context: "initial_start")
+        case .flowProxy:
+            guard FPTNTunnelBridge.isFlowSupported() else {
+                let err = makeError("FlowProxy data plane is not supported in this build")
+                logger.error("startTunnel failed: \(err.localizedDescription)")
+                finishStart(with: err)
+                return
+            }
+
+            if let custom = runtimeConfig.customDnsIPv4, !custom.isEmpty {
+                // explicit custom DNS configured
+            } else {
+                let serverDns = runtimeConfig.dnsIPv4
+                if serverDns.hasPrefix("10.8.0.") || serverDns.hasPrefix("127.") || serverDns.hasPrefix("169.254.") || serverDns.hasPrefix("192.168.") || serverDns.hasPrefix("10.") {
+                    let err = makeError("Server DNS '\(serverDns)' is in internal/tunnel space; explicit custom DNS required")
+                    logger.error("startTunnel failed: \(err.localizedDescription)")
+                    finishStart(with: err)
+                    return
+                }
+            }
+
+            let bridge = FPTNTunnelBridge(tunIPv4: runtimeConfig.tunIPv4, tunIPv6: runtimeConfig.tunIPv6, mtu: 1400)
+            let adapter = FPTNApplePacketFlowAdapter(packetFlow: packetFlow, consumer: bridge)
+            bridge.setEgressAdapter(adapter)
+
+            do {
+                try bridge.start()
+            } catch {
+                let err = makeError("Failed to start FlowProxy bridge: \(error.localizedDescription)")
+                logger.error("startTunnel failed: \(err.localizedDescription)")
+                finishStart(with: err)
+                return
+            }
+
+            adapter.start()
+
+            self.flowBridge = bridge
+            self.flowAdapter = adapter
+
+            applyNetworkSettings(configuration: runtimeConfig) { [weak self] err in
+                guard let self else { return }
+                if let err {
+                    bridge.stop()
+                    adapter.stop()
+                    self.finishStart(with: err)
+                } else {
+                    self.updateRuntimeState(.connected, reason: "flowProxy started")
+                    self.finishStart(with: nil)
+                }
+            }
+        }
     }
 
     override func stopTunnel(
@@ -494,6 +587,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stopPathMonitor()
         stopTelemetry()
         finishStart(with: makeError("Tunnel stopped before startup completed"))
+
+        if let adapter = flowAdapter {
+            flowAdapter = nil
+            adapter.stop()
+        }
+        if let bridge = flowBridge {
+            flowBridge = nil
+            bridge.stop()
+        }
+
         replaceWebSocketClient(with: nil, stopCurrent: true)
         // Final synchronized write, after the last generation's exact upload
         // total has been finalized above — without this, the persisted

@@ -20,6 +20,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var routePushThroughTunnel: Bool
     @Published var customDnsEnabled: Bool
     @Published var customDnsIPv4: String
+    @Published var flowDataPlaneEnabled: Bool
 
     var onLogout: (() -> Void)?
 
@@ -45,6 +46,7 @@ final class SettingsViewModel: ObservableObject {
         self.routePushThroughTunnel = settingsService.routePushThroughTunnel
         self.customDnsEnabled = settingsService.customDnsEnabled
         self.customDnsIPv4 = settingsService.customDnsIPv4
+        self.flowDataPlaneEnabled = settingsService.flowDataPlaneEnabled
     }
 
     func saveSni() {
@@ -109,6 +111,11 @@ final class SettingsViewModel: ObservableObject {
     func saveCustomDnsIPv4(_ value: String) {
         customDnsIPv4 = value
         Task { await settingsService.setCustomDnsIPv4(value) }
+    }
+
+    func saveFlowDataPlaneEnabled(_ value: Bool) {
+        flowDataPlaneEnabled = value
+        Task { await settingsService.setFlowDataPlaneEnabled(value) }
     }
 
     func logout() {

@@ -770,7 +770,8 @@ final class VPNService: ObservableObject {
             websocketIdleTimeoutSeconds: settings.websocketIdleTimeoutSeconds,
             customDnsIPv4: settings.customDnsEnabled ? settings.customDnsIPv4 : nil,
             perAppMode: perAppMode,
-            allowedBundleIDs: AppFilterService.shared.selectedBundleIDs
+            allowedBundleIDs: AppFilterService.shared.selectedBundleIDs,
+            dataPlaneMode: settings.flowDataPlaneEnabled ? .flowProxy : .l3Tunnel
         )
     }
 

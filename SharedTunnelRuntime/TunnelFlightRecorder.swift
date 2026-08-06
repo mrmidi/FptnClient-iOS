@@ -49,6 +49,7 @@ enum TunnelFlightEventCode: UInt16, Sendable {
     case queueHighWater = 22
     case invariantViolation = 23
     case snapshotWriteFailed = 24
+    case unsupportedDataPlaneMode = 25
 }
 
 // PR3: RAII Swift wrapper over the C flight recorder.

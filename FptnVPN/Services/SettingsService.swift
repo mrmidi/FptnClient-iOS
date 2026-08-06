@@ -21,6 +21,7 @@ actor SettingsService {
     private static let routePushThroughTunnelKey = "fptn.settings.routePushThroughTunnel"
     private static let customDnsEnabledKey  = "fptn.settings.customDnsEnabled"
     private static let customDnsIPv4Key     = "fptn.settings.customDnsIPv4"
+    private static let flowDataPlaneEnabledKey = "fptn.settings.flowDataPlaneEnabled"
 
     // MARK: - Nonisolated reads (UserDefaults is thread-safe)
 
@@ -90,6 +91,10 @@ actor SettingsService {
         UserDefaults.standard.string(forKey: Self.customDnsIPv4Key) ?? ""
     }
 
+    nonisolated var flowDataPlaneEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.flowDataPlaneEnabledKey)
+    }
+
     // MARK: - Setters
 
     func setSni(_ value: String) {
@@ -142,6 +147,10 @@ actor SettingsService {
 
     func setCustomDnsIPv4(_ value: String) {
         UserDefaults.standard.set(value, forKey: Self.customDnsIPv4Key)
+    }
+
+    func setFlowDataPlaneEnabled(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: Self.flowDataPlaneEnabledKey)
     }
 
     // MARK: - SNI sanitization

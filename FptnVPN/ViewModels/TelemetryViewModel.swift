@@ -478,6 +478,8 @@ final class TelemetryViewModel: ObservableObject {
             return TelemetryEvent(timestamp: timestamp, message: "Outbound queue high-water", kind: .warning)
         case .invariantViolation:
             return TelemetryEvent(timestamp: timestamp, message: "Internal invariant violation", kind: .error)
+        case .unsupportedDataPlaneMode:
+            return TelemetryEvent(timestamp: timestamp, message: "Unsupported data plane mode", kind: .error)
         }
     }
 

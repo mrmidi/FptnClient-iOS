@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(fptn_native_lib VERSION 1.0.0 LANGUAGES CXX C)
+project(fptn_native_lib VERSION 1.0.0 LANGUAGES CXX C OBJCXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -64,9 +64,12 @@ include_directories(fptn/src/fptn-protocol-lib)
 add_library(fptn_native_lib SHARED
     src/https/SwiftApiClient.cpp src/https/SwiftApiClient.h
     src/websocket/WrapperWebsocketClientBridge.cpp src/websocket/WrapperWebsocketClientBridge.h
+    src/apple/FPTNApplePacketFlowAdapter.h src/apple/FPTNApplePacketFlowAdapter.mm
+    src/apple/FPTNTunnelBridge.h src/apple/FPTNTunnelBridge.mm
 )
 
 target_compile_features(fptn_native_lib PRIVATE cxx_std_23)
+target_compile_options(fptn_native_lib PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
 target_compile_definitions(fptn_native_lib PRIVATE
     BOOST_ASIO_HAS_CO_AWAIT
     BOOST_ASIO_HAS_CO_SPAWN
@@ -78,6 +81,7 @@ target_compile_definitions(fptn_native_lib PRIVATE
 # OpenSSL::Crypto already resolve to BoringSSL via Conan).
 target_link_libraries(fptn_native_lib PRIVATE
     "-framework Foundation"
+    "-framework NetworkExtension"
     fptn::fptn
     OpenSSL::SSL
     OpenSSL::Crypto
@@ -100,7 +104,7 @@ set_target_properties(fptn_native_lib PROPERTIES
     FRAMEWORK_VERSION ${PROJECT_VERSION}
     VERSION ${PROJECT_VERSION}
     PUBLIC_HEADER "${ALL_HEADERS}"
-    XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC NO
+    XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
     CXX_VISIBILITY_PRESET default
     VISIBILITY_INLINES_HIDDEN OFF
     MACOSX_FRAMEWORK_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"

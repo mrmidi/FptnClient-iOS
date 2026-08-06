@@ -24,38 +24,6 @@
     "%@" : {
 
     },
-    "Best: %@ (%lld ms)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Best: %1$@ (%2$lld ms)"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Лучший: %1$@ (%2$lld мс)"
-          }
-        }
-      }
-    },
-    "Scanning servers: %lld / %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Scanning servers: %1$lld / %2$lld"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Сканирование серверов: %1$lld / %2$lld"
-          }
-        }
-      }
-    },
     "%@ · %@ · %@" : {
       "localizations" : {
         "en" : {
@@ -366,6 +334,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Лучший"
+          }
+        }
+      }
+    },
+    "Best: %@ (%lld ms)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Best: %1$@ (%2$lld ms)"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лучший: %1$@ (%2$lld мс)"
           }
         }
       }
@@ -750,6 +734,9 @@
         }
       }
     },
+    "Developer" : {
+
+    },
     "Disconnected" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -869,6 +856,9 @@
         }
       }
     },
+    "Experimental lwIP flow proxy data plane mode." : {
+
+    },
     "Failed to decompress token — make sure you have the latest token from @fptn_bot" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -902,6 +892,9 @@
           }
         }
       }
+    },
+    "Flow Data Plane (lwIP)" : {
+
     },
     "Follow" : {
       "extractionState" : "manual",
@@ -1672,6 +1665,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Переподключение происходит внутри расширения туннеля. Автопереподключение управляет бюджетом попыток и задержкой, а таймаут бездействия — как быстро WebSocket считается мёртвым."
+          }
+        }
+      }
+    },
+    "Scanning servers: %lld / %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scanning servers: %1$lld / %2$lld"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сканирование серверов: %1$lld / %2$lld"
           }
         }
       }

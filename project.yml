@@ -47,7 +47,7 @@ configs:
 packages:
   FptnShared:
     url: https://github.com/mrmidi/FptnShared.git
-    exactVersion: 0.7.3
+    exactVersion: 0.8.0
   FptnNativeBootstrap:
     path: Packages/FptnNativeBootstrap
   swift-log:
@@ -122,6 +122,7 @@ targets:
     scheme:
       testTargets:
         - FptnVPNTests
+        - FptnAppleBridgeTests
     sources:
       - path: FptnVPN
         excludes:
@@ -439,6 +440,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FptnVPN
+      - framework: FptnVPN/Cpp/fptn_native_lib.framework
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
@@ -462,3 +464,19 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Fptn-macOS
+
+  FptnAppleBridgeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - FptnAppleBridgeTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnAppleBridgeTests
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework/Headers $(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework/Headers/fptn/src $(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework/Headers/src
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_OBJC_BRIDGING_HEADER: FptnAppleBridgeTests/FptnAppleBridgeTests-Bridging-Header.h
+    dependencies:
+      - framework: FptnVPN/Cpp/fptn_native_lib.framework
+
