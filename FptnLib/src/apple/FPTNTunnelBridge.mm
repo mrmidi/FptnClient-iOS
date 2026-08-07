@@ -35,14 +35,14 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
         __weak __typeof__(self) weakSelf = self;
         fptn::tunnel::TunnelCallbacks callbacks;
-        callbacks.on_owned_packet_batch = [weakSelf](fptn::tunnel::OwnedPacketBatch batch) {
+        callbacks.on_owned_packet_batch = [weakSelf](fptn::tunnel::OwnedPacketBatchView batch) {
             __typeof__(self) strongSelf = weakSelf;
             if (!strongSelf) {
                 return;
             }
             FPTNApplePacketFlowAdapter *adapter = strongSelf->_egressAdapter;
             if (adapter) {
-                [adapter sendEgressBatch:std::move(batch)];
+                [adapter sendEgressBatch:batch];
             }
         };
 
@@ -89,6 +89,34 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
     return _engine != nullptr && _engine->IsStarted();
 }
 
+- (FPTNFlowCounters)flowCounters {
+    FPTNFlowCounters out = {};
+    if (!_engine) {
+        return out;
+    }
+    const fptn::tunnel::FlowCounters c = _engine->Counters();
+    out.inputPackets = c.input_packets;
+    out.inputBytes = c.input_bytes;
+    out.ingressZeroCopyPackets = c.ingress_zero_copy_packets;
+    out.ingressCopyPackets = c.ingress_copy_packets;
+    out.leasePoolExhaustions = c.lease_pool_exhaustions;
+    out.droppedPackets = c.dropped_packets;
+    out.activeTcpFlows = c.active_tcp_flows;
+    out.peakTcpFlows = c.peak_tcp_flows;
+    out.activeUdpFlows = c.active_udp_flows;
+    out.peakUdpFlows = c.peak_udp_flows;
+    out.tcpBackpressureEvents = c.tcp_backpressure_events;
+    out.tcpResets = c.tcp_resets;
+    out.udpDrops = c.udp_drops;
+    out.tcpOutboundActive = c.tcp_outbound_active;
+    out.tcpOutboundOpenedTotal = c.tcp_outbound_opened_total;
+    out.udpOutboundActive = c.udp_outbound_active;
+    out.outputPackets = c.output_packets;
+    out.outputBytes = c.output_bytes;
+    out.egressBatches = c.egress_batches;
+    return out;
+}
+
 - (FPTNPacketInputResult)consumePackets:(const FPTNPacketDescriptor *)packets count:(NSUInteger)count {
     if (!_engine || count == 0) {
         return FPTNPacketInputResultInvalidPacket;
@@ -100,8 +128,10 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
             .bytes = packets[i].bytes,
             .length = packets[i].length,
             .ip_version = packets[i].ipVersion,
-            .owner = nullptr,
-            .release = nullptr
+            // Carries the retained NSData through to the engine, which
+            // releases it once the bytes are no longer referenced by a pbuf.
+            .owner = packets[i].owner,
+            .release = &fptn_release_ingress_packet
         });
     }
     fptn::tunnel::PacketBatchView view(leases.data(), count);

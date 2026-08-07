@@ -16,6 +16,13 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept {
     }
 }
 
+void fptn_release_ingress_packet(void * _Nullable owner) noexcept {
+    // Balances the CFBridgingRetain taken when the descriptor was built.
+    if (owner != nullptr) {
+        CFRelease(static_cast<CFTypeRef>(owner));
+    }
+}
+
 @interface FPTNReadGenerationToken : NSObject
 @property (nonatomic, readonly) uint64_t generation;
 - (instancetype)initWithGeneration:(uint64_t)generation;
@@ -44,6 +51,7 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept {
     std::atomic<uint64_t> _totalWritePackets;
     std::atomic<uint64_t> _totalWriteBytes;
     std::atomic<uint64_t> _staleReadCallbacks;
+    std::atomic<uint64_t> _writeFailures;
 }
 @end
 
@@ -72,6 +80,7 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept {
         _totalWritePackets.store(0);
         _totalWriteBytes.store(0);
         _staleReadCallbacks.store(0);
+        _writeFailures.store(0);
     }
     return self;
 }
@@ -130,7 +139,11 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept {
                     descriptors[i] = FPTNPacketDescriptor{
                         .bytes = (const uint8_t *)data.bytes,
                         .length = (uint32_t)data.length,
-                        .ipVersion = ipVer
+                        .ipVersion = ipVer,
+                        // NE owns these NSData only for the duration of this
+                        // block; the engine reads them later on its runtime
+                        // thread, so each one is retained for the engine.
+                        .owner = (void *)CFBridgingRetain(data)
                     };
                     batchBytes += data.length;
                 }
@@ -138,6 +151,12 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept {
                 if (result == FPTNPacketInputResultAccepted) {
                     strongSelf->_totalReadPackets.fetch_add(count, std::memory_order_relaxed);
                     strongSelf->_totalReadBytes.fetch_add(batchBytes, std::memory_order_relaxed);
+                } else {
+                    // Not accepted: ownership never transferred, so the batch
+                    // is ours to release.
+                    for (const auto &descriptor : descriptors) {
+                        fptn_release_ingress_packet(descriptor.owner);
+                    }
                 }
             }
         }
@@ -149,30 +168,48 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept {
     }];
 }
 
-- (void)sendEgressBatch:(fptn::tunnel::OwnedPacketBatch)batch {
+- (void)sendEgressBatch:(fptn::tunnel::OwnedPacketBatchView)batch {
     if (batch.empty()) {
         return;
     }
-    NSUInteger count = batch.size();
-    NSMutableArray<NSData *> *packetsArray = [NSMutableArray arrayWithCapacity:count];
-    NSMutableArray<NSNumber *> *protocolsArray = [NSMutableArray arrayWithCapacity:count];
-    uint64_t batchBytes = 0;
+    // Runs on the engine's executor thread, which is a plain std::thread with
+    // no run loop and therefore no ambient autorelease pool. Anything the
+    // Foundation/NetworkExtension code below autoreleases would otherwise
+    // accumulate for the lifetime of the tunnel, and each pooled array pins
+    // every packet buffer it holds.
+    @autoreleasepool {
+        const NSUInteger count = batch.size();
+        // alloc/init rather than the +arrayWith… convenience constructors:
+        // ARC owns these outright and releases them at scope exit without
+        // involving the autorelease pool at all.
+        NSMutableArray<NSData *> *packetsArray =
+            [[NSMutableArray alloc] initWithCapacity:count];
+        NSMutableArray<NSNumber *> *protocolsArray =
+            [[NSMutableArray alloc] initWithCapacity:count];
+        uint64_t batchBytes = 0;
 
-    for (auto &pkt : batch) {
-        uint32_t len = static_cast<uint32_t>(pkt.data.size());
-        batchBytes += len;
-        auto *heapBuffer = new fptn::tunnel::OwnedBuffer(std::move(pkt.data));
-        dispatch_data_t ddata = dispatch_data_create(heapBuffer->data(), len, NULL, ^{
-            fptn_release_native_packet(heapBuffer);
-        });
-        NSData *nsData = (NSData *)ddata;
-        [packetsArray addObject:nsData];
-        [protocolsArray addObject:(pkt.ip_version == 6 ? _v6ProtocolNumber : _v4ProtocolNumber)];
+        for (auto &pkt : batch) {
+            const NSUInteger len = pkt.data.size();
+            batchBytes += len;
+            // Copy straight into the NSData. The previous heap OwnedBuffer +
+            // dispatch_data_create + destructor block cost three extra
+            // allocations per packet and, because dispatch_data_create with a
+            // null queue submits its destructor to the default target queue,
+            // deferred every free onto GCD — where it could lag arbitrarily
+            // behind production under load. ARC frees this deterministically
+            // when NE and this array both let go.
+            [packetsArray addObject:[[NSData alloc] initWithBytes:pkt.data.data()
+                                                           length:len]];
+            [protocolsArray addObject:(pkt.ip_version == 6 ? _v6ProtocolNumber
+                                                           : _v4ProtocolNumber)];
+        }
+
+        _totalWritePackets.fetch_add(count, std::memory_order_relaxed);
+        _totalWriteBytes.fetch_add(batchBytes, std::memory_order_relaxed);
+        if (![_packetFlow writePackets:packetsArray withProtocols:protocolsArray]) {
+            _writeFailures.fetch_add(1, std::memory_order_relaxed);
+        }
     }
-
-    _totalWritePackets.fetch_add(count, std::memory_order_relaxed);
-    _totalWriteBytes.fetch_add(batchBytes, std::memory_order_relaxed);
-    [_packetFlow writePackets:packetsArray withProtocols:protocolsArray];
 }
 
 - (uint64_t)totalReadPackets { return _totalReadPackets.load(); }
@@ -180,5 +217,6 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept {
 - (uint64_t)totalWritePackets { return _totalWritePackets.load(); }
 - (uint64_t)totalWriteBytes { return _totalWriteBytes.load(); }
 - (uint64_t)staleReadCallbacks { return _staleReadCallbacks.load(); }
+- (uint64_t)writeFailures { return _writeFailures.load(); }
 
 @end

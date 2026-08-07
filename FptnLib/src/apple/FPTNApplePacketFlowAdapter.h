@@ -8,6 +8,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 #ifdef __cplusplus
 #include <cstdint>
+#include <span>
 #include <vector>
 
 #ifndef FPTN_OWNED_PACKET_DEFINED
@@ -18,23 +19,34 @@ struct OwnedPacket {
     std::uint8_t ip_version = 0;
 };
 using OwnedPacketBatch = std::vector<OwnedPacket>;
+using OwnedPacketBatchView = std::span<const OwnedPacket>;
 }
 #endif
 #endif
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Mirrors fptn::tunnel::PacketInputResult; the values must stay in the same
+/// order because FPTNTunnelBridge casts between them.
 typedef NS_ENUM(NSInteger, FPTNPacketInputResult) {
     FPTNPacketInputResultAccepted = 0,
-    FPTNPacketInputResultInvalidPacket = 1,
-    FPTNPacketInputResultQueueFull = 2,
-    FPTNPacketInputResultTransportStopped = 3,
+    FPTNPacketInputResultQueueFull = 1,
+    FPTNPacketInputResultTransportStopped = 2,
+    FPTNPacketInputResultInvalidPacket = 3,
 };
 
 typedef struct {
     const uint8_t * _Nullable bytes;
     uint32_t length;
     uint8_t ipVersion;
+    /// Retained backing object keeping `bytes` alive, released with
+    /// fptn_release_ingress_packet(). The engine ingests asynchronously on its
+    /// own runtime thread and may hold the bytes in a PBUF_REF well past the
+    /// producing call, so a borrowed pointer alone is not enough. The consumer
+    /// takes ownership on FPTNPacketInputResultAccepted and releases each
+    /// owner exactly once; on any other result ownership stays with the
+    /// producer.
+    void * _Nullable owner;
 } FPTNPacketDescriptor;
 
 @protocol FPTNPacketBatchConsumer <NSObject>
@@ -50,6 +62,9 @@ typedef struct {
 extern "C" {
 #endif
 void fptn_release_native_packet(void * _Nullable owner) noexcept;
+/// Releases an FPTNPacketDescriptor.owner. Signature matches
+/// fptn::tunnel::PacketLease::release so it can be installed directly.
+void fptn_release_ingress_packet(void * _Nullable owner) noexcept;
 #ifdef __cplusplus
 }
 #endif
@@ -65,7 +80,7 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept;
 - (void)stop;
 
 #ifdef __cplusplus
-- (void)sendEgressBatch:(fptn::tunnel::OwnedPacketBatch)batch;
+- (void)sendEgressBatch:(fptn::tunnel::OwnedPacketBatchView)batch;
 #endif
 
 @property (nonatomic, readonly) uint64_t totalReadPackets;
@@ -73,6 +88,9 @@ void fptn_release_native_packet(void * _Nullable owner) noexcept;
 @property (nonatomic, readonly) uint64_t totalWritePackets;
 @property (nonatomic, readonly) uint64_t totalWriteBytes;
 @property (nonatomic, readonly) uint64_t staleReadCallbacks;
+/// Count of -writePackets:withProtocols: calls that returned NO. The result
+/// was previously discarded, so write failures were invisible.
+@property (nonatomic, readonly) uint64_t writeFailures;
 
 @end
 
