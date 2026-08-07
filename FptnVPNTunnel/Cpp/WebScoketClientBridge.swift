@@ -193,6 +193,17 @@ final class WebsocketClientBridge {
         clientBridge.isStarted()
     }
 
+    /// Opaque handle for `FPTNTunnelBridge.setSplitTransport(_:)`, so the split
+    /// data plane can send `fptn`-verdict packets through this bridge rather
+    /// than opening a second websocket of its own.
+    ///
+    /// Only valid while this object is alive: the provider builds a new bridge
+    /// per reconnect generation, so it must clear the handle before releasing
+    /// the old one.
+    var splitTransportHandle: UnsafeMutableRawPointer? {
+        UnsafeMutableRawPointer(bitPattern: UInt(clientBridge.splitTransportHandle()))
+    }
+
     var status: WebsocketClientStatus {
         let raw = clientBridge.getStatus()
         return WebsocketClientStatus(

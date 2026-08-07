@@ -544,6 +544,10 @@ bool WebsocketSwiftBridge::stop(std::uint16_t origin) {
 
 // PR1B: returns typed send result as uint8_t.
 // 0=accepted, 1=queue_full, 2=transport_stopped, 3=invalid_packet.
+std::uintptr_t WebsocketSwiftBridge::splitTransportHandle() {
+    return reinterpret_cast<std::uintptr_t>(this);
+}
+
 std::shared_ptr<fptn::protocol::https::WebsocketClient>
 WebsocketSwiftBridge::splitRoutingTransport() const {
     if (!wrapper_) {

@@ -123,6 +123,16 @@ public:
     WebsocketClientBridgeStatus getStatus() const;
     void registerIPAssignedCallback(IPAssignedCallback callback);
 
+    /// Opaque handle identifying this bridge, to hand to
+    /// -[FPTNTunnelBridge setSplitTransport:]. The tunnel bridge casts it back
+    /// and resolves the live transport through it on each batch, so the
+    /// provider can swap generations without the split plane noticing.
+    ///
+    /// An integer rather than void*: Swift's C++ interop does not import
+    /// raw-pointer-returning members of this class, and the value is only ever
+    /// passed straight back across the bridge.
+    std::uintptr_t splitTransportHandle();
+
 #if !defined(__swift__)
     // Split routing only, and deliberately invisible to Swift: hands the live
     // transport to the split data plane so `fptn`-verdict packets ride the
