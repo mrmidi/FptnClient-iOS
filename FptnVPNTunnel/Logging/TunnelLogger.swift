@@ -150,11 +150,14 @@ struct TunnelLogHandler: Logging.LogHandler {
         os_log("%{public}@", log: osLog, type: osType, text)
 
         // PR-1 (Measurement Safety): the 1 MiB in-memory ring buffer and its
-        // 512 KiB file sink are compiled out of Release builds. Release
-        // builds do not retain provider text in the application-owned ring
-        // or shared log file; sparse messages continue through os_log.
-        // Debug/internal builds retain the ring for developer diagnostics.
-        #if DEBUG
+        // 512 KiB file sink are compiled out of measurement builds so no
+        // provider text is retained during memory profiling; sparse messages
+        // continue through os_log. Every other build keeps the ring so the
+        // app's Logs screen has a tunnel source to read — this was `#if DEBUG`,
+        // which never held (see SWIFT_ACTIVE_COMPILATION_CONDITIONS in
+        // project.yml) and left tunnel.log permanently empty, while the app's
+        // equivalent sink in FptnLogger was unguarded.
+        #if !FPTN_MEASUREMENT_BUILD
         RingLogSink.tunnel.write(text)
         #endif
     }

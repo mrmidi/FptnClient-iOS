@@ -30,7 +30,11 @@ settings:
   configs:
     Debug:
       DEBUG_INFORMATION_FORMAT: dwarf
-      SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FPTN_SIGNPOSTS
+      # DEBUG must be listed explicitly: this key overrides XcodeGen's debug
+      # preset, and $(inherited) resolves to nothing at project level, so
+      # omitting it left `#if DEBUG` false for all Swift in every config
+      # (ObjC/C++ still got GCC_PREPROCESSOR_DEFINITIONS DEBUG=1).
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DEBUG FPTN_SIGNPOSTS
     Release:
       DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
       # TEMPORARY: signposts on in Release for Instruments profiling.
