@@ -5,6 +5,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import SwiftUI
+import FptnSharedTunnel
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
@@ -12,6 +13,19 @@ struct SettingsView: View {
     @State private var showLogoutConfirmation = false
     @State private var showClearKeychainConfirmation = false
     @State private var showAdvancedBypass = false
+
+    #if DEBUG
+    private var dataPlaneFooter: String {
+        switch viewModel.dataPlaneMode {
+        case .l3Tunnel:
+            "All traffic goes through the FPTN server."
+        case .split:
+            "Routes per flow: 2ip.ru leaves directly from this device, mail.ru is rejected, everything else goes through the server. Test policy — not yet configurable."
+        case .flowProxy:
+            "Every flow exits from this device, NOT through an FPTN server — your real IP is not hidden. Profiling only."
+        }
+    }
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -229,19 +243,22 @@ struct SettingsView: View {
 
                 // MARK: Developer
 
-                // Debug-only until RouteAction.fptn_l4 is implemented. Flow
-                // mode currently routes every flow DIRECT — lwIP terminates
-                // the connection locally and re-originates it from the
-                // physical interface, so traffic never reaches an FPTN server
-                // and the user's real IP is exposed while the UI reports a
-                // healthy connection. Not something to ship behind a toggle.
+                // Debug-only. "Direct only" routes every flow out of this
+                // device, so the real IP is exposed while the UI reports a
+                // healthy connection — never something to ship behind a
+                // toggle. A value persisted here is clamped back to FPTN only
+                // by SettingsService in release builds.
                 #if DEBUG
                 Section {
-                    Toggle(isOn: Binding(
-                        get: { viewModel.flowDataPlaneEnabled },
-                        set: { viewModel.saveFlowDataPlaneEnabled($0) }
+                    Picker(selection: Binding(
+                        get: { viewModel.dataPlaneMode },
+                        set: { viewModel.saveDataPlaneMode($0) }
                     )) {
-                        Text("Flow Data Plane (lwIP)")
+                        Text("FPTN only").tag(TunnelDataPlaneMode.l3Tunnel)
+                        Text("Split routing").tag(TunnelDataPlaneMode.split)
+                        Text("Direct only (unsafe)").tag(TunnelDataPlaneMode.flowProxy)
+                    } label: {
+                        Text("Data Plane")
                             .foregroundStyle(Color.appPrimaryText)
                     }
                     .tint(Color.appAccent)
@@ -249,7 +266,7 @@ struct SettingsView: View {
                     Text("Developer")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
-                    Text("Experimental lwIP flow proxy data plane. Traffic exits from this device, NOT through an FPTN server — your real IP is not hidden.")
+                    Text(dataPlaneFooter)
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)

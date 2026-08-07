@@ -5,6 +5,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import FptnSharedTunnel
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
@@ -21,6 +22,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var customDnsEnabled: Bool
     @Published var customDnsIPv4: String
     @Published var flowDataPlaneEnabled: Bool
+    @Published var dataPlaneMode: TunnelDataPlaneMode
 
     var onLogout: (() -> Void)?
 
@@ -47,6 +49,7 @@ final class SettingsViewModel: ObservableObject {
         self.customDnsEnabled = settingsService.customDnsEnabled
         self.customDnsIPv4 = settingsService.customDnsIPv4
         self.flowDataPlaneEnabled = settingsService.flowDataPlaneEnabled
+        self.dataPlaneMode = settingsService.dataPlaneMode
     }
 
     func saveSni() {
@@ -116,6 +119,14 @@ final class SettingsViewModel: ObservableObject {
     func saveFlowDataPlaneEnabled(_ value: Bool) {
         flowDataPlaneEnabled = value
         Task { await settingsService.setFlowDataPlaneEnabled(value) }
+    }
+
+    /// Changing the data plane takes effect on the next connect: both planes
+    /// are built at tunnel start, so switching while connected would mean
+    /// tearing the session down anyway.
+    func saveDataPlaneMode(_ value: TunnelDataPlaneMode) {
+        dataPlaneMode = value
+        Task { await settingsService.setDataPlaneMode(value) }
     }
 
     func logout() {

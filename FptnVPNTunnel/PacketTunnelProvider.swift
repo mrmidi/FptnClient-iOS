@@ -488,21 +488,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         case .l3Tunnel:
             startWebSocket(using: runtimeConfig, context: "initial_start")
         case .split:
-            // The native split plane, its classifier and the ObjC bridge are in
-            // place, but the provider does not yet start them: the routing
-            // policy has no path from the app to this process, and the
-            // transport still has to be handed over on every reconnect
-            // generation via -setSplitTransport:. Failing loudly beats starting
-            // a tunnel that silently routes nothing the way the user asked.
-            let err = makeError("Split routing is not wired into the provider yet")
-            logger.error("startTunnel failed: \(err.localizedDescription)")
-            recordProviderEvent(
-                category: "error",
-                message: "split_mode_not_implemented",
-                flightEvent: .unsupportedDataPlaneMode
-            )
-            finishStart(with: err)
-            return
+            guard FPTNTunnelBridge.isFlowSupported() else {
+                let err = makeError("Split routing is not supported in this build")
+                logger.error("startTunnel failed: \(err.localizedDescription)")
+                finishStart(with: err)
+                return
+            }
+            // Both planes run in one session, so start exactly as l3Tunnel
+            // does. The lwIP side is brought up in handleTransportConnected,
+            // once there is a transport to hand it for fptn-verdict traffic.
+            startWebSocket(using: runtimeConfig, context: "initial_start")
         case .flowProxy:
             guard FPTNTunnelBridge.isFlowSupported() else {
                 let err = makeError("FlowProxy data plane is not supported in this build")
@@ -805,6 +800,78 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         updateDiagnosticsHeartbeat(lastEvent: "websocket_start_issued")
     }
 
+    // MARK: - Split routing
+
+    /// Hardcoded verification policy. `2ip.ru` echoes the caller's public IP,
+    /// so a single page load proves which plane carried the flow: it must show
+    /// this device's own address while every other site shows the server's.
+    /// `mail.ru` must fail *immediately* rather than hang, which is what
+    /// distinguishes reject from drop.
+    ///
+    /// Replaced by the geosite loader later; there is deliberately no UI for
+    /// editing these yet.
+    private static let splitDirectDomains = ["domain:2ip.ru"]
+    private static let splitRejectDomains = ["domain:mail.ru"]
+    private static let splitDropDomains: [String] = []
+
+    /// Brings up lwIP for split mode. Idempotent: a reconnect re-points the
+    /// transport but must not rebuild the stack, or every live direct flow
+    /// would die with it.
+    private func ensureSplitPlaneStarted(configuration: TunnelConfiguration) -> Bool {
+        if flowBridge != nil {
+            return true
+        }
+
+        // Resolvers are pinned to the fptn verdict so the server's own DNS is
+        // reachable through the tunnel — that is what makes split mode work
+        // without a custom resolver.
+        var resolvers: [String] = [configuration.dnsIPv4]
+        if let dnsIPv6 = configuration.dnsIPv6 { resolvers.append(dnsIPv6) }
+        if let custom = configuration.customDnsIPv4 { resolvers.append(custom) }
+
+        guard let bridge = FPTNTunnelBridge(
+            splitWithTunIPv4: configuration.tunIPv4,
+            tunIPv6: configuration.tunIPv6,
+            mtu: 1400,
+            serverIP: configuration.serverIP,
+            serverPort: Int32(configuration.serverPort),
+            directDomains: Self.splitDirectDomains,
+            rejectDomains: Self.splitRejectDomains,
+            dropDomains: Self.splitDropDomains,
+            tunnelResolvers: resolvers
+        ) else {
+            logger.error("Failed to create the split routing bridge")
+            recordProviderEvent(category: "error", message: "split_bridge_create_failed", flightEvent: .unsupportedDataPlaneMode)
+            return false
+        }
+
+        let adapter = FPTNApplePacketFlowAdapter(packetFlow: packetFlow, consumer: bridge)
+        bridge.setEgressAdapter(adapter)
+        do {
+            try bridge.start()
+        } catch {
+            logger.error("Failed to start the split routing bridge: \(error.localizedDescription)")
+            recordProviderEvent(category: "error", message: "split_bridge_start_failed", flightEvent: .unsupportedDataPlaneMode)
+            return false
+        }
+        adapter.start()
+
+        flowBridge = bridge
+        flowAdapter = adapter
+        logger.info("Split routing plane started [direct=\(Self.splitDirectDomains.count) reject=\(Self.splitRejectDomains.count) resolvers=\(resolvers.count)]")
+        recordProviderEvent(category: "flow", message: "split_plane_started", flightEvent: .tunnelConnected)
+        return true
+    }
+
+    /// Points the split plane at the current generation's websocket, or clears
+    /// it. Must be cleared *before* a bridge is released: the native setter
+    /// blocks until no ingress call still holds the old pointer.
+    private func updateSplitTransport(_ client: WebsocketClientBridge?) {
+        guard let flowBridge else { return }
+        flowBridge.setSplitTransport(client?.splitTransportHandle)
+        logger.debug("Split transport \(client == nil ? "cleared" : "attached")")
+    }
+
     private func handleTransportConnected(generation: Int) {
         let configuration: TunnelConfiguration?
         let shouldApplySettings: Bool
@@ -841,6 +908,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             logger.error("Transport connected without runtime configuration")
             recordProviderEvent(category: "websocket", message: "connected_without_configuration generation=\(generation)", generation: generation, flightEvent: .bridgeConnected)
             return
+        }
+
+        // Split mode: bring lwIP up (once) and hand it this generation's
+        // transport before any settings are applied, so the first packet the
+        // OS sends already has somewhere to go.
+        if configuration.dataPlaneMode == .split {
+            guard ensureSplitPlaneStarted(configuration: configuration) else {
+                let err = makeError("Failed to start the split routing plane")
+                updateRuntimeState(.failed, reason: "split plane start failed")
+                finishStart(with: err)
+                replaceWebSocketClient(with: nil, stopCurrent: true)
+                return
+            }
+            stateLock.lock()
+            let currentClient = wsClient
+            stateLock.unlock()
+            updateSplitTransport(currentClient)
         }
 
         logger.info("Tunnel transport connected \(activityDiagnosticsDescription())")
@@ -1241,6 +1325,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         var ipv6Enabled = configuration.dnsIPv6 != nil
+        // flowProxy only, deliberately. It routes everything direct, so the
+        // server's resolvers are unreachable and have to be filtered out.
+        // Split mode reaches them through the tunnel — a pinned classifier rule
+        // sends resolver traffic to the fptn verdict — so it keeps them, which
+        // is the whole reason split mode needs no custom DNS.
         if configuration.dataPlaneMode == .flowProxy {
             let pathSupportsIPv6 = monitor?.currentPath.supportsIPv6 ?? false
 
@@ -1438,6 +1527,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         // temporaries — each retaining a zero-copy native packet lease — are
         // released per batch instead of accumulating for the whole session.
         autoreleasepool {
+            // Split mode: this is where DNS answers come back, and therefore
+            // the only place domain -> IP can be learned for classification.
+            // Read-only, so the packets still go to the OS untouched.
+            if let flowBridge {
+                for packet in batch.packets {
+                    packet.withUnsafeBytes { raw in
+                        guard let base = raw.baseAddress else { return }
+                        flowBridge.observeInboundPacket(
+                            base.assumingMemoryBound(to: UInt8.self),
+                            length: raw.count
+                        )
+                    }
+                }
+            }
+
             let bytes = batch.packets.reduce(into: Int64.zero) { $0 += Int64($1.count) }
             let accepted = packetFlow.writePackets(batch.packets, withProtocols: batch.protocols)
             recordPacketFlowWrite(
@@ -1457,6 +1561,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private func shouldReadOutboundPackets() -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
+        // In split mode the packet-flow adapter owns ingress and feeds the
+        // classifier, which decides per flow whether a packet goes to lwIP or
+        // to the websocket. Running this loop as well would read the same
+        // packets into the transport unclassified.
+        if configuration?.dataPlaneMode == .split {
+            return false
+        }
         return isReadLoopActive &&
             runtimeState == .connected &&
             didApplyNetworkSettings &&
@@ -1531,6 +1642,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let generation = websocketGeneration
         wsClient = nil
         stateLock.unlock()
+
+        // Detach the split plane from the outgoing bridge before it is stopped
+        // or released. The native setter blocks until no ingress call is still
+        // inside the old pointer, so doing it here is what keeps it from
+        // dangling across a reconnect. lwIP keeps running throughout: only the
+        // transport changes, so live direct flows survive.
+        if previousClient != nil {
+            updateSplitTransport(nil)
+        }
 
         // PR3A: begin NativeTeardown after detach.
         #if FPTN_SIGNPOSTS
