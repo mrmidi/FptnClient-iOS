@@ -765,13 +765,23 @@ final class VPNService: ObservableObject {
         case .onlyAllowed: .allowSelected
         case .exceptDisallowed: .excludeSelected
         }
+        // Gated with the Settings toggle: flow mode routes every flow DIRECT
+        // (RouteAction.fptn_l4 is unimplemented), so it exits from the device
+        // rather than an FPTN server. Hiding the toggle is not enough — a
+        // value already persisted in UserDefaults from a build that exposed
+        // it would otherwise keep selecting flowProxy.
+        #if DEBUG
+        let useFlowDataPlane = settings.flowDataPlaneEnabled
+        #else
+        let useFlowDataPlane = false
+        #endif
         return TunnelRuntimeOptions(
             logLevel: SharedLogLevel(rawValue: settings.logLevel.rawValue) ?? .warning,
             websocketIdleTimeoutSeconds: settings.websocketIdleTimeoutSeconds,
             customDnsIPv4: settings.customDnsEnabled ? settings.customDnsIPv4 : nil,
             perAppMode: perAppMode,
             allowedBundleIDs: AppFilterService.shared.selectedBundleIDs,
-            dataPlaneMode: settings.flowDataPlaneEnabled ? .flowProxy : .l3Tunnel
+            dataPlaneMode: useFlowDataPlane ? .flowProxy : .l3Tunnel
         )
     }
 

@@ -229,6 +229,13 @@ struct SettingsView: View {
 
                 // MARK: Developer
 
+                // Debug-only until RouteAction.fptn_l4 is implemented. Flow
+                // mode currently routes every flow DIRECT — lwIP terminates
+                // the connection locally and re-originates it from the
+                // physical interface, so traffic never reaches an FPTN server
+                // and the user's real IP is exposed while the UI reports a
+                // healthy connection. Not something to ship behind a toggle.
+                #if DEBUG
                 Section {
                     Toggle(isOn: Binding(
                         get: { viewModel.flowDataPlaneEnabled },
@@ -242,10 +249,11 @@ struct SettingsView: View {
                     Text("Developer")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
-                    Text("Experimental lwIP flow proxy data plane mode.")
+                    Text("Experimental lwIP flow proxy data plane. Traffic exits from this device, NOT through an FPTN server — your real IP is not hidden.")
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)
+                #endif
 
                 // MARK: Account
 
