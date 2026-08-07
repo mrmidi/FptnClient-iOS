@@ -495,17 +495,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 return
             }
 
-            if let custom = runtimeConfig.customDnsIPv4, !custom.isEmpty {
-                // explicit custom DNS configured
-            } else {
-                let serverDns = runtimeConfig.dnsIPv4
-                if serverDns.hasPrefix("10.8.0.") || serverDns.hasPrefix("127.") || serverDns.hasPrefix("169.254.") || serverDns.hasPrefix("192.168.") || serverDns.hasPrefix("10.") {
-                    let err = makeError("Server DNS '\(serverDns)' is in internal/tunnel space; explicit custom DNS required")
-                    logger.error("startTunnel failed: \(err.localizedDescription)")
-                    finishStart(with: err)
-                    return
-                }
-            }
+            // Resolver reachability is decided in applyNetworkSettings, which
+            // filters per address and fails with a precise message if nothing
+            // usable survives. The prefix test that used to live here only
+            // covered 10/8, 192.168/16, 127/8 and 169.254/16 — it missed
+            // 172.16/12 entirely and never looked at the IPv6 resolver, which
+            // was the address actually breaking name resolution.
 
             let bridge = FPTNTunnelBridge(tunIPv4: runtimeConfig.tunIPv4, tunIPv6: runtimeConfig.tunIPv6, mtu: 1400)
             let adapter = FPTNApplePacketFlowAdapter(packetFlow: packetFlow, consumer: bridge)
@@ -528,8 +523,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             applyNetworkSettings(configuration: runtimeConfig) { [weak self] err in
                 guard let self else { return }
                 if let err {
-                    bridge.stop()
+                    // Adapter first: stop feeding ingress before the engine
+                    // goes away, matching the order used by stopTunnel.
                     adapter.stop()
+                    bridge.stop()
+                    self.flowAdapter = nil
+                    self.flowBridge = nil
                     self.finishStart(with: err)
                 } else {
                     self.updateRuntimeState(.connected, reason: "flowProxy started")
@@ -1207,6 +1206,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         let clientIPv4 = assignedIPv4 ?? configuration.tunIPv4
         let remoteAddress = configuration.serverIP
         let clientIPv6 = assignedIPv6 ?? configuration.tunIPv6
+        let monitor = pathMonitor
         stateLock.unlock()
 
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: remoteAddress)
@@ -1223,11 +1223,43 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             dnsServers = [custom] + dnsServers
             logger.info("Custom DNS configured [ipv4=\(custom)]")
         }
+
+        var ipv6Enabled = configuration.dnsIPv6 != nil
+        if configuration.dataPlaneMode == .flowProxy {
+            let pathSupportsIPv6 = monitor?.currentPath.supportsIPv6 ?? false
+
+            // Keep the server's resolvers wherever they can actually be
+            // reached — only drop the ones flow mode cannot use.
+            let unreachable = dnsServers.filter { !Self.isFlowReachableResolver($0) }
+            dnsServers.removeAll { !Self.isFlowReachableResolver($0) }
+            if !pathSupportsIPv6 {
+                dnsServers.removeAll { IPv6Address($0) != nil }
+            }
+            if !unreachable.isEmpty {
+                logger.warning(
+                    "Dropped unreachable resolver(s) for flow mode [servers=\(unreachable.joined(separator: ","))]"
+                )
+            }
+
+            guard !dnsServers.isEmpty else {
+                let err = makeError(
+                    "No reachable DNS server for the flow data plane — every server-supplied resolver is private, loopback or link-local, which flow mode cannot route. Configure a custom DNS in Settings."
+                )
+                logger.error("Applying tunnel settings failed: \(err.localizedDescription)")
+                completionHandler(err)
+                return
+            }
+
+            // An IPv6 default route is only useful when the path can carry v6
+            // *and* something can resolve over it; otherwise every AAAA lookup
+            // and Happy Eyeballs attempt black-holes into the tunnel.
+            ipv6Enabled = pathSupportsIPv6 && dnsServers.contains { IPv6Address($0) != nil }
+        }
+
         let dns = NEDNSSettings(servers: dnsServers)
         dns.matchDomains = [""]
         settings.dnsSettings = dns
 
-        let ipv6Enabled = configuration.dnsIPv6 != nil
         if ipv6Enabled {
             let ipv6 = NEIPv6Settings(
                 addresses: [clientIPv6],
@@ -1239,11 +1271,45 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         settings.mtu = 1400
 
         logger.info(
-            "Applying tunnel settings ipv4_enabled=true ipv6_enabled=\(ipv6Enabled) dns_server_count=\(dnsServers.count) mtu=1400"
+            "Applying tunnel settings ipv4_enabled=true ipv6_enabled=\(ipv6Enabled) dns_servers=[\(dnsServers.joined(separator: ","))] mtu=1400"
         )
         recordProviderEvent(category: "settings", message: "apply_start ipv6=\(ipv6Enabled)", flightEvent: .tunnelConnected)
 
         setTunnelNetworkSettings(settings, completionHandler: completionHandler)
+    }
+
+    /// Whether a resolver address is reachable from the flow data plane.
+    ///
+    /// Flow mode terminates connections inside lwIP and re-originates them
+    /// from the physical interface, so a server-supplied resolver only works
+    /// if it is globally routable. Private, loopback, link-local and
+    /// unique-local addresses name hosts on the *server's* network: following
+    /// them either black-holes (the observed failure — UDP flows accumulating
+    /// with nothing ever resolving) or, worse, reaches a same-numbered host on
+    /// the user's own LAN.
+    private static func isFlowReachableResolver(_ address: String) -> Bool {
+        if let v4 = IPv4Address(address) {
+            let b = [UInt8](v4.rawValue)
+            guard b.count == 4 else { return false }
+            switch (b[0], b[1]) {
+            case (0, _), (127, _), (255, _): return false  // unspecified, loopback, broadcast
+            case (10, _):                    return false  // 10/8
+            case (169, 254):                 return false  // link-local
+            case (192, 168):                 return false  // 192.168/16
+            case (172, 16...31):             return false  // 172.16/12
+            default:                         return true
+            }
+        }
+        if let v6 = IPv6Address(address) {
+            let b = [UInt8](v6.rawValue)
+            guard b.count == 16 else { return false }
+            if b.allSatisfy({ $0 == 0 }) { return false }                    // ::
+            if b.dropLast().allSatisfy({ $0 == 0 }) && b[15] == 1 { return false }  // ::1
+            if b[0] == 0xFE && (b[1] & 0xC0) == 0x80 { return false }        // fe80::/10
+            if (b[0] & 0xFE) == 0xFC { return false }                        // fc00::/7
+            return true
+        }
+        return false
     }
 
     // MARK: - Packet flow
@@ -2043,7 +2109,47 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         )
         writeLifecycleSnapshot()
         evaluateMemoryPressure(memory: memory)
+        logFlowCounters()
         #endif
+    }
+
+    /// The flow data plane produces no other telemetry: the websocket counters
+    /// stay at zero because it never opens one, so these adapter totals are the
+    /// only window into whether packets reach lwIP and come back. Absence of
+    /// this line means the l3Tunnel path is running.
+    private func logFlowCounters() {
+        guard let adapter = flowAdapter else { return }
+        let mode = configuration?.dataPlaneMode.rawValue ?? "unknown"
+
+        // Funnel, in pipeline order. Whichever stage stops advancing is where
+        // packets are being lost; see FlowCounters in flow_counters.h.
+        let c = flowBridge?.flowCounters() ?? FPTNFlowCounters()
+        logger.info(
+            """
+            Flow funnel mode=\(mode) started=\(self.flowBridge?.isStarted ?? false) \
+            ne_read=\(adapter.totalReadPackets)/\(adapter.totalReadBytes)B \
+            lwip_in=\(c.inputPackets)/\(c.inputBytes)B \
+            zerocopy=\(c.ingressZeroCopyPackets) copy=\(c.ingressCopyPackets) dropped=\(c.droppedPackets) \
+            tcp_flows=\(c.activeTcpFlows)/\(c.peakTcpFlows) udp_flows=\(c.activeUdpFlows)/\(c.peakUdpFlows) \
+            outbound_tcp=\(c.tcpOutboundActive)/\(c.tcpOutboundOpenedTotal) outbound_udp=\(c.udpOutboundActive) \
+            lwip_out=\(c.outputPackets)/\(c.outputBytes)B \
+            ne_write=\(adapter.totalWritePackets)/\(adapter.totalWriteBytes)B
+            """
+        )
+
+        // Pressure and memory on their own line: these are what precede a
+        // jetsam kill, and they are the reason a speed test can end the
+        // extension while every funnel stage still looks healthy.
+        let footprintMB = String(format: "%.1f", Double(physFootprintBytes() ?? 0) / 1_048_576)
+        let residentMB = String(format: "%.1f", Double(residentMemoryBytes() ?? 0) / 1_048_576)
+        logger.info(
+            """
+            Flow pressure backpressure=\(c.tcpBackpressureEvents) tcp_resets=\(c.tcpResets) \
+            udp_drops=\(c.udpDrops) lease_exhaustions=\(c.leasePoolExhaustions) \
+            stale_reads=\(adapter.staleReadCallbacks) \
+            footprint=\(footprintMB)MB resident=\(residentMB)MB
+            """
+        )
     }
 
     /// Exact session upload total, computed on demand — never cached or
