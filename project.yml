@@ -484,3 +484,26 @@ targets:
     dependencies:
       - framework: FptnVPN/Cpp/fptn_native_lib.framework
 
+  # Same sources as FptnAppleBridgeTests, built against the macOS framework.
+  # The flow data plane is portable C++/ObjC++ and the adapter binds to
+  # FPTNPacketFlowIO rather than NetworkExtension, so the whole stack runs as
+  # an ordinary macOS process — no packet tunnel, no 50 MB jetsam ceiling, and
+  # Instruments/leaks/malloc_history all work normally. This is the profiling
+  # stand; the iOS bundle stays for on-device parity.
+  FptnAppleBridgeTests-macOS:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - FptnAppleBridgeTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnAppleBridgeTests.macOS
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp/fptn_native_lib.framework/Headers $(PROJECT_DIR)/Fptn-macOS/Cpp/fptn_native_lib.framework/Headers/fptn/src $(PROJECT_DIR)/Fptn-macOS/Cpp/fptn_native_lib.framework/Headers/src
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - framework: Fptn-macOS/Cpp/fptn_native_lib.framework
+    scheme:
+      testTargets:
+        - FptnAppleBridgeTests-macOS
+
