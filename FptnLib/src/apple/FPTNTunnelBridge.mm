@@ -209,6 +209,37 @@ std::vector<std::string> ToStringVector(NSArray<NSString *> *values) {
     return _engine != nullptr && _engine->IsStarted();
 }
 
+- (FPTNSplitCounters)splitCounters {
+    FPTNSplitCounters out = {};
+    if (!_engine) {
+        return out;
+    }
+    auto* plane = _engine->SplitPlane();
+    if (plane == nullptr) {
+        return out;
+    }
+    const auto split = plane->SplitStatistics();
+    out.batches = split.batches;
+    out.packetsToStack = split.packets_to_stack;
+    out.packetsToTransport = split.packets_to_transport;
+    out.packetsDropped = split.packets_dropped;
+    out.rollbacks = split.rollbacks;
+
+    const auto classifier = plane->ClassifierForTesting().Counters();
+    out.decisions = classifier.decisions;
+    out.tableHits = classifier.table_hits;
+    out.unclassifiable = classifier.unclassifiable;
+    out.activeFlows = classifier.active_flows;
+
+    const auto dns = plane->DnsObserverForTesting().Counters();
+    out.dnsResponsesParsed = dns.responses_parsed;
+    out.dnsMappingsRecorded = dns.mappings_recorded;
+    out.dnsEntries = dns.entries;
+
+    out.routerUnknownFlows = plane->RouterUnknownFlows();
+    return out;
+}
+
 - (FPTNFlowCounters)flowCounters {
     FPTNFlowCounters out = {};
     if (!_engine) {

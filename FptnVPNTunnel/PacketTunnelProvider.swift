@@ -2257,6 +2257,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         guard let adapter = flowAdapter else { return }
         let mode = configuration?.dataPlaneMode.rawValue ?? "unknown"
 
+        // The routing funnel, in decision order. `dns_parsed=0` means no DNS
+        // answer was ever observed, so nothing can be attributed to a domain
+        // and every flow necessarily falls to the default (fptn) verdict —
+        // which looks exactly like split routing being broken.
+        if mode == "split", let flowBridge {
+            let s = flowBridge.splitCounters()
+            logger.info(
+                """
+                Split funnel batches=\(s.batches) \
+                to_stack=\(s.packetsToStack) to_transport=\(s.packetsToTransport) \
+                dropped=\(s.packetsDropped) rollbacks=\(s.rollbacks) \
+                decisions=\(s.decisions) hits=\(s.tableHits) \
+                unclassifiable=\(s.unclassifiable) flows=\(s.activeFlows) \
+                dns_parsed=\(s.dnsResponsesParsed) dns_recorded=\(s.dnsMappingsRecorded) \
+                dns_entries=\(s.dnsEntries) router_unknown=\(s.routerUnknownFlows)
+                """
+            )
+        }
+
         // Funnel, in pipeline order. Whichever stage stops advancing is where
         // packets are being lost; see FlowCounters in flow_counters.h.
         let c = flowBridge?.flowCounters() ?? FPTNFlowCounters()

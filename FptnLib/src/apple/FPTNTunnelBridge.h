@@ -42,6 +42,32 @@ typedef struct {
     uint64_t egressBatches;
 } FPTNFlowCounters;
 
+/// Split-routing view of the same session, mirroring SplitCounters,
+/// ClassifierCounters and DnsObserverCounters. Zeroed in flow-proxy mode.
+///
+/// Reads as a funnel for the *routing* decision, the way FPTNFlowCounters does
+/// for the packet path: if `dnsResponsesParsed` is zero the observer never saw
+/// an answer, so every flow falls to the default verdict and nothing can ever
+/// be routed direct.
+typedef struct {
+    uint64_t batches;
+    uint64_t packetsToStack;
+    uint64_t packetsToTransport;
+    uint64_t packetsDropped;
+    uint64_t rollbacks;
+
+    uint64_t decisions;
+    uint64_t tableHits;
+    uint64_t unclassifiable;
+    uint64_t activeFlows;
+
+    uint64_t dnsResponsesParsed;
+    uint64_t dnsMappingsRecorded;
+    uint64_t dnsEntries;
+
+    uint64_t routerUnknownFlows;
+} FPTNSplitCounters;
+
 @interface FPTNTunnelBridge : NSObject <FPTNPacketBatchConsumer>
 
 + (BOOL)isFlowSupported;
@@ -98,6 +124,9 @@ typedef struct {
 /// Safe to call at any time, including after -stop: the engine retains its
 /// final tallies so a post-mortem read reports the session rather than zeroes.
 - (FPTNFlowCounters)flowCounters;
+
+/// Split-routing counters. All zero outside split mode.
+- (FPTNSplitCounters)splitCounters;
 
 @property (nonatomic, readonly) BOOL isStarted;
 
