@@ -26,6 +26,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 #include "common/logger/logger.h"
 #include "WrapperWebsocketClientBridge.h"
+#include "../apple/FPTNAppleLogSink.h"
 
 #ifndef FPTN_CLIENT_DEFAULT_ADDRESS_IP6
 #define FPTN_CLIENT_DEFAULT_ADDRESS_IP6 "fd00::1"
@@ -442,6 +443,7 @@ WebsocketSwiftBridge::WebsocketSwiftBridge(
     DisconnectedCallback disconnected_callback,
     void* context
 ) {
+    FPTNInstallAppleLogSink();
     wrapper_ = new WebsocketClientWrapper(
         packet_callback,
         connected_callback,
@@ -542,6 +544,17 @@ bool WebsocketSwiftBridge::stop(std::uint16_t origin) {
 
 // PR1B: returns typed send result as uint8_t.
 // 0=accepted, 1=queue_full, 2=transport_stopped, 3=invalid_packet.
+std::shared_ptr<fptn::protocol::https::WebsocketClient>
+WebsocketSwiftBridge::splitRoutingTransport() const {
+    if (!wrapper_) {
+        return nullptr;
+    }
+    // Same pattern as sendPacket: copy under the mutex so this cannot race
+    // stop() resetting wrapper_->client.
+    std::lock_guard<std::mutex> lock(wrapper_->mutex);
+    return wrapper_->client;
+}
+
 // PR1C: takes a local copy of the client under the mutex to avoid
 // racing with stop() resetting wrapper_->client.
 std::uint8_t WebsocketSwiftBridge::sendPacket(const uint8_t* packet_data, uint32_t length) {

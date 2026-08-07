@@ -66,6 +66,7 @@ add_library(fptn_native_lib SHARED
     src/websocket/WrapperWebsocketClientBridge.cpp src/websocket/WrapperWebsocketClientBridge.h
     src/apple/FPTNApplePacketFlowAdapter.h src/apple/FPTNApplePacketFlowAdapter.mm
     src/apple/FPTNTunnelBridge.h src/apple/FPTNTunnelBridge.mm
+    src/apple/FPTNAppleLogSink.h src/apple/FPTNAppleLogSink.cpp
 )
 
 target_compile_features(fptn_native_lib PRIVATE cxx_std_23)

@@ -16,6 +16,11 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 // Forward declaration of internal wrapper implementation
 struct WebsocketClientWrapper;
 
+#if !defined(__swift__)
+#include <memory>
+namespace fptn::protocol::https { class WebsocketClient; }
+#endif
+
 struct FptnOwnedPacketDescriptor {
     std::uint8_t* bytes;
     std::uint32_t length;
@@ -117,6 +122,18 @@ public:
     bool isStarted() const;
     WebsocketClientBridgeStatus getStatus() const;
     void registerIPAssignedCallback(IPAssignedCallback callback);
+
+#if !defined(__swift__)
+    // Split routing only, and deliberately invisible to Swift: hands the live
+    // transport to the split data plane so `fptn`-verdict packets ride the
+    // websocket this bridge already manages. Keeping one transport means
+    // reconnect, generation tracking and diagnostics keep working, and a
+    // reconnect leaves lwIP and its live direct flows untouched.
+    //
+    // Null while disconnected. Safe to call from any thread.
+    std::shared_ptr<fptn::protocol::https::WebsocketClient>
+        splitRoutingTransport() const;
+#endif
 
 private:
     WebsocketClientWrapper* wrapper_;

@@ -46,9 +46,49 @@ typedef struct {
 
 + (BOOL)isFlowSupported;
 
+/// Direct-only flow proxy. Development and profiling only: every flow leaves
+/// via the device's own interface, so the user's real IP is exposed.
 - (instancetype)initWithTunIPv4:(NSString *)tunIPv4
                         tunIPv6:(nullable NSString *)tunIPv6
                             mtu:(uint16_t)mtu;
+
+/// Split routing: lwIP terminates the flows policy sends `direct` (and RSTs
+/// those it rejects), while everything else is forwarded untouched to the
+/// websocket transport `websocketBridge` already manages.
+///
+/// The transport is borrowed, not owned, so its reconnect and diagnostics keep
+/// working and a reconnect leaves lwIP and its live flows alone. Supply it
+/// with -setSplitTransport:.
+///
+/// Domains take the `domain:example.com` form or a bare domain, and match the
+/// name plus any subdomain. Anything unmatched, or unattributable such as an
+/// IP-literal connection, is tunnelled.
+- (nullable instancetype)initSplitWithTunIPv4:(NSString *)tunIPv4
+                                      tunIPv6:(nullable NSString *)tunIPv6
+                                          mtu:(uint16_t)mtu
+                                     serverIP:(NSString *)serverIP
+                                   serverPort:(int)serverPort
+                               directDomains:(NSArray<NSString *> *)directDomains
+                               rejectDomains:(NSArray<NSString *> *)rejectDomains
+                                 dropDomains:(NSArray<NSString *> *)dropDomains
+                             tunnelResolvers:(NSArray<NSString *> *)tunnelResolvers;
+
+/// Points the split plane at the websocket transport carrying `fptn`-verdict
+/// packets. Pass a `WebsocketSwiftBridge *`.
+///
+/// The provider builds a **new** bridge per reconnect generation, so call this
+/// on every (re)connect with the current one — and with NULL *before* dropping
+/// the old bridge. The setter blocks until no ingress call is using the old
+/// pointer, so honouring that order is what keeps it from dangling.
+///
+/// While NULL, `fptn`-verdict batches are refused instead of being queued into
+/// a dead transport, and lwIP keeps running with its direct flows intact.
+- (void)setSplitTransport:(nullable void *)websocketBridge;
+
+/// Read-only tap for packets arriving from the transport, which is where DNS
+/// answers appear and therefore where domain -> IP is learned. Call this from
+/// the websocket inbound callback in split mode. No-op in flow-proxy mode.
+- (void)observeInboundPacket:(const uint8_t *)bytes length:(size_t)length;
 
 - (BOOL)startWithError:(NSError * _Nullable * _Nullable)error;
 - (void)stop;

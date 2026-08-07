@@ -106,6 +106,10 @@ func bootstrapLogging() {
 
 func setTunnelLogLevel(rawValue: String?) {
     TunnelLogLevelStore.shared.set(rawValue: rawValue)
+    // Keep the native (spdlog -> os_log) side at the same level, so raising
+    // the level in the app reveals the C++ tunnel too rather than just the
+    // Swift half of it.
+    FPTNSetAppleLogLevel(TunnelLogLevelStore.shared.get().rawValue)
 }
 
 // MARK: - TunnelLogHandler
