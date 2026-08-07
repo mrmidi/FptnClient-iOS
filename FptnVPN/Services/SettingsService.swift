@@ -5,6 +5,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 =============================================================================*/
 
 import Foundation
+import FptnSharedTunnel
 
 actor SettingsService {
     static let shared = SettingsService()
@@ -22,6 +23,7 @@ actor SettingsService {
     private static let customDnsEnabledKey  = "fptn.settings.customDnsEnabled"
     private static let customDnsIPv4Key     = "fptn.settings.customDnsIPv4"
     private static let flowDataPlaneEnabledKey = "fptn.settings.flowDataPlaneEnabled"
+    fileprivate static let dataPlaneModeKey = "fptn.settings.dataPlaneMode"
 
     // MARK: - Nonisolated reads (UserDefaults is thread-safe)
 
@@ -95,6 +97,30 @@ actor SettingsService {
         UserDefaults.standard.bool(forKey: Self.flowDataPlaneEnabledKey)
     }
 
+    /// The persisted data plane, already clamped to something this build may
+    /// run. A debug build can persist `flowProxy`, which routes every flow
+    /// direct and would expose the user's real IP; a later release build must
+    /// never honour it, and hiding the UI is not sufficient. Clamping lands on
+    /// `l3Tunnel` — the safest mode, not `split`.
+    nonisolated var dataPlaneMode: TunnelDataPlaneMode {
+        let stored = UserDefaults.standard.string(forKey: Self.dataPlaneModeKey)
+            .flatMap(TunnelDataPlaneMode.init(rawValue:))
+            ?? Self.migratedDataPlaneMode
+        #if DEBUG
+        return stored
+        #else
+        return stored.isReleaseSafe ? stored : .l3Tunnel
+        #endif
+    }
+
+    /// One-time read of the superseded boolean so an existing install keeps
+    /// the mode it was already running.
+    private nonisolated static var migratedDataPlaneMode: TunnelDataPlaneMode {
+        UserDefaults.standard.bool(forKey: flowDataPlaneEnabledKey)
+            ? .flowProxy
+            : .l3Tunnel
+    }
+
     // MARK: - Setters
 
     func setSni(_ value: String) {
@@ -151,6 +177,10 @@ actor SettingsService {
 
     func setFlowDataPlaneEnabled(_ value: Bool) {
         UserDefaults.standard.set(value, forKey: Self.flowDataPlaneEnabledKey)
+    }
+
+    func setDataPlaneMode(_ value: TunnelDataPlaneMode) {
+        UserDefaults.standard.set(value.rawValue, forKey: Self.dataPlaneModeKey)
     }
 
     // MARK: - SNI sanitization

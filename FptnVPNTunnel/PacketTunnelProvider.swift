@@ -487,6 +487,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         switch runtimeConfig.dataPlaneMode {
         case .l3Tunnel:
             startWebSocket(using: runtimeConfig, context: "initial_start")
+        case .split:
+            // The native split plane, its classifier and the ObjC bridge are in
+            // place, but the provider does not yet start them: the routing
+            // policy has no path from the app to this process, and the
+            // transport still has to be handed over on every reconnect
+            // generation via -setSplitTransport:. Failing loudly beats starting
+            // a tunnel that silently routes nothing the way the user asked.
+            let err = makeError("Split routing is not wired into the provider yet")
+            logger.error("startTunnel failed: \(err.localizedDescription)")
+            recordProviderEvent(
+                category: "error",
+                message: "split_mode_not_implemented",
+                flightEvent: .unsupportedDataPlaneMode
+            )
+            finishStart(with: err)
+            return
         case .flowProxy:
             guard FPTNTunnelBridge.isFlowSupported() else {
                 let err = makeError("FlowProxy data plane is not supported in this build")
