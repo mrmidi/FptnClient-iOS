@@ -135,6 +135,8 @@ targets:
           - Cpp/*.framework/**
           - Cpp/*.framework.dSYM
           - Cpp/*.framework.dSYM/**
+          - Cpp/*.xcframework
+          - Cpp/*.xcframework/**
       - SharedTunnelRuntime
       - path: fptn.icon
         buildPhase: resources
@@ -201,7 +203,7 @@ targets:
         product: Logging
       - package: swift-collections
         product: Collections
-      - framework: FptnVPN/Cpp/fptn_native_lib.framework
+      - framework: FptnVPN/Cpp/fptn_native_lib.xcframework
         embed: true
         codeSign: false
     preBuildScripts:
@@ -255,7 +257,7 @@ targets:
         product: FptnSharedTunnel
       - package: swift-log
         product: Logging
-      - framework: FptnVPN/Cpp/fptn_native_lib.framework
+      - framework: FptnVPN/Cpp/fptn_native_lib.xcframework
     preBuildScripts:
       - name: Build FptnLib (Conan+CMake)
         script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
@@ -274,6 +276,8 @@ targets:
           - Cpp/*.framework/**
           - Cpp/*.framework.dSYM
           - Cpp/*.framework.dSYM/**
+          - Cpp/*.xcframework
+          - Cpp/*.xcframework/**
       - SharedTunnelRuntime
     settings:
       base:
@@ -308,7 +312,7 @@ targets:
         product: FptnSharedCore
       - package: FptnShared
         product: FptnSharedTunnel
-      - framework: Fptn-macOS/Cpp/fptn_native_lib.framework
+      - framework: Fptn-macOS/Cpp/fptn_native_lib.xcframework
         embed: true
         codeSign: true
     preBuildScripts:
@@ -341,7 +345,7 @@ targets:
     dependencies:
       - package: FptnShared
         product: FptnSharedTunnel
-      - framework: Fptn-macOS-Tunnel/Cpp/fptn_native_lib.framework
+      - framework: Fptn-macOS-Tunnel/Cpp/fptn_native_lib.xcframework
     preBuildScripts:
       - name: Build FptnLib (Conan+CMake)
         script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
@@ -360,6 +364,8 @@ targets:
           - Cpp/*.framework/**
           - Cpp/*.framework.dSYM
           - Cpp/*.framework.dSYM/**
+          - Cpp/*.xcframework
+          - Cpp/*.xcframework/**
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-tvOS
@@ -392,7 +398,7 @@ targets:
         product: FptnSharedCore
       - package: FptnShared
         product: FptnSharedTunnel
-      - framework: Fptn-tvOS/Cpp/fptn_native_lib.framework
+      - framework: Fptn-tvOS/Cpp/fptn_native_lib.xcframework
         embed: true
         codeSign: true
     preBuildScripts:
@@ -425,7 +431,7 @@ targets:
         product: FptnSharedCore
       - package: FptnShared
         product: FptnSharedTunnel
-      - framework: Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework
+      - framework: Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.xcframework
     preBuildScripts:
       - name: Build FptnLib (Conan+CMake)
         script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'
@@ -451,7 +457,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FptnVPN
-      - framework: FptnVPN/Cpp/fptn_native_lib.framework
+      - framework: FptnVPN/Cpp/fptn_native_lib.xcframework
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
@@ -485,11 +491,15 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnAppleBridgeTests
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp
-        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework/Headers $(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework/Headers/fptn/src $(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.framework/Headers/src
+        # Recursive on purpose: the xcframework holds one framework per
+        # platform, so Headers lives under a slice directory whose name
+        # depends on the architectures built. Enumerating slices here
+        # would break the first time one gained an architecture.
+        HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/FptnVPN/Cpp/fptn_native_lib.xcframework/**
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_OBJC_BRIDGING_HEADER: FptnAppleBridgeTests/FptnAppleBridgeTests-Bridging-Header.h
     dependencies:
-      - framework: FptnVPN/Cpp/fptn_native_lib.framework
+      - framework: FptnVPN/Cpp/fptn_native_lib.xcframework
 
   # Same sources as FptnAppleBridgeTests, built against the macOS framework.
   # The flow data plane is portable C++/ObjC++ and the adapter binds to
@@ -506,10 +516,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnAppleBridgeTests.macOS
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp
-        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp/fptn_native_lib.framework/Headers $(PROJECT_DIR)/Fptn-macOS/Cpp/fptn_native_lib.framework/Headers/fptn/src $(PROJECT_DIR)/Fptn-macOS/Cpp/fptn_native_lib.framework/Headers/src
+        HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/Fptn-macOS/Cpp/fptn_native_lib.xcframework/**
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
-      - framework: Fptn-macOS/Cpp/fptn_native_lib.framework
+      - framework: Fptn-macOS/Cpp/fptn_native_lib.xcframework
     scheme:
       testTargets:
         - FptnAppleBridgeTests-macOS

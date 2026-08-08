@@ -95,25 +95,36 @@ framework_matches_native_target() {
     fi
 }
 
-native_framework_paths() {
+# Checks the per-platform SLICE, not the packaged xcframework.
+#
+# The destination now holds an .xcframework containing every platform built so
+# far, so its mere presence says nothing about whether THIS target was built —
+# and vtool cannot be pointed at a bundle that deliberately contains several
+# platforms. The slice is the thing that is one platform, so it is the thing to
+# test.
+native_slice_paths() {
+    local slice_root="${ROOT_DIR}/FptnLib/slices"
     case "$NATIVE_TARGET" in
-        ios|ios-device|ios-simulator)
-            printf '%s\n' "${ROOT_DIR}/FptnVPN/Cpp/fptn_native_lib.framework"
+        ios|ios-device)
+            printf '%s\n' "${slice_root}/ios-device/fptn_native_lib.framework"
             ;;
-        tvos|tvos-device|tvos-simulator)
-            printf '%s\n' "${ROOT_DIR}/Fptn-tvOS/Cpp/fptn_native_lib.framework"
-            printf '%s\n' "${ROOT_DIR}/Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework"
+        ios-simulator)
+            printf '%s\n' "${slice_root}/ios-simulator/fptn_native_lib.framework"
+            ;;
+        tvos|tvos-device)
+            printf '%s\n' "${slice_root}/tvos-device/fptn_native_lib.framework"
+            ;;
+        tvos-simulator)
+            printf '%s\n' "${slice_root}/tvos-simulator/fptn_native_lib.framework"
             ;;
         macos)
-            printf '%s\n' "${ROOT_DIR}/Fptn-macOS/Cpp/fptn_native_lib.framework"
-            printf '%s\n' "${ROOT_DIR}/Fptn-macOS-Tunnel/Cpp/fptn_native_lib.framework"
+            printf '%s\n' "${slice_root}/macos/fptn_native_lib.framework"
             ;;
         all|apple|all-apple)
-            printf '%s\n' "${ROOT_DIR}/FptnVPN/Cpp/fptn_native_lib.framework"
-            printf '%s\n' "${ROOT_DIR}/Fptn-tvOS/Cpp/fptn_native_lib.framework"
-            printf '%s\n' "${ROOT_DIR}/Fptn-tvOS-Tunnel/Cpp/fptn_native_lib.framework"
-            printf '%s\n' "${ROOT_DIR}/Fptn-macOS/Cpp/fptn_native_lib.framework"
-            printf '%s\n' "${ROOT_DIR}/Fptn-macOS-Tunnel/Cpp/fptn_native_lib.framework"
+            # Mirrors run_aggregate_build's target list.
+            printf '%s\n' "${slice_root}/ios-device/fptn_native_lib.framework"
+            printf '%s\n' "${slice_root}/tvos-device/fptn_native_lib.framework"
+            printf '%s\n' "${slice_root}/macos/fptn_native_lib.framework"
             ;;
         *)
             fail "unknown native target '${NATIVE_TARGET}'"
@@ -126,7 +137,7 @@ native_is_built() {
 
     while IFS= read -r path; do
         framework_matches_native_target "$path" || return 1
-    done < <(native_framework_paths)
+    done < <(native_slice_paths)
 
     return 0
 }

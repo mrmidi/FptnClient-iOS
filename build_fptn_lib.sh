@@ -167,7 +167,7 @@ copy_dsym_to_archive_products() {
 copy_existing_dsym_to_archive_products() {
     local candidate
     local candidates=(
-        "${DEST_DIR}/fptn_native_lib.framework.dSYM"
+        "${SLICE_DIR}/fptn_native_lib.framework.dSYM"
         "${LIB_DIR}/${OUTPUT_DIR}/fptn_native_lib.framework.dSYM"
     )
 
@@ -275,6 +275,134 @@ case "$TARGET" in
         ;;
 esac
 
+# ── XCFramework slices ────────────────────────────────────────────────────────
+#
+# On Apple silicon a device build and a simulator build are BOTH arm64 and
+# differ only in their LC_BUILD_VERSION platform (2 vs 7), so `lipo` refuses to
+# combine them and one thin .framework physically cannot serve both. Copying
+# every target into a single destination therefore meant each platform silently
+# destroyed the previous one, and "which platform is installed right now"
+# became a question you had to answer with otool.
+#
+# So each build is staged into its own slice directory, and the slices are
+# packaged into one .xcframework that Xcode selects from per destination.
+# Slices are independent: building the simulator no longer invalidates the
+# device build, or the reverse.
+SLICE_ROOT="${LIB_DIR}/slices"
+
+case "$TARGET" in
+    ios|ios-device)     SLICE_NAME="ios-device";     FAMILY_SLICES=("ios-device" "ios-simulator") ;;
+    ios-simulator)      SLICE_NAME="ios-simulator";  FAMILY_SLICES=("ios-device" "ios-simulator") ;;
+    tvos|tvos-device)   SLICE_NAME="tvos-device";    FAMILY_SLICES=("tvos-device" "tvos-simulator") ;;
+    tvos-simulator)     SLICE_NAME="tvos-simulator"; FAMILY_SLICES=("tvos-device" "tvos-simulator") ;;
+    macos)              SLICE_NAME="macos";          FAMILY_SLICES=("macos") ;;
+esac
+
+SLICE_DIR="${SLICE_ROOT}/${SLICE_NAME}"
+
+stage_slice() {
+    local destination="$SLICE_DIR"
+
+    mkdir -p "$destination"
+    rm -rf "${destination}/fptn_native_lib.framework"
+    cp -R fptn_native_lib.framework "$destination/"
+
+    local framework_plist="${destination}/fptn_native_lib.framework/Info.plist"
+    if [ -n "$MIN_PLATFORM_VERSION" ] && [ -f "$framework_plist" ]; then
+        echo "Adding MinimumOSVersion=${MIN_PLATFORM_VERSION} to framework Info.plist for ${destination}..."
+        /usr/libexec/PlistBuddy -c "Delete :MinimumOSVersion" "$framework_plist" 2>/dev/null || true
+        /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string ${MIN_PLATFORM_VERSION}" "$framework_plist"
+    fi
+
+    # Keep the dSYM beside the slice. It used to be deleted at the
+    # destination, which left copy_existing_dsym_to_archive_products
+    # looking for a path that was guaranteed absent.
+    rm -rf "${destination}/fptn_native_lib.framework.dSYM"
+    if [ -d fptn_native_lib.framework.dSYM ]; then
+        cp -R fptn_native_lib.framework.dSYM "$destination/"
+    fi
+
+    # PR0: write the build manifest BESIDE the framework (not inside it)
+    # BEFORE codesign, so the signature is not invalidated. The manifest
+    # records full cache identity: configuration, fptn commit, wrapper
+    # source hash, build-file hash, and compiler identity.
+    local fptn_commit wrapper_hash build_hash compiler_id
+    fptn_commit="$(git -C "${LIB_DIR}/fptn" rev-parse HEAD 2>/dev/null || echo unknown)"
+    wrapper_hash="$(find "${LIB_DIR}/src" -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 2>/dev/null | sort -z | xargs -0 shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}')"
+    build_hash="$(
+        {
+            printf '%s\n' \
+                "${SCRIPT_PATH}" \
+                "${LIB_DIR}/CMakeLists.txt" \
+                "${LIB_DIR}/conanfile.py" \
+                "${LIB_DIR}/Info.plist.in"
+            find "${LIB_DIR}" -maxdepth 1 -type f -name 'conan-*-profile' -print
+        } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}'
+    )"
+    compiler_id="$(xcrun clang++ --version 2>/dev/null | head -1 || echo unknown)"
+    cat > "${destination}/fptn_native_lib.build-manifest.json" <<MANIFEST
+{
+  "platform": "${TARGET}",
+  "configuration": "${BUILD_TYPE}",
+  "fptn_commit": "${fptn_commit}",
+  "wrapper_hash": "${wrapper_hash}",
+  "build_hash": "${build_hash}",
+  "compiler": "${compiler_id}",
+  "ios_socket_buffer_bytes": ${SOCKET_BUFFER_BYTES},
+  "with_lwip": ${WITH_LWIP},
+  "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+MANIFEST
+
+    if [ "${FPTN_SKIP_NATIVE_CODESIGN:-0}" != "1" ]; then
+        SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
+        echo "Signing ${destination}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
+        codesign --force --sign "${SIGN_IDENTITY}" "${destination}/fptn_native_lib.framework"
+    else
+        echo "Skipping native framework signing for ${destination}; Xcode will sign the embedded copy."
+    fi
+}
+
+
+# Packages every slice of this family that has actually been built. A family
+# with only one slice is still a valid xcframework: building for the missing
+# platform then fails at link time with a clear error, rather than silently
+# linking the wrong platform, which is the failure this replaces.
+package_xcframework() {
+    local destination="$1"
+    local args=()
+    local slice framework staged=()
+
+    for slice in "${FAMILY_SLICES[@]}"; do
+        framework="${SLICE_ROOT}/${slice}/fptn_native_lib.framework"
+        if framework_is_built "$framework"; then
+            args+=(-framework "$framework")
+            staged+=("$slice")
+        fi
+    done
+
+    if [ ${#args[@]} -eq 0 ]; then
+        echo "error: no built slices found under ${SLICE_ROOT} for ${TARGET}"
+        return 1
+    fi
+
+    mkdir -p "$destination"
+    rm -rf "${destination}/fptn_native_lib.xcframework"
+    if ! xcodebuild -create-xcframework "${args[@]}" \
+            -output "${destination}/fptn_native_lib.xcframework" >/dev/null; then
+        echo "error: failed to package fptn_native_lib.xcframework into ${destination}"
+        return 1
+    fi
+    # The single-platform .framework this replaces would otherwise sit next to
+    # the xcframework and get linked by a stale search path. Its manifest goes
+    # too: manifests describe one slice, and leaving one here would invite
+    # reading it as a description of the whole bundle.
+    rm -rf "${destination}/fptn_native_lib.framework"
+    rm -f "${destination}/fptn_native_lib.build-manifest.json"
+    echo "Packaged xcframework (${staged[*]}) into ${destination}"
+}
+
+
 if [ "${FPTN_NATIVE_BUILD_IF_MISSING:-0}" = "1" ]; then
     EXPECTED_PLATFORM=""
     case "$TARGET" in
@@ -317,10 +445,18 @@ if [ "${FPTN_NATIVE_BUILD_IF_MISSING:-0}" = "1" ]; then
         return 0
     }
 
-    if framework_matches_target "${DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM" &&
-       manifest_matches "$DEST_DIR" &&
-       { [ -z "$SECONDARY_DEST_DIR" ] || framework_matches_target "${SECONDARY_DEST_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM"; }; then
-        echo "fptn_native_lib already built for ${TARGET} (${BUILD_TYPE}); skipping native build."
+    # Identity is checked against this target's SLICE, not the shared
+    # destination. That is the point of slices: a simulator build must not be
+    # able to invalidate the device cache.
+    if framework_matches_target "${SLICE_DIR}/fptn_native_lib.framework" "$EXPECTED_PLATFORM" &&
+       manifest_matches "$SLICE_DIR"; then
+        echo "fptn_native_lib slice already built for ${TARGET} (${BUILD_TYPE}); skipping native build."
+        # Repackage regardless: the slice can be current while the xcframework
+        # is absent, or while a sibling slice built since is missing from it.
+        package_xcframework "$DEST_DIR" || exit 1
+        if [ -n "$SECONDARY_DEST_DIR" ]; then
+            package_xcframework "$SECONDARY_DEST_DIR" || exit 1
+        fi
         copy_existing_dsym_to_archive_products
         exit 0
     fi
@@ -389,30 +525,27 @@ if [ "$TARGET" = "macos" ]; then
 
     generate_framework_dsym "${UNIVERSAL_FW}"
 
-    # ── Copy to all macOS destination directories ─────────────────────────────
+    # ── Stage as the macos slice, then package ────────────────────────────────
+    # arm64 + x86_64 lipo'd together is a legitimate fat binary: same platform,
+    # different architectures. It becomes the single macos slice.
     TUNNEL_DEST_DIR="${ROOT_DIR}/Fptn-macOS-Tunnel/Cpp"
-    for DEST in "$DEST_DIR" "$TUNNEL_DEST_DIR"; do
-        mkdir -p "$DEST"
-        rm -rf "${DEST}/fptn_native_lib.framework"
-        cp -R "$UNIVERSAL_FW" "$DEST/"
-        rm -rf "${DEST}/fptn_native_lib.framework.dSYM"
 
-        if [ "${FPTN_SKIP_NATIVE_CODESIGN:-0}" != "1" ]; then
-            SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
-            echo "Signing ${DEST}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
-            codesign --force --sign "${SIGN_IDENTITY}" "${DEST}/fptn_native_lib.framework"
-        else
-            echo "Skipping native framework signing for ${DEST}; Xcode will sign the embedded copy."
-        fi
-    done
+    # stage_slice copies from the working directory, and the universal
+    # framework was assembled at the top of LIB_DIR.
+    cd "$LIB_DIR"
+    stage_slice
 
-    copy_dsym_to_archive_products "${UNIVERSAL_FW}.dSYM"
+    package_xcframework "$DEST_DIR" || exit 1
+    package_xcframework "$TUNNEL_DEST_DIR" || exit 1
+
+    copy_dsym_to_archive_products "${SLICE_DIR}/fptn_native_lib.framework.dSYM"
 
     rm -rf "$UNIVERSAL_FW"
     rm -rf "${UNIVERSAL_FW}.dSYM"
-    echo "Build complete. Universal framework copied to:"
-    echo "  ${DEST_DIR}/fptn_native_lib.framework"
-    echo "  ${TUNNEL_DEST_DIR}/fptn_native_lib.framework"
+    echo "Build complete. Slice: ${SLICE_DIR}/fptn_native_lib.framework"
+    echo "Build complete. Universal xcframework packaged into:"
+    echo "  ${DEST_DIR}/fptn_native_lib.xcframework"
+    echo "  ${TUNNEL_DEST_DIR}/fptn_native_lib.xcframework"
     exit 0
 fi
 
@@ -430,72 +563,18 @@ if [ "$TARGET" = "ios-device" ] || [ "$TARGET" = "ios" ]; then
     sync_ios_release_output "fptn_native_lib.framework" "fptn_native_lib.framework.dSYM"
 fi
 
-copy_framework_to_dest() {
-    local destination="$1"
 
-    mkdir -p "$destination"
-    rm -rf "${destination}/fptn_native_lib.framework"
-    cp -R fptn_native_lib.framework "$destination/"
+stage_slice
 
-    local framework_plist="${destination}/fptn_native_lib.framework/Info.plist"
-    if [ -n "$MIN_PLATFORM_VERSION" ] && [ -f "$framework_plist" ]; then
-        echo "Adding MinimumOSVersion=${MIN_PLATFORM_VERSION} to framework Info.plist for ${destination}..."
-        /usr/libexec/PlistBuddy -c "Delete :MinimumOSVersion" "$framework_plist" 2>/dev/null || true
-        /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string ${MIN_PLATFORM_VERSION}" "$framework_plist"
-    fi
-
-    rm -rf "${destination}/fptn_native_lib.framework.dSYM"
-
-    # PR0: write the build manifest BESIDE the framework (not inside it)
-    # BEFORE codesign, so the signature is not invalidated. The manifest
-    # records full cache identity: configuration, fptn commit, wrapper
-    # source hash, build-file hash, and compiler identity.
-    local fptn_commit wrapper_hash build_hash compiler_id
-    fptn_commit="$(git -C "${LIB_DIR}/fptn" rev-parse HEAD 2>/dev/null || echo unknown)"
-    wrapper_hash="$(find "${LIB_DIR}/src" -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -print0 2>/dev/null | sort -z | xargs -0 shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}')"
-    build_hash="$(
-        {
-            printf '%s\n' \
-                "${SCRIPT_PATH}" \
-                "${LIB_DIR}/CMakeLists.txt" \
-                "${LIB_DIR}/conanfile.py" \
-                "${LIB_DIR}/Info.plist.in"
-            find "${LIB_DIR}" -maxdepth 1 -type f -name 'conan-*-profile' -print
-        } | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}'
-    )"
-    compiler_id="$(xcrun clang++ --version 2>/dev/null | head -1 || echo unknown)"
-    cat > "${destination}/fptn_native_lib.build-manifest.json" <<MANIFEST
-{
-  "platform": "${TARGET}",
-  "configuration": "${BUILD_TYPE}",
-  "fptn_commit": "${fptn_commit}",
-  "wrapper_hash": "${wrapper_hash}",
-  "build_hash": "${build_hash}",
-  "compiler": "${compiler_id}",
-  "ios_socket_buffer_bytes": ${SOCKET_BUFFER_BYTES},
-  "with_lwip": ${WITH_LWIP},
-  "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-}
-MANIFEST
-
-    if [ "${FPTN_SKIP_NATIVE_CODESIGN:-0}" != "1" ]; then
-        SIGN_IDENTITY="${FPTN_CODESIGN_IDENTITY:--}"
-        echo "Signing ${destination}/fptn_native_lib.framework with identity: ${SIGN_IDENTITY}"
-        codesign --force --sign "${SIGN_IDENTITY}" "${destination}/fptn_native_lib.framework"
-    else
-        echo "Skipping native framework signing for ${destination}; Xcode will sign the embedded copy."
-    fi
-}
-
-copy_framework_to_dest "$DEST_DIR"
-
+package_xcframework "$DEST_DIR" || exit 1
 if [ -n "$SECONDARY_DEST_DIR" ]; then
-    copy_framework_to_dest "$SECONDARY_DEST_DIR"
+    package_xcframework "$SECONDARY_DEST_DIR" || exit 1
 fi
 
 copy_dsym_to_archive_products "fptn_native_lib.framework.dSYM"
 
-echo "Build complete. Framework output: ${DEST_DIR}/fptn_native_lib.framework"
+echo "Build complete. Slice: ${SLICE_DIR}/fptn_native_lib.framework"
+echo "Build complete. Framework output: ${DEST_DIR}/fptn_native_lib.xcframework"
 if [ -n "$SECONDARY_DEST_DIR" ]; then
-    echo "Build complete. Framework output: ${SECONDARY_DEST_DIR}/fptn_native_lib.framework"
+    echo "Build complete. Framework output: ${SECONDARY_DEST_DIR}/fptn_native_lib.xcframework"
 fi
