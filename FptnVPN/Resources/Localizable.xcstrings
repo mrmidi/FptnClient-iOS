@@ -4,6 +4,9 @@
     "—" : {
 
     },
+    "·" : {
+
+    },
     "@fptn_bot" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -63,6 +66,19 @@
           }
         }
       }
+    },
+    "%@ groups · %@ rules" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ groups · %2$@ rules"
+          }
+        }
+      }
+    },
+    "%@ more not shown. Filter to narrow the list, or use Look up to resolve one address." : {
+
     },
     "%@ms" : {
 
@@ -363,6 +379,9 @@
           }
         }
       }
+    },
+    "Both files are removed from this device. You can download them again at any time." : {
+
     },
     "Build" : {
 
@@ -750,6 +769,9 @@
         }
       }
     },
+    "Delete database" : {
+
+    },
     "Disconnected" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -801,6 +823,9 @@
         }
       }
     },
+    "Domains" : {
+
+    },
     "Done" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -817,6 +842,9 @@
           }
         }
       }
+    },
+    "Download database" : {
+
     },
     "DPI Bypass" : {
       "extractionState" : "manual",
@@ -940,6 +968,9 @@
         }
       }
     },
+    "Geo Database" : {
+
+    },
     "Get your free token from" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1008,6 +1039,9 @@
         }
       }
     },
+    "IP ranges" : {
+
+    },
     "Level" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1041,6 +1075,9 @@
           }
         }
       }
+    },
+    "Lists are compiled and published by the %@ project. FPTN downloads them unmodified." : {
+
     },
     "Log Level" : {
       "extractionState" : "manual",
@@ -1143,6 +1180,9 @@
           }
         }
       }
+    },
+    "Look up" : {
+
     },
     "Max attempts" : {
       "extractionState" : "manual",
@@ -1255,6 +1295,9 @@
         }
       }
     },
+    "No routing lists yet" : {
+
+    },
     "No servers" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1302,6 +1345,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Нет данных токена"
+          }
+        }
+      }
+    },
+    "Nothing in %@ matches “%@”." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Nothing in %1$@ matches “%2$@”."
           }
         }
       }
@@ -1575,6 +1628,9 @@
       }
     },
     "Recovery" : {
+
+    },
+    "Reference only. Split routing still uses its built-in test policy — these lists are not applied to traffic yet." : {
 
     },
     "Restrict VPN to specific apps or exclude selected apps from the tunnel." : {
@@ -1893,6 +1949,9 @@
         }
       }
     },
+    "Source" : {
+
+    },
     "Split routing" : {
 
     },
@@ -1948,6 +2007,12 @@
       }
     },
     "Telemetry" : {
+
+    },
+    "The bar shows how much of the address space each range covers." : {
+
+    },
+    "The database could not be loaded" : {
 
     },
     "The VPN will be disconnected before scanning so probes reach the server directly." : {
@@ -2115,6 +2180,12 @@
         }
       }
     },
+    "Two files describe which traffic can skip the FPTN server: a table of IP ranges and a table of domain rules. Together they are about 490 KB." : {
+
+    },
+    "Type an IP address or a domain to see which rule claims it." : {
+
+    },
     "Unknown error" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2131,6 +2202,12 @@
           }
         }
       }
+    },
+    "Update from %@" : {
+
+    },
+    "via" : {
+
     },
     "View all logs" : {
 
