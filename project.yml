@@ -436,7 +436,14 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - FptnVPNTests
+      - path: FptnVPNTests
+        excludes:
+          - Fixtures/**
+      # Real published geoip.dat/geosite.dat, frozen as fixtures. The parser is
+      # cross-checked against their exact counts, so these must not be
+      # refreshed casually — a newer download changes the expected numbers.
+      - path: FptnVPNTests/Fixtures
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.fptn.FptnVPNTests

@@ -12,6 +12,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showLogoutConfirmation = false
     @State private var showClearKeychainConfirmation = false
+    @State private var showGeoDatabase = false
     @State private var showAdvancedBypass = false
 
     private var dataPlaneFooter: String {
@@ -317,6 +318,19 @@ struct SettingsView: View {
                             .foregroundStyle(Color.appPrimaryText)
                     }
                     .tint(Color.appAccent)
+
+                    Button {
+                        showGeoDatabase = true
+                    } label: {
+                        HStack {
+                            Text("Geo Database")
+                                .foregroundStyle(Color.appPrimaryText)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.bold())
+                                .foregroundStyle(Color.appSecondaryText)
+                        }
+                    }
                 } header: {
                     Text("Traffic Routing")
                         .foregroundStyle(Color.appAccent)
@@ -368,6 +382,9 @@ struct SettingsView: View {
                         .foregroundStyle(Color.appAccent)
                 }
             }
+        }
+        .sheet(isPresented: $showGeoDatabase) {
+            GeoDatabaseView()
         }
         .confirmationDialog(
             "Are you sure you want to log out?",
