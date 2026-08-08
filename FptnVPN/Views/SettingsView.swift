@@ -27,6 +27,17 @@ struct SettingsView: View {
     }
     #endif
 
+    /// The app and the native framework are compiled separately, so the pair
+    /// has to be reported as a pair — a Release app linked against a Debug
+    /// framework looks entirely healthy from the outside.
+    private var buildFooter: String {
+        let base = "The app and the native protocol library are built separately. "
+            + "Built \(NativeBuildInfo.buildTimestamp)."
+        guard NativeBuildInfo.hasMixedConfiguration else { return base }
+        return base + " The app is \(NativeBuildInfo.swiftConfiguration) but the "
+            + "library is \(NativeBuildInfo.configuration)."
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -237,6 +248,48 @@ struct SettingsView: View {
                         .foregroundStyle(Color.appAccent)
                 } footer: {
                     Text("Route Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected.")
+                        .foregroundStyle(Color.appSecondaryText)
+                }
+                .listRowBackground(Color.appSurface)
+
+                // MARK: Build
+                //
+                // Not debug-only on purpose. The failure this exists to catch —
+                // an optimised app linked against a Debug native framework — is
+                // exactly the one that survives into a TestFlight build and
+                // silently invalidates any measurement taken from it.
+
+                Section {
+                    LabeledContent("Native Library") {
+                        Text("\(NativeBuildInfo.configuration) \(NativeBuildInfo.optimizationLevel)")
+                            .foregroundStyle(Color.appSecondaryText)
+                    }
+                    LabeledContent("Platform") {
+                        Text(NativeBuildInfo.platform)
+                            .foregroundStyle(Color.appSecondaryText)
+                    }
+                    LabeledContent("App") {
+                        Text(NativeBuildInfo.swiftConfiguration)
+                            .foregroundStyle(
+                                NativeBuildInfo.hasMixedConfiguration
+                                    ? Color.orange : Color.appSecondaryText
+                            )
+                    }
+                    LabeledContent("Native Commit") {
+                        Text(NativeBuildInfo.fptnCommit)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(Color.appSecondaryText)
+                    }
+                    if let caveat = NativeBuildInfo.performanceCaveat {
+                        Label(caveat, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color.orange)
+                            .font(.footnote)
+                    }
+                } header: {
+                    Text("Build")
+                        .foregroundStyle(Color.appAccent)
+                } footer: {
+                    Text(buildFooter)
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)

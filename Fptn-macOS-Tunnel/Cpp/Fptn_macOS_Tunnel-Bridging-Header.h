@@ -2,5 +2,6 @@
 #define FPTN_MACOS_TUNNEL_BRIDGING_HEADER
 
 #include <fptn_native_lib/src/websocket/WrapperWebsocketClientBridge.h>
+#import <fptn_native_lib/src/apple/FPTNBuildInfo.h>
 
 #endif // FPTN_MACOS_TUNNEL_BRIDGING_HEADER

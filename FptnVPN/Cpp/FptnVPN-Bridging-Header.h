@@ -11,6 +11,7 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 #include <fptn_native_lib/src/websocket/WrapperWebsocketClientBridge.h>
 #import <fptn_native_lib/src/apple/FPTNApplePacketFlowAdapter.h>
 #import <fptn_native_lib/src/apple/FPTNTunnelBridge.h>
+#import <fptn_native_lib/src/apple/FPTNBuildInfo.h>
 #include "FptnTunnelDiagnostics.h"
 
 #endif // FPTN_VPN_BRIDGING_HEADER

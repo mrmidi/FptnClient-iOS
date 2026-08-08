@@ -5,6 +5,7 @@
 #import <fptn_native_lib/src/apple/FPTNApplePacketFlowAdapter.h>
 #import <fptn_native_lib/src/apple/FPTNTunnelBridge.h>
 #import <fptn_native_lib/src/apple/FPTNAppleLogSink.h>
+#import <fptn_native_lib/src/apple/FPTNBuildInfo.h>
 #include "FptnTunnelDiagnostics.h"
 
 #endif // FPTN_VPN_TUNNEL_BRIDGING_HEADER

@@ -67,6 +67,7 @@ add_library(fptn_native_lib SHARED
     src/apple/FPTNApplePacketFlowAdapter.h src/apple/FPTNApplePacketFlowAdapter.mm
     src/apple/FPTNTunnelBridge.h src/apple/FPTNTunnelBridge.mm
     src/apple/FPTNAppleLogSink.h src/apple/FPTNAppleLogSink.cpp
+    src/apple/FPTNBuildInfo.h src/apple/FPTNBuildInfo.mm
 )
 
 target_compile_features(fptn_native_lib PRIVATE cxx_std_23)
@@ -75,6 +76,22 @@ target_compile_definitions(fptn_native_lib PRIVATE
     BOOST_ASIO_HAS_CO_AWAIT
     BOOST_ASIO_HAS_CO_SPAWN
     BOOST_ASIO_HAS_COROUTINES
+)
+
+# Build provenance, compiled into the binary so it cannot drift from it the way
+# the sidecar build manifest can. FPTN_BUILD_COMMIT/FPTN_BUILD_TARGET are passed
+# by build_fptn_lib.sh; CMAKE_BUILD_TYPE also selects the conan build_type for
+# the fptn dependency, so it describes the protocol library too.
+if(NOT DEFINED FPTN_BUILD_COMMIT)
+    set(FPTN_BUILD_COMMIT "unknown")
+endif()
+if(NOT DEFINED FPTN_BUILD_TARGET)
+    set(FPTN_BUILD_TARGET "unknown")
+endif()
+set_property(SOURCE src/apple/FPTNBuildInfo.mm APPEND PROPERTY COMPILE_DEFINITIONS
+    FPTN_BUILD_CONFIGURATION="${CMAKE_BUILD_TYPE}"
+    FPTN_BUILD_COMMIT="${FPTN_BUILD_COMMIT}"
+    FPTN_BUILD_TARGET="${FPTN_BUILD_TARGET}"
 )
 
 # PR0: removed -framework Accelerate, Metal, MetalKit (zero references

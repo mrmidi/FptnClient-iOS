@@ -328,6 +328,15 @@ fi
 
 cd "$LIB_DIR"
 
+# Build provenance compiled into the framework binary (FPTNBuildInfo). The
+# sidecar manifest below records the same facts, but travels separately from
+# the binary and so cannot be trusted once a framework is copied by hand.
+BUILD_INFO_COMMIT="$(git -C "${LIB_DIR}/fptn" rev-parse HEAD 2>/dev/null || echo unknown)"
+BUILD_INFO_DEFINES=(
+    "-DFPTN_BUILD_COMMIT=${BUILD_INFO_COMMIT}"
+    "-DFPTN_BUILD_TARGET=${TARGET}"
+)
+
 if [ "$TARGET" = "macos" ]; then
     # ── arm64 slice ──────────────────────────────────────────────────────────
     ARM64_DIR="build-macos-${BUILD_TYPE}"
@@ -338,7 +347,8 @@ if [ "$TARGET" = "macos" ]; then
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
              -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
-             -DCMAKE_OSX_ARCHITECTURES=arm64
+             -DCMAKE_OSX_ARCHITECTURES=arm64 \
+             "${BUILD_INFO_DEFINES[@]}"
     rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
     cmake --build . --config "$BUILD_TYPE"
     cd "$LIB_DIR"
@@ -352,7 +362,8 @@ if [ "$TARGET" = "macos" ]; then
     cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake \
              -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
              -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
-             -DCMAKE_OSX_ARCHITECTURES=x86_64
+             -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+             "${BUILD_INFO_DEFINES[@]}"
     rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
     cmake --build . --config "$BUILD_TYPE"
     cd "$LIB_DIR"
@@ -410,7 +421,7 @@ conan install . --profile:host="$HOST_PROFILE" --profile:build=conan-macos-profi
 purge_stale_cmake_cache "$OUTPUT_DIR"
 
 cd "$OUTPUT_DIR"
-cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET"
+cmake .. -DCMAKE_TOOLCHAIN_FILE=./build/${BUILD_TYPE}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" "${BUILD_INFO_DEFINES[@]}"
 rm -rf fptn_native_lib.framework fptn_native_lib.framework.dSYM
 cmake --build . --config "$BUILD_TYPE"
 generate_framework_dsym "fptn_native_lib.framework"

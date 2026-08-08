@@ -17,6 +17,11 @@ struct FptnVPNApp: App {
         RingLogSink.app.clear()
         RingLogSink.tunnel.clear()
         logger.info("FptnVPN app started")
+        if NativeBuildInfo.isPerformanceRepresentative {
+            logger.info("Build: \(NativeBuildInfo.logLine)")
+        } else {
+            logger.warning("Build: \(NativeBuildInfo.logLine)")
+        }
 
         // Start collecting crash/hang diagnostics via MetricKit.
         // _ = MetricKitManager.shared

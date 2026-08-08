@@ -355,6 +355,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         signpostLock.unlock()
         #endif
         bootstrapLogging()
+        // First line of every tunnel session: which native framework actually
+        // loaded. A Release app can link a Debug framework, and until this was
+        // logged the only way to find out was to disassemble the binary.
+        if NativeBuildInfo.isPerformanceRepresentative {
+            logger.info("Build: \(NativeBuildInfo.logLine)")
+        } else {
+            logger.warning("Build: \(NativeBuildInfo.logLine)")
+        }
         TunnelCrashSignalInstaller.installIfPossible()
 
         // PR3: initialize binary flight recorder + lifecycle snapshot store.
