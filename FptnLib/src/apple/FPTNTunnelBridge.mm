@@ -6,13 +6,33 @@ Distributed under the MIT License (https://opensource.org/licenses/MIT)
 
 #import "FPTNTunnelBridge.h"
 
+#include <array>
+#include <cerrno>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <exception>
+#include <fcntl.h>
+#include <fstream>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <vector>
+#include <unistd.h>
+
+#include <openssl/sha.h>
+
+#include "fptn-protocol-lib/geo/geo_compiler.h"
+#include "fptn-protocol-lib/geo/geo_dat_parser.h"
+#include "fptn-protocol-lib/geo/geo_inputs.h"
+#include "fptn-protocol-lib/geo/geo_routing_policy.h"
+#include "fptn-protocol-lib/geo/geo_rule_set.h"
 #include "fptn-protocol-lib/tunnel/tunnel_engine.h"
 #include "../websocket/WrapperWebsocketClientBridge.h"
 #include "FPTNAppleLogSink.h"
+
+#include <spdlog/spdlog.h>
 
 namespace {
 
@@ -36,6 +56,342 @@ std::vector<std::string> ToStringVector(NSArray<NSString *> *values) {
     return out;
 }
 
+std::string FileSystemPath(NSString *directory, NSString *name) {
+    NSString *path = [directory stringByAppendingPathComponent:name];
+    const char *fileSystemPath = [path fileSystemRepresentation];
+    return fileSystemPath == nullptr ? std::string{} : fileSystemPath;
+}
+
+std::vector<std::uint8_t> ReadBytes(const std::string& path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) {
+        return {};
+    }
+    const std::streampos end = file.tellg();
+    if (end <= std::streampos(0)) {
+        return {};
+    }
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(end));
+    file.seekg(0, std::ios::beg);
+    file.read(reinterpret_cast<char *>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size()));
+    if (!file) {
+        return {};
+    }
+    return bytes;
+}
+
+bool WriteAll(int fd, const std::vector<std::uint8_t>& bytes) {
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        const ssize_t written = ::write(
+            fd, bytes.data() + offset, bytes.size() - offset);
+        if (written > 0) {
+            offset += static_cast<std::size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool FailGeoCompile(std::string message, std::string& failure) {
+    failure = std::move(message);
+    SPDLOG_WARN("[geo] source compilation failed: {}", failure);
+    return false;
+}
+
+std::array<std::uint8_t, fptn::geo::kSha256Size> Sha256(
+    const std::vector<std::uint8_t>& bytes) {
+    std::array<std::uint8_t, fptn::geo::kSha256Size> digest = {};
+    ::SHA256(bytes.data(), bytes.size(), digest.data());
+    return digest;
+}
+
+bool PublishCompiledArtifact(NSString *geoDatabaseDirectory,
+    const std::vector<std::uint8_t>& bytes, std::string& failure) {
+    const std::string artifactPath = FileSystemPath(
+        geoDatabaseDirectory, @"geo-routing.bin");
+    std::string temporaryPath = artifactPath + ".XXXXXX";
+    const int fd = ::mkstemp(temporaryPath.data());
+    if (fd < 0) {
+        return FailGeoCompile(
+            "could not create the temporary compiled artifact: " +
+                std::string(std::strerror(errno)),
+            failure);
+    }
+
+    const bool written = WriteAll(fd, bytes);
+    const bool synced = written && ::fsync(fd) == 0;
+    const int closeResult = ::close(fd);
+    if (!written || !synced || closeResult != 0) {
+        ::unlink(temporaryPath.c_str());
+        return FailGeoCompile(
+            "could not write the temporary compiled artifact", failure);
+    }
+
+    // Validate the exact bytes that are about to be published. This keeps a
+    // compiler/reader mismatch from ever becoming the active routing policy.
+    auto rules = std::make_unique<fptn::geo::GeoRuleSet>();
+    const auto loadError = rules->Open(temporaryPath, true);
+    if (loadError != fptn::geo::GeoLoadError::none) {
+        ::unlink(temporaryPath.c_str());
+        return FailGeoCompile(
+            "compiled artifact rejected: " +
+                std::string(fptn::geo::ToString(loadError)),
+            failure);
+    }
+
+    // Same-directory rename is atomic. A running tunnel that already mapped
+    // the old inode continues to see its old, consistent artifact; the next
+    // tunnel session sees the new one after the manifest is committed.
+    if (::rename(temporaryPath.c_str(), artifactPath.c_str()) != 0) {
+        ::unlink(temporaryPath.c_str());
+        return FailGeoCompile(
+            "could not publish " + artifactPath + ": " +
+                std::string(std::strerror(errno)),
+            failure);
+    }
+
+    SPDLOG_INFO("[geo] published compiled routing artifact={} bytes={} "
+                "ipv4_intervals={} ipv6_rules={} domains={} substrings={} "
+                "pairs={}",
+        artifactPath, bytes.size(), rules->ipv4_count(), rules->ipv6_count(),
+        rules->domain_count(), rules->substring_count(), rules->pair_count());
+    return true;
+}
+
+bool CompileGeoDatabaseImpl(NSString *geoDatabaseDirectory,
+    std::string& failure) {
+    if (geoDatabaseDirectory.length == 0) {
+        return FailGeoCompile("geo database directory is empty", failure);
+    }
+
+    NSString *manifestPath = [geoDatabaseDirectory
+        stringByAppendingPathComponent:@"manifest.json"];
+    NSString *geoipPath = [geoDatabaseDirectory
+        stringByAppendingPathComponent:@"geoip.dat"];
+    NSString *geositePath = [geoDatabaseDirectory
+        stringByAppendingPathComponent:@"geosite.dat"];
+    const std::string directoryFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"");
+    const std::string manifestFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"manifest.json");
+    const std::string geoipFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"geoip.dat");
+    const std::string geositeFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"geosite.dat");
+    const std::string artifactFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"geo-routing.bin");
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    const bool manifestExists = [fileManager fileExistsAtPath:manifestPath];
+    const bool geoipExists = [fileManager fileExistsAtPath:geoipPath];
+    const bool geositeExists = [fileManager fileExistsAtPath:geositePath];
+
+    SPDLOG_INFO(
+        "[geo] compiling directory={} manifest={} exists={} geoip={} exists={} "
+        "geosite={} exists={} output={}",
+        directoryFilePath, manifestFilePath, manifestExists, geoipFilePath,
+        geoipExists, geositeFilePath, geositeExists, artifactFilePath);
+    if (!geoipExists || !geositeExists) {
+        return FailGeoCompile("one or more source files are missing", failure);
+    }
+
+    const auto geoipBytes = ReadBytes(geoipFilePath);
+    const auto geositeBytes = ReadBytes(geositeFilePath);
+    SPDLOG_INFO("[geo] read source files geoip={} bytes={} geosite={} bytes={}",
+        geoipFilePath, geoipBytes.size(), geositeFilePath,
+        geositeBytes.size());
+    if (geoipBytes.empty() || geositeBytes.empty()) {
+        return FailGeoCompile("one or more source files are empty or unreadable",
+            failure);
+    }
+
+    SPDLOG_INFO("[geo] parsing geoip.dat and geosite.dat");
+    const auto ip = fptn::geo::GeoDatParser::ParseGeoIp(
+        std::span<const std::uint8_t>(geoipBytes.data(), geoipBytes.size()));
+    if (!ip.ok()) {
+        return FailGeoCompile(
+            "geoip.dat rejected: " + std::string(fptn::geo::ToString(ip.error)) +
+                " at byte " + std::to_string(ip.error_offset),
+            failure);
+    }
+    const auto site = fptn::geo::GeoDatParser::ParseGeoSite(
+        std::span<const std::uint8_t>(
+            geositeBytes.data(), geositeBytes.size()));
+    if (!site.ok()) {
+        return FailGeoCompile(
+            "geosite.dat rejected: " +
+                std::string(fptn::geo::ToString(site.error)) + " at byte " +
+                std::to_string(site.error_offset),
+            failure);
+    }
+    SPDLOG_INFO("[geo] parsed {} IP groups and {} site groups", ip.groups.size(),
+        site.groups.size());
+
+    const auto verdictMap = fptn::geo::DefaultVerdictMap();
+    const auto built = fptn::geo::BuildGeoInputs(
+        ip.groups, site.groups, verdictMap);
+    if (!built.report.unsupported_regexes.empty() ||
+        !built.report.inverted_groups.empty()) {
+        return FailGeoCompile(
+            "source contains " +
+                std::to_string(built.report.unsupported_regexes.size()) +
+                " unsupported regexes and " +
+                std::to_string(built.report.inverted_groups.size()) +
+                " inverted groups; refusing a partial policy",
+            failure);
+    }
+
+    fptn::geo::GeoCompileOptions options;
+    options.default_action = verdictMap.default_action;
+    options.bare_hostname_is_direct = built.report.bare_hostname_is_direct;
+    options.verdict_map_id = verdictMap.id();
+    options.geoip_sha256 = Sha256(geoipBytes);
+    options.geosite_sha256 = Sha256(geositeBytes);
+    options.built_at_unix = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count());
+    SPDLOG_INFO("[geo] building compiled policy from {} CIDRs, {} domains, "
+                "{} substrings, {} pairs",
+        built.inputs.cidrs.size(), built.inputs.domains.size(),
+        built.inputs.substrings.size(), built.inputs.pairs.size());
+    const auto compiled = fptn::geo::GeoCompiler::Compile(
+        built.inputs, options);
+    if (!compiled.ok || compiled.bytes.empty()) {
+        return FailGeoCompile(
+            compiled.error.empty() ? "empty artifact" : compiled.error,
+            failure);
+    }
+    SPDLOG_INFO("[geo] compiled policy bytes={} domain_conflicts={}",
+        compiled.bytes.size(), compiled.stats.domain_conflicts);
+    return PublishCompiledArtifact(geoDatabaseDirectory, compiled.bytes, failure);
+}
+
+// `status` is a short human-readable verdict handed back to the platform layer.
+//
+// It exists because the native spdlog output has proven unreliable to observe
+// from a shipped extension, and "is geo routing actually active" is the one
+// question that must be answerable without attaching a log stream. The caller
+// logs it through the platform logger, which is the path known to survive.
+std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicyImpl(
+    NSString *geoDatabaseDirectory, NSString **status) {
+    *status = @"inactive (not attempted)";
+    if (geoDatabaseDirectory.length == 0) {
+        SPDLOG_WARN("[geo] geo database directory is empty; split policy stays "
+                    "tunnel-only");
+        *status = @"inactive (no shared directory)";
+        return nullptr;
+    }
+
+    NSString *manifestPath = [geoDatabaseDirectory
+        stringByAppendingPathComponent:@"manifest.json"];
+    NSString *artifactPath = [geoDatabaseDirectory
+        stringByAppendingPathComponent:@"geo-routing.bin"];
+    const std::string directoryFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"");
+    const std::string manifestFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"manifest.json");
+    const std::string artifactFilePath = FileSystemPath(
+        geoDatabaseDirectory, @"geo-routing.bin");
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    const bool manifestExists = [fileManager fileExistsAtPath:manifestPath];
+    const bool artifactExists = [fileManager fileExistsAtPath:artifactPath];
+    NSNumber *artifactSize = [[fileManager
+        attributesOfItemAtPath:artifactPath error:nil] objectForKey:NSFileSize];
+
+    SPDLOG_INFO(
+        "[geo] loading directory={} manifest={} exists={} artifact={} "
+        "exists={} bytes={}",
+        directoryFilePath, manifestFilePath, manifestExists, artifactFilePath,
+        artifactExists, artifactSize ? artifactSize.unsignedLongLongValue : 0);
+    if (!manifestExists) {
+        SPDLOG_WARN("[geo] no published manifest at {}; split policy stays "
+                    "tunnel-only", manifestFilePath);
+        *status = @"inactive (no manifest — database not published yet)";
+        return nullptr;
+    }
+    if (!artifactExists) {
+        SPDLOG_WARN("[geo] no compiled routing artifact at {}; split policy "
+                    "stays tunnel-only", artifactFilePath);
+        *status = @"inactive (manifest present but no compiled artifact)";
+        return nullptr;
+    }
+
+    auto rules = std::make_shared<fptn::geo::GeoRuleSet>();
+    const auto loadError = rules->Open(artifactFilePath, true);
+    if (loadError != fptn::geo::GeoLoadError::none) {
+        SPDLOG_WARN("[geo] compiled artifact rejected: {}; split policy stays "
+                    "tunnel-only", fptn::geo::ToString(loadError));
+        *status = [NSString stringWithFormat:@"inactive (artifact rejected: %s)",
+                            fptn::geo::ToString(loadError)];
+        return nullptr;
+    }
+
+    SPDLOG_INFO(
+        "[geo] loaded compiled artifact: {} IPv4 intervals, {} IPv6 rules, "
+        "{} domains, {} substrings, {} pairs ({} bytes)",
+        rules->ipv4_count(), rules->ipv6_count(), rules->domain_count(),
+        rules->substring_count(), rules->pair_count(),
+        artifactSize ? artifactSize.unsignedLongLongValue : 0);
+    *status = [NSString
+        stringWithFormat:@"active (%u ipv4, %u ipv6, %u domains, %u substrings, "
+                          "%u pairs, %llu bytes)",
+                         rules->ipv4_count(), rules->ipv6_count(),
+                         rules->domain_count(), rules->substring_count(),
+                         rules->pair_count(),
+                         artifactSize ? artifactSize.unsignedLongLongValue : 0];
+    return std::make_shared<fptn::geo::GeoRoutingPolicy>(
+        std::move(rules), fptn::tunnel::RouteAction::fptn_l4);
+}
+
+void SetGeoError(NSError **error, const std::string& message) {
+    if (error == nullptr) {
+        return;
+    }
+    NSString *description = [NSString stringWithUTF8String:message.c_str()];
+    if (description == nil) {
+        description = @"The geo routing policy could not be compiled.";
+    }
+    *error = [NSError errorWithDomain:@"org.fptn.geo" code:1
+                              userInfo:@{NSLocalizedDescriptionKey: description}];
+}
+
+bool CompileGeoDatabase(NSString *geoDatabaseDirectory, std::string& failure) {
+    try {
+        return CompileGeoDatabaseImpl(geoDatabaseDirectory, failure);
+    } catch (const std::exception& exception) {
+        failure = exception.what();
+        SPDLOG_ERROR("[geo] exception while compiling the geo database: {}",
+            failure);
+    } catch (...) {
+        failure = "unknown exception";
+        SPDLOG_ERROR("[geo] unknown exception while compiling the geo database");
+    }
+    return false;
+}
+
+std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
+    NSString *geoDatabaseDirectory, NSString **status) {
+    try {
+        return LoadGeoPolicyImpl(geoDatabaseDirectory, status);
+    } catch (const std::exception& exception) {
+        SPDLOG_ERROR("[geo] exception while loading the compiled geo database: "
+                     "{}; split policy stays tunnel-only", exception.what());
+        *status = [NSString stringWithFormat:@"inactive (exception: %s)",
+                            exception.what()];
+    } catch (...) {
+        SPDLOG_ERROR("[geo] unknown exception while loading the compiled geo "
+                     "database; split policy stays tunnel-only");
+        *status = @"inactive (unknown exception)";
+    }
+    return nullptr;
+}
+
 }  // namespace
 
 @interface FPTNTunnelBridge () {
@@ -43,6 +399,7 @@ std::vector<std::string> ToStringVector(NSArray<NSString *> *values) {
     FPTNApplePacketFlowAdapter * __weak _egressAdapter;
     std::shared_ptr<SplitTransportSlot> _transportSlot;
 }
+@property (nonatomic, copy, nullable) NSString *geoRoutingStatusStorage;
 @end
 
 @implementation FPTNTunnelBridge
@@ -56,6 +413,25 @@ std::vector<std::string> ToStringVector(NSArray<NSString *> *values) {
 
 + (BOOL)isFlowSupported {
     return [FPTNApplePacketFlowAdapter isFlowSupported];
+}
+
+- (NSString *)geoRoutingStatus {
+    NSString *status = self.geoRoutingStatusStorage;
+    return status.length == 0 ? @"inactive (not a split bridge)" : status;
+}
+
++ (BOOL)compileGeoRoutingPolicyAtPath:(NSString *)directoryPath
+                                error:(NSError * _Nullable * _Nullable)error {
+    if (error != nullptr) {
+        *error = nil;
+    }
+
+    std::string failure;
+    if (CompileGeoDatabase(directoryPath, failure)) {
+        return YES;
+    }
+    SetGeoError(error, failure);
+    return NO;
 }
 
 - (instancetype)initWithTunIPv4:(NSString *)tunIPv4
@@ -93,12 +469,13 @@ std::vector<std::string> ToStringVector(NSArray<NSString *> *values) {
 - (nullable instancetype)initSplitWithTunIPv4:(NSString *)tunIPv4
                                       tunIPv6:(nullable NSString *)tunIPv6
                                           mtu:(uint16_t)mtu
-                                     serverIP:(NSString *)serverIP
-                                   serverPort:(int)serverPort
-                               directDomains:(NSArray<NSString *> *)directDomains
+                                   serverIP:(NSString *)serverIP
+                                 serverPort:(int)serverPort
+                             directDomains:(NSArray<NSString *> *)directDomains
                                rejectDomains:(NSArray<NSString *> *)rejectDomains
                                  dropDomains:(NSArray<NSString *> *)dropDomains
-                             tunnelResolvers:(NSArray<NSString *> *)tunnelResolvers {
+                             tunnelResolvers:(NSArray<NSString *> *)tunnelResolvers
+                         geoDatabaseDirectory:(nullable NSString *)geoDatabaseDirectory {
     self = [super init];
     if (!self) {
         return nil;
@@ -124,6 +501,9 @@ std::vector<std::string> ToStringVector(NSArray<NSString *> *values) {
     config.routing.reject_domains = ToStringVector(rejectDomains);
     config.routing.drop_domains = ToStringVector(dropDomains);
     config.routing.tunnel_resolvers = ToStringVector(tunnelResolvers);
+    NSString *geoStatus = @"inactive (not attempted)";
+    auto routingPolicy = LoadGeoPolicy(geoDatabaseDirectory, &geoStatus);
+    self.geoRoutingStatusStorage = geoStatus;
 
     __weak __typeof__(self) weakSelf = self;
     fptn::tunnel::TunnelCallbacks callbacks;
@@ -149,7 +529,8 @@ std::vector<std::string> ToStringVector(NSArray<NSString *> *values) {
         };
 
     auto createResult = fptn::tunnel::TunnelEngine::CreateSplit(
-        std::move(config), std::move(callbacks), std::move(transport));
+        std::move(config), std::move(callbacks), std::move(transport),
+        std::move(routingPolicy));
     if (!createResult.has_value()) {
         return nil;
     }

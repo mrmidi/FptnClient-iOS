@@ -31,10 +31,11 @@ enum GeoDatabaseSource {
 
 // MARK: - Errors
 
-enum GeoDatabaseStoreError: Error, LocalizedError {
+enum GeoDatabaseStoreError: Error, LocalizedError, Sendable {
     case noSharedContainer
     case httpStatus(Int, kind: GeoDataKind)
     case emptyResponse(GeoDataKind)
+    case compilationFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -44,6 +45,8 @@ enum GeoDatabaseStoreError: Error, LocalizedError {
             "Downloading \(kind.fileName) failed with HTTP \(code)."
         case .emptyResponse(let kind):
             "\(kind.fileName) came back empty."
+        case .compilationFailed(let message):
+            "Compiling the geo routing artifact failed: \(message)"
         }
     }
 }
@@ -53,10 +56,12 @@ enum GeoDatabaseStoreError: Error, LocalizedError {
 /// Downloads, stores and decodes the geo database.
 ///
 /// Files land in the shared app group container rather than the app's own
-/// documents directory. Nothing outside the app reads them yet — split routing
-/// still runs its built-in test policy — but putting them anywhere else would
-/// mean moving them later, and the container is the only location both
-/// processes can name.
+/// documents directory. The app compiles the raw pair into `geo-routing.bin`
+/// in that same directory before it publishes the manifest. The packet-tunnel
+/// extension maps that immutable artifact; it does not parse or compile source
+/// lists on its packet-routing path. The manifest is a publish marker: it is
+/// removed before an update and written last, so the extension either sees a
+/// complete artifact or safely stays tunnel-only.
 @MainActor
 final class GeoDatabaseStore: ObservableObject {
 
@@ -85,6 +90,7 @@ final class GeoDatabaseStore: ObservableObject {
 
     private let logger = Logger(subsystem: "org.fptn", category: "geodb")
     private let appGroup = "group.net.mrmidi.FptnVPN"
+    private let compiledArtifactFileName = "geo-routing.bin"
     private let session: URLSession
 
     init(session: URLSession = .shared) {
@@ -105,6 +111,29 @@ final class GeoDatabaseStore: ObservableObject {
 
     private var manifestURL: URL? {
         directory?.appendingPathComponent("manifest.json")
+    }
+
+    private var compiledArtifactURL: URL? {
+        directory?.appendingPathComponent(compiledArtifactFileName)
+    }
+
+    private var hasCompiledArtifact: Bool {
+        guard let compiledArtifactURL else { return false }
+        return FileManager.default.fileExists(atPath: compiledArtifactURL.path)
+    }
+
+    /// Size and mtime of the published artifact, for the log. Whether the
+    /// tunnel is routing on a fresh artifact or a months-old one is the first
+    /// thing worth knowing, and file existence alone does not say.
+    private var compiledArtifactDescription: String {
+        guard let compiledArtifactURL,
+              let attributes = try? FileManager.default
+                  .attributesOfItem(atPath: compiledArtifactURL.path)
+        else { return "absent" }
+        let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        let modified = (attributes[.modificationDate] as? Date)
+            .map { ISO8601DateFormatter().string(from: $0) } ?? "unknown"
+        return "\(size) bytes, built \(modified)"
     }
 
     /// True when both files and their provenance are on disk. Checked before
@@ -131,6 +160,16 @@ final class GeoDatabaseStore: ObservableObject {
         state = .parsing
         do {
             let manifest = try readManifest()
+            if hasCompiledArtifact {
+                logger.info("Compiled artifact already present (\(self.compiledArtifactDescription)); skipping recompilation")
+            } else {
+                let directory = try require(directory)
+                logger.info("No compiled artifact; compiling into \(directory.path)")
+                try invalidatePublishedDatabase()
+                try await Self.compileNativeDatabase(at: directory.path)
+                try writeManifest(manifest)
+                logger.info("Compiled the routing artifact (\(self.compiledArtifactDescription))")
+            }
             let database = try await Self.parse(
                 ipURL: try require(fileURL(for: .geoip)),
                 siteURL: try require(fileURL(for: .geosite)),
@@ -138,7 +177,7 @@ final class GeoDatabaseStore: ObservableObject {
                 siteProvenance: try require(manifest[GeoDataKind.geosite.rawValue])
             )
             state = .ready(database)
-            logger.info("Loaded geo database: \(database.totalRuleCount) rules")
+            logger.info("Loaded and compiled geo database: \(database.totalRuleCount) rules")
         } catch {
             logger.error("Loading the stored geo database failed: \(error.localizedDescription)")
             state = .failed(error.localizedDescription)
@@ -160,8 +199,15 @@ final class GeoDatabaseStore: ObservableObject {
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true
             )
+            // Make an in-progress update invisible to the packet tunnel. The
+            // extension treats manifest.json as the commit marker and only
+            // maps geo-routing.bin after that marker is restored.
+            try invalidatePublishedDatabase()
             try ip.data.write(to: try require(fileURL(for: .geoip)), options: .atomic)
             try site.data.write(to: try require(fileURL(for: .geosite)), options: .atomic)
+            logger.info("Compiling the routing artifact from \(ip.data.count) + \(site.data.count) downloaded bytes")
+            try await Self.compileNativeDatabase(at: directory.path)
+            logger.info("Compiled the routing artifact (\(self.compiledArtifactDescription))")
             try writeManifest([
                 GeoDataKind.geoip.rawValue: ip.provenance,
                 GeoDataKind.geosite.rawValue: site.provenance,
@@ -175,7 +221,7 @@ final class GeoDatabaseStore: ObservableObject {
                 siteProvenance: site.provenance
             )
             state = .ready(database)
-            logger.info("Downloaded geo database: \(database.totalRuleCount) rules")
+            logger.info("Downloaded and compiled geo database: \(database.totalRuleCount) rules")
         } catch {
             logger.error("Downloading the geo database failed: \(error.localizedDescription)")
             state = .failed(error.localizedDescription)
@@ -231,9 +277,39 @@ final class GeoDatabaseStore: ObservableObject {
         try encoder.encode(manifest).write(to: try require(manifestURL), options: .atomic)
     }
 
+    private func invalidatePublishedDatabase() throws {
+        if let manifestURL,
+           FileManager.default.fileExists(atPath: manifestURL.path) {
+            try FileManager.default.removeItem(at: manifestURL)
+        }
+    }
+
     private func require<T>(_ value: T?) throws -> T {
         guard let value else { throw GeoDatabaseStoreError.noSharedContainer }
         return value
+    }
+
+    /// The compiler is synchronous native code, so keep it off the main actor.
+    /// The task is awaited before the manifest is restored; the tunnel can only
+    /// observe the artifact once the complete download/compile transaction is
+    /// committed.
+    private nonisolated static func compileNativeDatabase(at path: String) async throws {
+        try await Task.detached(priority: .utility) {
+            do {
+                try FPTNTunnelBridge.compileGeoRoutingPolicy(atPath: path)
+            } catch {
+                // Named here rather than only at the call site: the native
+                // compiler's reason (which .dat was rejected, at which byte)
+                // is the whole diagnostic, and the outer handler flattens it
+                // into a generic "loading failed".
+                Logger(subsystem: "org.fptn", category: "geodb").error(
+                    "Native geo compilation failed at \(path): \(error.localizedDescription)"
+                )
+                throw GeoDatabaseStoreError.compilationFailed(
+                    error.localizedDescription
+                )
+            }
+        }.value
     }
 
     // MARK: Parsing

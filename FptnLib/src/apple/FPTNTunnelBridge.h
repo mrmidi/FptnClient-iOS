@@ -86,18 +86,39 @@ typedef struct {
 /// working and a reconnect leaves lwIP and its live flows alone. Supply it
 /// with -setSplitTransport:.
 ///
-/// Domains take the `domain:example.com` form or a bare domain, and match the
-/// name plus any subdomain. Anything unmatched, or unattributable such as an
-/// IP-literal connection, is tunnelled.
+/// `geoDatabaseDirectory` points at the shared app-group directory containing
+/// the atomically-published `manifest.json` and `geo-routing.bin` artifact.
+/// The app compiles the raw `geoip.dat`/`geosite.dat` pair before publishing
+/// that artifact. The tunnel only maps the artifact; it never compiles or
+/// parses the source lists on its packet-routing path. The domain arrays remain
+/// a compatibility fallback for native callers; production passes them empty.
 - (nullable instancetype)initSplitWithTunIPv4:(NSString *)tunIPv4
                                       tunIPv6:(nullable NSString *)tunIPv6
                                           mtu:(uint16_t)mtu
-                                     serverIP:(NSString *)serverIP
-                                   serverPort:(int)serverPort
-                               directDomains:(NSArray<NSString *> *)directDomains
+                                   serverIP:(NSString *)serverIP
+                                 serverPort:(int)serverPort
+                             directDomains:(NSArray<NSString *> *)directDomains
                                rejectDomains:(NSArray<NSString *> *)rejectDomains
                                  dropDomains:(NSArray<NSString *> *)dropDomains
-                             tunnelResolvers:(NSArray<NSString *> *)tunnelResolvers;
+                             tunnelResolvers:(NSArray<NSString *> *)tunnelResolvers
+                         geoDatabaseDirectory:(nullable NSString *)geoDatabaseDirectory;
+
+/// Compiles the raw `geoip.dat`/`geosite.dat` pair in the shared app-group
+/// directory and atomically publishes `geo-routing.bin` there. The existing
+/// published artifact is never modified in place. This is intended for the
+/// app process, immediately after it has downloaded and atomically written the
+/// two source files, before it writes `manifest.json` as the commit marker.
++ (BOOL)compileGeoRoutingPolicyAtPath:(NSString *)directoryPath
+                                error:(NSError * _Nullable * _Nullable)error;
+
+/// Whether the compiled geo policy is actually driving this tunnel, and if not,
+/// why. Reads `active (…)` with the rule counts, or `inactive (…)` naming the
+/// reason — no published manifest, no artifact, a rejected artifact.
+///
+/// Deliberately a value the platform layer can log through its own logger:
+/// whether geo routing is live is the one thing that must be answerable from an
+/// ordinary log capture, without attaching a stream to the native output.
+@property (nonatomic, readonly, copy) NSString *geoRoutingStatus;
 
 /// Points the split plane at the websocket transport carrying `fptn`-verdict
 /// packets. Pass a `WebsocketSwiftBridge *`.

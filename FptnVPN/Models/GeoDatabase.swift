@@ -13,9 +13,9 @@ import Foundation
 /// worth showing a person — reject and drop differ only in *how* a blocked flow
 /// fails, which is a detail of the engine, not of the rule.
 ///
-/// Nothing here reaches the tunnel yet. The verdicts are a stated reading of
-/// what each geo group is *for*, so the database can be inspected before it is
-/// trusted with traffic.
+/// The packet-tunnel process applies the matching native verdict map when it
+/// compiles the shared files. This Swift enum is the display-side mirror, so
+/// the database can be inspected with the same meaning the tunnel uses.
 enum GeoVerdict: String, Sendable, CaseIterable {
     case direct
     case fptn
@@ -326,10 +326,9 @@ struct GeoDatabase: Sendable {
 
 /// What each published group is for.
 ///
-/// A fixed table on purpose: not user-editable, and not consulted by the tunnel
-/// — split routing still runs its own built-in test policy. It exists so the
-/// browser can show what each group would *mean*, which is most of the value of
-/// being able to read the database at all.
+/// A fixed table on purpose: not user-editable. The native compiler carries the
+/// equivalent table into the split policy; this Swift copy exists so the
+/// browser can show what each group means before it is applied to traffic.
 ///
 /// These are not our guesses. They follow the publisher's own routing profile
 /// (github.com/hydraponique/roscomvpn-routing), which documents the three

@@ -71,7 +71,12 @@ class AppleOsLogSink final : public spdlog::sinks::base_sink<Mutex> {
         type = OS_LOG_TYPE_DEBUG;
         break;
       case spdlog::level::info:
-        type = OS_LOG_TYPE_INFO;
+        // DEFAULT, not INFO. OS_LOG_TYPE_INFO is memory-only and
+        // `os_log_type_enabled` reports it disabled unless a capture is
+        // attached right then, so info lines vanished at exactly the moments
+        // nobody was streaming -- which is most of them, and always the ones
+        // you want after the fact. DEFAULT is persisted and always enabled.
+        type = OS_LOG_TYPE_DEFAULT;
         break;
       case spdlog::level::warn:
       case spdlog::level::err:

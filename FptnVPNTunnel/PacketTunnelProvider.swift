@@ -825,17 +825,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     // MARK: - Split routing
 
-    /// Hardcoded verification policy. `2ip.ru` echoes the caller's public IP,
-    /// so a single page load proves which plane carried the flow: it must show
-    /// this device's own address while every other site shows the server's.
-    /// `mail.ru` must fail *immediately* rather than hang, which is what
-    /// distinguishes reject from drop.
-    ///
-    /// Replaced by the geosite loader later; there is deliberately no UI for
-    /// editing these yet.
-    private static let splitDirectDomains = ["domain:2ip.ru"]
-    private static let splitRejectDomains = ["domain:mail.ru"]
-    private static let splitDropDomains: [String] = []
+    /// The app publishes raw geoip/geosite files and a compiled geo-routing.bin
+    /// artifact into this app-group directory. The native bridge maps the
+    /// artifact only when manifest.json is present. Missing or invalid data
+    /// leaves the default verdict as fptn, so a stale or first-run database
+    /// cannot accidentally make traffic direct.
+    private static let sharedAppGroupIdentifier = "group.net.mrmidi.FptnVPN"
+
+    private static func geoDatabaseDirectoryPath() -> String? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: sharedAppGroupIdentifier)?
+            .appendingPathComponent("GeoDatabase", isDirectory: true)
+            .path
+    }
 
     /// Brings up lwIP for split mode. Idempotent: a reconnect re-points the
     /// transport but must not rebuild the stack, or every live direct flow
@@ -851,6 +853,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         var resolvers: [String] = [configuration.dnsIPv4]
         if let dnsIPv6 = configuration.dnsIPv6 { resolvers.append(dnsIPv6) }
         if let custom = configuration.customDnsIPv4 { resolvers.append(custom) }
+        let geoDatabaseDirectory = Self.geoDatabaseDirectoryPath()
 
         guard let bridge = FPTNTunnelBridge(
             splitWithTunIPv4: configuration.tunIPv4,
@@ -858,10 +861,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             mtu: 1400,
             serverIP: configuration.serverIP,
             serverPort: Int32(configuration.serverPort),
-            directDomains: Self.splitDirectDomains,
-            rejectDomains: Self.splitRejectDomains,
-            dropDomains: Self.splitDropDomains,
-            tunnelResolvers: resolvers
+            directDomains: [],
+            rejectDomains: [],
+            dropDomains: [],
+            tunnelResolvers: resolvers,
+            geoDatabaseDirectory: geoDatabaseDirectory
         ) else {
             logger.error("Failed to create the split routing bridge")
             recordProviderEvent(category: "error", message: "split_bridge_create_failed", flightEvent: .unsupportedDataPlaneMode)
@@ -881,7 +885,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         flowBridge = bridge
         flowAdapter = adapter
-        logger.info("Split routing plane started [direct=\(Self.splitDirectDomains.count) reject=\(Self.splitRejectDomains.count) resolvers=\(resolvers.count)]")
+        // The bridge's own verdict, not just whether we found a directory to
+        // hand it. "shared" only ever meant the path resolved.
+        logger.info("Split routing plane started [geo=\(bridge.geoRoutingStatus) resolvers=\(resolvers.count)]")
         recordProviderEvent(category: "flow", message: "split_plane_started", flightEvent: .tunnelConnected)
         return true
     }
