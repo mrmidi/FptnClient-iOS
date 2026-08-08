@@ -324,31 +324,49 @@ struct GeoDatabase: Sendable {
 
 // MARK: - Fixed verdict preset
 
-/// The v1 reading of what each published group is for.
+/// What each published group is for.
 ///
-/// This is a fixed table on purpose. It is not user-editable and it is not
-/// consulted by the tunnel — split routing still runs its own built-in test
-/// policy. It exists so the browser can show what each group would *mean*,
-/// which is most of the value of being able to read the database at all.
+/// A fixed table on purpose: not user-editable, and not consulted by the tunnel
+/// — split routing still runs its own built-in test policy. It exists so the
+/// browser can show what each group would *mean*, which is most of the value of
+/// being able to read the database at all.
 ///
-/// The names come from roscomvpn's own grouping; the verdicts are ours.
+/// These are not our guesses. They follow the publisher's own routing profile
+/// (github.com/hydraponique/roscomvpn-routing), which documents the three
+/// outbounds it sorts every group into. Several are counter-intuitive and were
+/// wrong when inferred from the group name alone: the gaming platforms and
+/// Twitch go DIRECT because they waste server traffic and break behind a proxy,
+/// Apple and Microsoft go DIRECT so updates and push notifications keep
+/// working, and `twitch-ads` is PROXIED rather than blocked because routing it
+/// through the tunnel is what restores Source-quality streams.
 enum GeoVerdictPreset {
     static func verdict(forGroup name: String, kind: GeoDataKind) -> GeoVerdict {
         let key = name.uppercased()
         switch kind {
         case .geoip:
-            // Every published geoip group is a "reach this without the server"
-            // set: RU-facing ranges, plus RFC1918 which must never be tunnelled.
+            // All three geoip groups are "reach this without the server" sets,
+            // but they are not additive — they belong to two different
+            // profiles the publisher ships. DIRECT is the broad RU/BY set used
+            // when the default is direct; WHITELIST is the narrow, hand-curated
+            // set of Russian mobile-operator whitelists, RU hosting and Yandex
+            // DNS, used when the default is proxy. That is why WHITELIST sits
+            // almost entirely inside DIRECT and is still not redundant.
+            // PRIVATE is RFC1918, which must never be tunnelled.
             return .direct
         case .geosite:
             switch key {
-            case "CATEGORY-ADS", "TWITCH-ADS", "WIN-SPY":
+            case "CATEGORY-ADS",       // VK video/music advertising
+                 "WIN-SPY",            // Windows telemetry
+                 "TORRENT":            // public BitTorrent DHT, to spare the server
                 return .block
-            case "WHITELIST", "CATEGORY-RU", "PRIVATE":
+            case "WHITELIST", "CATEGORY-RU", "PRIVATE",
+                 "APPLE", "MICROSOFT",                                  // updates, push
+                 "STEAM", "EPICGAMES", "RIOT", "ESCAPEFROMTARKOV",      // games
+                 "FACEIT", "TWITCH", "PINTEREST":
                 return .direct
             default:
-                // Everything else is a service that is either blocked from
-                // Russia or blocks Russia, so it needs the server.
+                // Geo-blocked or blocking services — Google Play, YouTube,
+                // Telegram, GitHub, twitch-ads — plus everything unlisted.
                 return .fptn
             }
         }

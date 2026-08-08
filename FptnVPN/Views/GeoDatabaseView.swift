@@ -223,6 +223,18 @@ private struct GeoLoadedView: View {
         kind == .geoip ? database.ip.groups : database.site.groups
     }
 
+    /// Three IP groups all marked Direct looks like a mistake until you know
+    /// they belong to different profiles, so the screen says so rather than
+    /// leaving the reader to wonder.
+    private var groupsFooter: String {
+        switch kind {
+        case .geoip:
+            "These groups are alternatives, not layers. DIRECT is the broad Russian and Belarusian set; WHITELIST is the narrow curated one, used when everything else goes through the server; PRIVATE is local address space that must never be tunnelled."
+        case .geosite:
+            "Verdicts follow the publisher's own routing profile. Some are deliberate rather than obvious: games and Twitch go direct because they waste server traffic and misbehave through a proxy."
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -260,6 +272,9 @@ private struct GeoLoadedView: View {
             } header: {
                 Text("\(groups.count) groups · \(formatted(kind == .geoip ? database.ip.ruleCount : database.site.ruleCount)) rules")
                     .foregroundStyle(Color.appAccent)
+            } footer: {
+                Text(groupsFooter)
+                    .foregroundStyle(Color.appSecondaryText)
             }
             .listRowBackground(Color.appSurface)
 

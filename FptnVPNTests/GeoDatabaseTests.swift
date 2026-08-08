@@ -357,21 +357,47 @@ private enum GeoFixture {
 
 @Suite struct GeoVerdictPresetTests {
 
+    /// Pinned against the publisher's documented routing profile
+    /// (roscomvpn-routing), not against what the group names suggest. Several
+    /// of these were wrong when inferred from the name, so they are asserted
+    /// individually rather than by rule.
     @Test func everyPublishedGroupGetsAVerdict() throws {
         let ip = try GeoFixture.geoip()
         let site = try GeoFixture.geosite()
-        // Nothing should fall through to an accidental default: assert the
-        // known shape of the mapping rather than merely that one exists.
         #expect(ip.groups.allSatisfy { $0.verdict == .direct })
 
         let byName = Dictionary(uniqueKeysWithValues: site.groups.map { ($0.name, $0.verdict) })
+
         #expect(byName["CATEGORY-ADS"] == .block)
         #expect(byName["WIN-SPY"] == .block)
-        #expect(byName["TWITCH-ADS"] == .block)
+        #expect(byName["TORRENT"] == .block)
+
         #expect(byName["WHITELIST"] == .direct)
         #expect(byName["CATEGORY-RU"] == .direct)
+        // Counter-intuitive, and documented upstream: games and Twitch waste
+        // server traffic and misbehave behind a proxy; Apple/Microsoft need
+        // updates and push to keep working.
+        #expect(byName["STEAM"] == .direct)
+        #expect(byName["EPICGAMES"] == .direct)
+        #expect(byName["RIOT"] == .direct)
+        #expect(byName["ESCAPEFROMTARKOV"] == .direct)
+        #expect(byName["FACEIT"] == .direct)
+        #expect(byName["TWITCH"] == .direct)
+        #expect(byName["PINTEREST"] == .direct)
+        #expect(byName["APPLE"] == .direct)
+        #expect(byName["MICROSOFT"] == .direct)
+
         #expect(byName["CATEGORY-GEOBLOCK-RU"] == .fptn)
         #expect(byName["TELEGRAM"] == .fptn)
+        #expect(byName["YOUTUBE"] == .fptn)
+        #expect(byName["GITHUB"] == .fptn)
+        #expect(byName["GOOGLE-PLAY"] == .fptn)
+        // Proxied, not blocked: tunnelling it is what restores Source quality.
+        #expect(byName["TWITCH-ADS"] == .fptn)
+
+        // Every published group must be covered by an assertion above, so a
+        // group added upstream cannot slip through on the default.
+        #expect(site.groups.count == 23)
     }
 
     @Test func presetIsCaseInsensitive() {
