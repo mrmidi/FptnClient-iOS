@@ -662,6 +662,9 @@
         }
       }
     },
+    "Data Plane" : {
+
+    },
     "Debug" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -916,6 +919,9 @@
           }
         }
       }
+    },
+    "FPTN only" : {
+
     },
     "FPTN VPN" : {
       "extractionState" : "manual",
@@ -1887,6 +1893,9 @@
         }
       }
     },
+    "Split routing" : {
+
+    },
     "Start Scan" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2062,6 +2071,9 @@
           }
         }
       }
+    },
+    "Traffic Routing" : {
+
     },
     "Tunnel" : {
       "extractionState" : "manual",

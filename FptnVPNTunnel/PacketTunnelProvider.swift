@@ -158,7 +158,22 @@ private struct TunnelConfiguration {
             }
             throw payloadError
         }
+        // Clamp here as well as in the app. The app's SettingsService already
+        // refuses to hand a release build a non-release-safe mode, but this
+        // process is the one that actually routes packets, and the payload
+        // reaching it is whatever was last saved into the NE configuration —
+        // which outlives the app that wrote it. A debug install upgraded in
+        // place can leave `flow_proxy` sitting in saved preferences, and
+        // honouring it would send every flow out of the device while the UI
+        // reported a healthy tunnel. Landing on l3Tunnel is the safe answer,
+        // not split.
+        #if DEBUG
         self.dataPlaneMode = startupV1.dataPlaneMode
+        #else
+        self.dataPlaneMode = startupV1.dataPlaneMode.isReleaseSafe
+            ? startupV1.dataPlaneMode
+            : .l3Tunnel
+        #endif
         self.episodeID = startupV1.episodeID
         self.serverIP = startupV1.serverHost
         self.serverPort = startupV1.serverPort

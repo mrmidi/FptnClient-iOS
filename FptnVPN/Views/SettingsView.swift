@@ -14,7 +14,6 @@ struct SettingsView: View {
     @State private var showClearKeychainConfirmation = false
     @State private var showAdvancedBypass = false
 
-    #if DEBUG
     private var dataPlaneFooter: String {
         switch viewModel.dataPlaneMode {
         case .l3Tunnel:
@@ -25,7 +24,6 @@ struct SettingsView: View {
             "Every flow exits from this device, NOT through an FPTN server — your real IP is not hidden. Profiling only."
         }
     }
-    #endif
 
     /// The app and the native framework are compiled separately, so the pair
     /// has to be reported as a pair — a Release app linked against a Debug
@@ -294,14 +292,16 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Color.appSurface)
 
-                // MARK: Developer
+                // MARK: Traffic Routing
 
-                // Debug-only. "Direct only" routes every flow out of this
-                // device, so the real IP is exposed while the UI reports a
-                // healthy connection — never something to ship behind a
-                // toggle. A value persisted here is clamped back to FPTN only
-                // by SettingsService in release builds.
-                #if DEBUG
+                // "FPTN only" and "Split routing" are both shipping product
+                // modes and are offered in every build. "Direct only" is not:
+                // it routes every flow out of this device, exposing the real IP
+                // while the UI still reports a healthy connection, so it stays
+                // debug-only. Hiding it is not the safeguard — a value a debug
+                // build persisted is clamped back to FPTN only by
+                // SettingsService.dataPlaneMode via TunnelDataPlaneMode
+                // .isReleaseSafe, which is what actually enforces this.
                 Section {
                     Picker(selection: Binding(
                         get: { viewModel.dataPlaneMode },
@@ -309,21 +309,22 @@ struct SettingsView: View {
                     )) {
                         Text("FPTN only").tag(TunnelDataPlaneMode.l3Tunnel)
                         Text("Split routing").tag(TunnelDataPlaneMode.split)
+                        #if DEBUG
                         Text("Direct only (unsafe)").tag(TunnelDataPlaneMode.flowProxy)
+                        #endif
                     } label: {
                         Text("Data Plane")
                             .foregroundStyle(Color.appPrimaryText)
                     }
                     .tint(Color.appAccent)
                 } header: {
-                    Text("Developer")
+                    Text("Traffic Routing")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
                     Text(dataPlaneFooter)
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)
-                #endif
 
                 // MARK: Account
 
