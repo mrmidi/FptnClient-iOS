@@ -609,3 +609,117 @@ struct FptnVPNTests {
         return url
     }
 }
+
+/// Freshness and provisioning policy for the geo database. These decide when
+/// half a megabyte gets fetched and whether the person is interrupted, so they
+/// are worth pinning independently of the network.
+struct GeoProvisioningPolicyTests {
+
+    private let fetched = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func now(_ hoursLater: Double) -> Date {
+        fetched.addingTimeInterval(hoursLater * 3600)
+    }
+
+    @Test func absentDatabaseIsAlwaysStale() {
+        #expect(GeoDatabaseStore.isStale(fetchedAt: nil))
+    }
+
+    @Test func stalenessFollowsThePublishersDailyCadence() {
+        #expect(!GeoDatabaseStore.isStale(fetchedAt: fetched, now: now(1)))
+        #expect(!GeoDatabaseStore.isStale(fetchedAt: fetched, now: now(23.9)))
+        // The boundary itself counts as stale, so a once-a-day launch does not
+        // keep landing just under the threshold and never refreshing.
+        #expect(GeoDatabaseStore.isStale(fetchedAt: fetched, now: now(24)))
+        #expect(GeoDatabaseStore.isStale(fetchedAt: fetched, now: now(72)))
+    }
+
+    @Test func aFutureFetchDateDoesNotForceAReDownloadEveryLaunch() {
+        // Clock skew, or a container restored from a backup made elsewhere.
+        #expect(!GeoDatabaseStore.isStale(fetchedAt: fetched, now: now(-48)))
+    }
+
+    @Test func onlyAnUnavailableDatabaseCountsAsUnusable() {
+        // This is what gates the alert: a failed refresh that left a working
+        // database behind must not interrupt anyone.
+        #expect(GeoProvisionOutcome.upToDate.isUsable)
+        #expect(GeoProvisionOutcome.refreshed.isUsable)
+        #expect(GeoProvisionOutcome.failedButUsable("blocked").isUsable)
+        #expect(!GeoProvisionOutcome.unavailable(reason: .download, message: "blocked").isUsable)
+        #expect(!GeoProvisionOutcome.unavailable(reason: .policy, message: "bad list").isUsable)
+    }
+
+    @Test func failureReasonSeparatesAnUnbuildablePolicyFromABlockedDownload() {
+        // The alert's advice hangs on this: "retry over the tunnel" is useless
+        // when the lists arrived fine and simply could not be compiled.
+        #expect(GeoDatabaseStore.failureReason(
+            for: GeoDatabaseStoreError.compilationFailed("bad regex")) == .policy)
+        #expect(GeoDatabaseStore.failureReason(
+            for: GeoDatabaseStoreError.stagingIncomplete("geo-routing.bin")) == .policy)
+
+        #expect(GeoDatabaseStore.failureReason(
+            for: GeoDatabaseStoreError.httpStatus(403, kind: .geoip)) == .download)
+        #expect(GeoDatabaseStore.failureReason(
+            for: GeoDatabaseStoreError.emptyResponse(.geosite)) == .download)
+        #expect(GeoDatabaseStore.failureReason(
+            for: GeoDatabaseStoreError.noSharedContainer) == .download)
+
+        // A URLSession failure — the blocked-CDN case this exists for.
+        #expect(GeoDatabaseStore.failureReason(
+            for: URLError(.notConnectedToInternet)) == .download)
+    }
+}
+
+/// The split-routing tally is the only per-decision visibility the tunnel has,
+/// so its derived values are worth pinning: they are what the Telemetry screen
+/// reads to answer "is geo routing doing anything".
+struct SplitRoutingSummaryTests {
+
+    private func summary(
+        geoStatus: String = "active (29600 ipv4, 88 ipv6, 2944 domains, 105 substrings, 6 pairs, 216634 bytes)",
+        direct: UInt64 = 0,
+        fptn: UInt64 = 0,
+        rejected: UInt64 = 0,
+        dropped: UInt64 = 0,
+        decisions: UInt64 = 0
+    ) -> SplitRoutingSummary {
+        SplitRoutingSummary(
+            geoStatus: geoStatus,
+            directFlows: direct,
+            fptnFlows: fptn,
+            rejectedFlows: rejected,
+            droppedFlows: dropped,
+            decisions: decisions,
+            activeFlows: 0,
+            unclassifiableFlows: 0,
+            packetsToStack: 0,
+            packetsToTransport: 0,
+            packetsDropped: 0,
+            dnsResponsesParsed: 0,
+            dnsEntries: 0
+        )
+    }
+
+    @Test func geoActivityIsReadFromTheBridgeVerdictNotInferred() {
+        #expect(summary().isGeoActive)
+        #expect(!summary(geoStatus: "inactive (no manifest — database not published yet)").isGeoActive)
+        #expect(!summary(geoStatus: "inactive (artifact rejected: bad header)").isGeoActive)
+        #expect(!summary(geoStatus: "inactive (not a split bridge)").isGeoActive)
+    }
+
+    @Test func directShareIsAbsentUntilSomethingHasBeenDecided() {
+        // 0 decisions must read as "unknown", not as 0% direct — the latter
+        // looks exactly like split routing being broken.
+        #expect(summary().directShare == nil)
+        #expect(summary(direct: 3, fptn: 1, decisions: 4).directShare == 0.75)
+    }
+
+    @Test func untalliedFlowsExposeAVerdictThatWentUncounted() {
+        // The four verdicts must partition `decisions`.
+        #expect(summary(direct: 3, fptn: 1, decisions: 4).untalliedFlows == 0)
+        #expect(summary(direct: 3, fptn: 1, decisions: 9).untalliedFlows == 5)
+        // Never negative, even if the counters are read mid-update and the
+        // parts momentarily outrun the total.
+        #expect(summary(direct: 3, fptn: 3, decisions: 4).untalliedFlows == 0)
+    }
+}

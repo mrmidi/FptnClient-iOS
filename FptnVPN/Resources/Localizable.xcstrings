@@ -971,6 +971,9 @@
     "Geo Database" : {
 
     },
+    "Geo policy" : {
+
+    },
     "Get your free token from" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1238,7 +1241,13 @@
         }
       }
     },
+    "Name attribution" : {
+
+    },
     "Network" : {
+
+    },
+    "No DNS answers observed — flows can only be matched by address." : {
 
     },
     "No domains" : {
@@ -1426,6 +1435,9 @@
           }
         }
       }
+    },
+    "Packets" : {
+
     },
     "Paste SNI hostnames, one per line…\n# lines starting with # are ignored" : {
       "extractionState" : "manual",
@@ -1955,6 +1967,9 @@
     "Split routing" : {
 
     },
+    "Split Routing" : {
+
+    },
     "Start Scan" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2013,6 +2028,12 @@
 
     },
     "The database could not be loaded" : {
+
+    },
+    "The routing lists could not be downloaded, so all traffic will go through FPTN servers. Split routing stays on. Your network may be blocking the download — try again from the Geo Database screen while the VPN is connected." : {
+
+    },
+    "The routing lists were downloaded but could not be prepared, so all traffic will go through FPTN servers. Split routing stays on. This usually clears up with the next published update." : {
 
     },
     "The VPN will be disconnected before scanning so probes reach the server directly." : {

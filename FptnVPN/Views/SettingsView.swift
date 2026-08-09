@@ -20,7 +20,7 @@ struct SettingsView: View {
         case .l3Tunnel:
             "All traffic goes through the FPTN server."
         case .split:
-            "Routes per flow: 2ip.ru leaves directly from this device, mail.ru is rejected, everything else goes through the server. Test policy — not yet configurable."
+            "Decides each connection separately from the geo database: listed Russian, Apple, Microsoft and gaming destinations leave directly from this device, ad and tracker domains are blocked, and everything else goes through the server. With no database loaded, everything goes through the server."
         case .flowProxy:
             "Every flow exits from this device, NOT through an FPTN server — your real IP is not hidden. Profiling only."
         }
@@ -385,6 +385,34 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showGeoDatabase) {
             GeoDatabaseView()
+        }
+        .alert(
+            "Routing policy unavailable",
+            isPresented: Binding(
+                get: { viewModel.geoProvisionFailure != nil },
+                set: { if !$0 { viewModel.geoProvisionFailure = nil } }
+            )
+        ) {
+            Button("Open Geo Database") {
+                viewModel.geoProvisionFailure = nil
+                showGeoDatabase = true
+            }
+            Button("Later", role: .cancel) {
+                viewModel.geoProvisionFailure = nil
+            }
+        } message: {
+            // Says what it means for the person, not what failed. Split routing
+            // stays selected and keeps working either way — with no policy
+            // every flow takes the default verdict, which is the server. The
+            // advice differs: a blocked download is worth retrying over the
+            // tunnel, a policy that cannot be built will fail the same way
+            // however it is fetched.
+            switch viewModel.geoProvisionFailureReason {
+            case .policy:
+                Text("The routing lists were downloaded but could not be prepared, so all traffic will go through FPTN servers. Split routing stays on. This usually clears up with the next published update.")
+            case .download, nil:
+                Text("The routing lists could not be downloaded, so all traffic will go through FPTN servers. Split routing stays on. Your network may be blocking the download — try again from the Geo Database screen while the VPN is connected.")
+            }
         }
         .confirmationDialog(
             "Are you sure you want to log out?",

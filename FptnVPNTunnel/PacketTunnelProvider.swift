@@ -2298,6 +2298,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 to_stack=\(s.packetsToStack) to_transport=\(s.packetsToTransport) \
                 dropped=\(s.packetsDropped) rollbacks=\(s.rollbacks) \
                 decisions=\(s.decisions) hits=\(s.tableHits) \
+                verdicts=direct:\(s.directFlows)/fptn:\(s.fptnFlows)/\
+                reject:\(s.rejectedFlows)/drop:\(s.droppedFlows) \
                 unclassifiable=\(s.unclassifiable) flows=\(s.activeFlows) \
                 dns_parsed=\(s.dnsResponsesParsed) dns_recorded=\(s.dnsMappingsRecorded) \
                 dns_entries=\(s.dnsEntries) router_unknown=\(s.routerUnknownFlows)
@@ -2635,7 +2637,35 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             nativeActiveOperations: status?.activeOperations ?? 0,
             sessionToken: sessionToken,
             websocketGeneration: UInt32(generation),
-            reconnectAttempt: UInt32(max(0, reconnAttempt))
+            reconnectAttempt: UInt32(max(0, reconnAttempt)),
+            splitRouting: currentSplitRoutingSnapshot()
+        )
+    }
+
+    /// Split-routing counters for the live feed, or nil outside split mode.
+    /// This is what replaced per-flow native logging: the extension's spdlog
+    /// output does not reliably reach a log capture, and one site opens many
+    /// flows, so the tally is both more reliable and more readable than the
+    /// line-per-decision it stands in for.
+    private func currentSplitRoutingSnapshot() -> TunnelSplitRoutingSnapshotV1? {
+        guard configuration?.dataPlaneMode == .split, let flowBridge else {
+            return nil
+        }
+        let s = flowBridge.splitCounters()
+        return TunnelSplitRoutingSnapshotV1(
+            geoStatus: flowBridge.geoRoutingStatus,
+            directFlows: s.directFlows,
+            fptnFlows: s.fptnFlows,
+            rejectedFlows: s.rejectedFlows,
+            droppedFlows: s.droppedFlows,
+            decisions: s.decisions,
+            activeFlows: s.activeFlows,
+            unclassifiableFlows: s.unclassifiable,
+            packetsToStack: s.packetsToStack,
+            packetsToTransport: s.packetsToTransport,
+            packetsDropped: s.packetsDropped,
+            dnsResponsesParsed: s.dnsResponsesParsed,
+            dnsEntries: s.dnsEntries
         )
     }
 

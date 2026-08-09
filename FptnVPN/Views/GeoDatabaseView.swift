@@ -67,7 +67,9 @@ private struct GeoCoverageBar: View {
 // MARK: - Root
 
 struct GeoDatabaseView: View {
-    @StateObject private var store = GeoDatabaseStore()
+    /// Shared, not owned: app launch and the data-plane picker provision the
+    /// same database, and a screen holding its own copy would not see it.
+    @ObservedObject private var store = GeoDatabaseStore.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -97,9 +99,11 @@ struct GeoDatabaseView: View {
             }
         }
         .task {
-            // Only reads what is already on disk. Downloading is always the
-            // person's decision — this is half a megabyte over someone's
-            // mobile data.
+            // Only reads what is already on disk. Opening this screen never
+            // starts a download — that is half a megabyte over someone's
+            // mobile data, so it happens on the paths that need it (selecting
+            // split routing, and the daily refresh at launch) or when the
+            // person asks for it here.
             if store.state.database == nil { await store.loadStored() }
         }
     }

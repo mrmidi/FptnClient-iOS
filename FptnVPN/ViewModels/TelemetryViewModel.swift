@@ -40,6 +40,7 @@ final class TelemetryViewModel: ObservableObject {
     }
     @Published var isHealthExpanded = false
     @Published var isNetworkExpanded = false
+    @Published var isSplitRoutingExpanded = false
 
     private weak var vpnService: VPNService?
     private let decoder = TunnelDiagnosticsDecoder.production
@@ -331,6 +332,7 @@ final class TelemetryViewModel: ObservableObject {
         next.websocketGeneration = Int(s.websocketGeneration)
         next.reconnectAttempt = Int(s.reconnectAttempt)
         next.sessionTokenHex = Self.hex(s.sessionToken)
+        next.splitRouting = s.splitRouting.map(Self.mapSplitRouting)
         next.healthLevel = Self.mapHealthLevel(footprintMB: footprintMB, queueFullCount: s.queueFullCount)
         next.availability = currentAvailability(for: vpnService?.connection)
         next.lastUpdated = live.receivedAt
@@ -509,6 +511,24 @@ final class TelemetryViewModel: ObservableObject {
         if footprintMB >= TelemetrySnapshot.memoryWarningMB { return .warning("Memory warning") }
         if queueFullCount > 0 { return .attention("Queue pressure") }
         return .healthy
+    }
+
+    private static func mapSplitRouting(_ s: TunnelSplitRoutingSnapshotV1) -> SplitRoutingSummary {
+        SplitRoutingSummary(
+            geoStatus: s.geoStatus,
+            directFlows: s.directFlows,
+            fptnFlows: s.fptnFlows,
+            rejectedFlows: s.rejectedFlows,
+            droppedFlows: s.droppedFlows,
+            decisions: s.decisions,
+            activeFlows: s.activeFlows,
+            unclassifiableFlows: s.unclassifiableFlows,
+            packetsToStack: s.packetsToStack,
+            packetsToTransport: s.packetsToTransport,
+            packetsDropped: s.packetsDropped,
+            dnsResponsesParsed: s.dnsResponsesParsed,
+            dnsEntries: s.dnsEntries
+        )
     }
 
     private static func hex(_ value: UInt64) -> String {

@@ -218,6 +218,48 @@ enum TelemetryTimeWindow: String, CaseIterable, Identifiable {
 /// Fields are `Optional` wherever no real value has been observed yet — a
 /// field being `nil` renders as "unavailable" in the UI, never as a fake `0`.
 /// A concrete `0`/`false`/etc. means "measured, and that's the value."
+/// Split-routing counters, shaped for display. Mirrors
+/// `TunnelSplitRoutingSnapshotV1` and adds only derived values the view would
+/// otherwise recompute on every redraw.
+struct SplitRoutingSummary: Equatable {
+    /// `active (…)` with rule counts, or `inactive (…)` naming the reason.
+    var geoStatus: String
+
+    var directFlows: UInt64
+    var fptnFlows: UInt64
+    var rejectedFlows: UInt64
+    var droppedFlows: UInt64
+    var decisions: UInt64
+    var activeFlows: UInt64
+    var unclassifiableFlows: UInt64
+
+    var packetsToStack: UInt64
+    var packetsToTransport: UInt64
+    var packetsDropped: UInt64
+
+    var dnsResponsesParsed: UInt64
+    var dnsEntries: UInt64
+
+    /// The compiled geo policy is only driving the tunnel when the bridge says
+    /// so. Anything else means the fallback policy is deciding.
+    var isGeoActive: Bool { geoStatus.hasPrefix("active") }
+
+    /// Share of decided flows that stayed off the tunnel. `nil` before the
+    /// first decision, so the view shows "—" rather than a meaningless 0%.
+    var directShare: Double? {
+        guard decisions > 0 else { return nil }
+        return Double(directFlows) / Double(decisions)
+    }
+
+    /// The tally must partition `decisions`; a nonzero remainder means a
+    /// verdict is going uncounted, which is a bug worth surfacing rather than
+    /// hiding behind a percentage that silently stops adding up.
+    var untalliedFlows: UInt64 {
+        let counted = directFlows + fptnFlows + rejectedFlows + droppedFlows
+        return decisions > counted ? decisions - counted : 0
+    }
+}
+
 struct TelemetrySnapshot {
     // Identity
     var connectionState: TelemetryConnectionState = .disconnected
@@ -274,6 +316,10 @@ struct TelemetrySnapshot {
     var isConstrained: Bool?
     var ipv4Available: Bool?
     var ipv6Available: Bool?
+
+    // Split routing — nil unless the split data plane is running, which is the
+    // only mode that makes per-flow routing decisions.
+    var splitRouting: SplitRoutingSummary?
 
     // Recovery
     var reconnectAttempt: Int = 0

@@ -235,14 +235,35 @@ bool CompileGeoDatabaseImpl(NSString *geoDatabaseDirectory,
     const auto verdictMap = fptn::geo::DefaultVerdictMap();
     const auto built = fptn::geo::BuildGeoInputs(
         ip.groups, site.groups, verdictMap);
+    // Skipped rules are reported, never adopted. BuildGeoInputs drops an
+    // inverted group rather than routing its complement, and drops a regex it
+    // cannot reduce; both then fall to the default verdict, which is the
+    // tunnel. That is the safe direction — it costs bandwidth, not privacy.
+    //
+    // Refusing the whole compile over them, as this used to, meant one new
+    // regex shape upstream would strand every rule in both files. The
+    // publisher ships daily, so that was a matter of when.
+    for (const std::string& pattern : built.report.unsupported_regexes) {
+        SPDLOG_WARN("[geo] skipping unreducible regex: {}", pattern);
+    }
+    for (const std::string& name : built.report.inverted_groups) {
+        SPDLOG_WARN("[geo] skipping inverted IP group: {}", name);
+    }
     if (!built.report.unsupported_regexes.empty() ||
         !built.report.inverted_groups.empty()) {
+        SPDLOG_WARN("[geo] compiling a partial policy: {} regexes and {} "
+                    "inverted groups skipped",
+            built.report.unsupported_regexes.size(),
+            built.report.inverted_groups.size());
+    }
+
+    // The one case worth refusing: nothing survived. An empty artifact would
+    // publish as "active" and route exactly nothing, which is harder to
+    // diagnose than having no artifact at all.
+    if (built.inputs.cidrs.empty() && built.inputs.domains.empty() &&
+        built.inputs.substrings.empty() && built.inputs.pairs.empty()) {
         return FailGeoCompile(
-            "source contains " +
-                std::to_string(built.report.unsupported_regexes.size()) +
-                " unsupported regexes and " +
-                std::to_string(built.report.inverted_groups.size()) +
-                " inverted groups; refusing a partial policy",
+            "no usable rules survived parsing; refusing an empty policy",
             failure);
     }
 
@@ -611,6 +632,10 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
     out.tableHits = classifier.table_hits;
     out.unclassifiable = classifier.unclassifiable;
     out.activeFlows = classifier.active_flows;
+    out.directFlows = classifier.direct_flows;
+    out.fptnFlows = classifier.fptn_flows;
+    out.rejectedFlows = classifier.rejected_flows;
+    out.droppedFlows = classifier.dropped_flows;
 
     const auto dns = plane->DnsObserverForTesting().Counters();
     out.dnsResponsesParsed = dns.responses_parsed;

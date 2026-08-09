@@ -61,6 +61,16 @@ typedef struct {
     uint64_t unclassifiable;
     uint64_t activeFlows;
 
+    /// Verdict tally, one increment per new flow. These four sum to
+    /// `decisions`, and they are the only per-decision visibility that exists:
+    /// the native per-flow log line was removed because one site opens many
+    /// flows, so it was unreadable under load and recorded every destination
+    /// the person visited.
+    uint64_t directFlows;
+    uint64_t fptnFlows;
+    uint64_t rejectedFlows;
+    uint64_t droppedFlows;
+
     uint64_t dnsResponsesParsed;
     uint64_t dnsMappingsRecorded;
     uint64_t dnsEntries;
