@@ -29,6 +29,12 @@ final class SettingsViewModel: ObservableObject {
     @Published var geoProvisionFailure: GeoProvisionOutcome?
     @Published private(set) var isProvisioningGeoDatabase = false
 
+    /// Set when a routing preference changed but the policy carrying it could
+    /// not be rebuilt. Distinct from `geoProvisionFailure`: a usable database is
+    /// still published and routing, so the traffic warning there would be
+    /// wrong — what failed is only the new preference taking effect.
+    @Published var geoPolicyRebuildFailed = false
+
     /// Why provisioning produced nothing, so the alert can give advice that
     /// applies. `nil` when there is no pending failure.
     var geoProvisionFailureReason: GeoProvisionFailureReason? {
@@ -118,9 +124,29 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    /// Where push goes is compiled into the split-routing policy rather than
+    /// checked while packets flow, so flipping this changes nothing for split
+    /// routing until the policy is rebuilt. Rebuilding needs no download — the
+    /// lists are already on disk, which matters because the network that makes
+    /// this setting necessary is often the one that cannot reach the CDN.
     func saveRoutePushThroughTunnel(_ value: Bool) {
         routePushThroughTunnel = value
-        Task { await settingsService.setRoutePushThroughTunnel(value) }
+        Task {
+            await settingsService.setRoutePushThroughTunnel(value)
+            isProvisioningGeoDatabase = true
+            let outcome = await geoDatabaseStore.recompilePolicy()
+            isProvisioningGeoDatabase = false
+            switch outcome {
+            case .upToDate, .refreshed:
+                break
+            case .failedButUsable:
+                // A database is still published and routing; it just does not
+                // carry the preference that was just asked for.
+                geoPolicyRebuildFailed = true
+            case .unavailable:
+                geoProvisionFailure = outcome
+            }
+        }
     }
 
     func saveCustomDnsEnabled(_ value: Bool) {

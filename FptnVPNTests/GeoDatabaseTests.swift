@@ -405,3 +405,88 @@ private enum GeoFixture {
         #expect(GeoVerdictPreset.verdict(forGroup: "Category-Ads", kind: .geosite) == .block)
     }
 }
+
+// MARK: - The compile bridge
+
+/// Compiles through the real native bridge, which no other test target links.
+///
+/// The semantics — which addresses and names move — are asserted in the C++
+/// suite against the same fixtures. What is only checkable from here is that
+/// the Settings switch actually reaches the compiler: an artifact built with
+/// push routed through the server must not be the one built without it.
+@Suite struct GeoPolicyCompilationTests {
+
+    /// Compiles into a throwaway directory and hands it to `body`, which runs
+    /// before the directory is torn down.
+    private func compile<T>(
+        routePushThroughTunnel: Bool,
+        _ body: (URL) throws -> T
+    ) throws -> T {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try GeoFixture.data("geoip")
+            .write(to: directory.appendingPathComponent("geoip.dat"))
+        try GeoFixture.data("geosite")
+            .write(to: directory.appendingPathComponent("geosite.dat"))
+
+        try FPTNTunnelBridge.compileGeoRoutingPolicy(
+            atPath: directory.path,
+            routePushThroughTunnel: routePushThroughTunnel
+        )
+        return try body(directory)
+    }
+
+    private func compile(routePushThroughTunnel: Bool) throws -> Data {
+        try compile(routePushThroughTunnel: routePushThroughTunnel) { directory in
+            try Data(contentsOf: directory.appendingPathComponent("geo-routing.bin"))
+        }
+    }
+
+    @Test func thePushSettingReachesTheCompiledPolicy() throws {
+        let pushDirect = try compile(routePushThroughTunnel: false)
+        let pushTunnelled = try compile(routePushThroughTunnel: true)
+
+        #expect(!pushDirect.isEmpty)
+        #expect(!pushTunnelled.isEmpty)
+        // Compared by size rather than by bytes: the artifact header carries a
+        // build timestamp, so two compiles either side of a second boundary
+        // differ whatever the setting was, and comparing bytes would pass for
+        // the wrong reason. Moving the courier ranges out of the direct set
+        // splits intervals that were merged, so the size genuinely moves.
+        #expect(pushDirect.count != pushTunnelled.count)
+    }
+
+    /// The artifact has to say which preferences built it, or an install that
+    /// cannot reach the CDN would keep routing on a policy compiled under the
+    /// old answer forever — and those installs are the ones this setting is
+    /// for.
+    @Test func theCompiledArtifactReportsWhichPreferencesBuiltIt() throws {
+        for routePushThroughTunnel in [true, false] {
+            let published = try compile(routePushThroughTunnel: routePushThroughTunnel) {
+                FPTNTunnelBridge.geoRoutingVerdictMapId(atPath: $0.path)
+            }
+            #expect(published != 0)
+            #expect(published == FPTNTunnelBridge.geoRoutingVerdictMapId(
+                forRoutePushThroughTunnel: routePushThroughTunnel
+            ))
+        }
+
+        // Different answers must be distinguishable, or the staleness check
+        // built on this would never fire.
+        #expect(
+            FPTNTunnelBridge.geoRoutingVerdictMapId(forRoutePushThroughTunnel: true)
+            != FPTNTunnelBridge.geoRoutingVerdictMapId(forRoutePushThroughTunnel: false)
+        )
+    }
+
+    @Test func anAbsentArtifactHasNoVerdictMap() {
+        #expect(FPTNTunnelBridge.geoRoutingVerdictMapId(
+            atPath: NSTemporaryDirectory() + "/" + UUID().uuidString
+        ) == 0)
+    }
+}

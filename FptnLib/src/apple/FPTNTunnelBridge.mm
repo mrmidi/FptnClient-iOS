@@ -165,7 +165,7 @@ bool PublishCompiledArtifact(NSString *geoDatabaseDirectory,
 }
 
 bool CompileGeoDatabaseImpl(NSString *geoDatabaseDirectory,
-    std::string& failure) {
+    bool routePushThroughTunnel, std::string& failure) {
     if (geoDatabaseDirectory.length == 0) {
         return FailGeoCompile("geo database directory is empty", failure);
     }
@@ -232,7 +232,8 @@ bool CompileGeoDatabaseImpl(NSString *geoDatabaseDirectory,
     SPDLOG_INFO("[geo] parsed {} IP groups and {} site groups", ip.groups.size(),
         site.groups.size());
 
-    const auto verdictMap = fptn::geo::DefaultVerdictMap();
+    const auto verdictMap = fptn::geo::DefaultVerdictMap(
+        fptn::geo::GeoIpProfile::standard, routePushThroughTunnel);
     const auto built = fptn::geo::BuildGeoInputs(
         ip.groups, site.groups, verdictMap);
     // Skipped rules are reported, never adopted. BuildGeoInputs drops an
@@ -255,6 +256,16 @@ bool CompileGeoDatabaseImpl(NSString *geoDatabaseDirectory,
                     "inverted groups skipped",
             built.report.unsupported_regexes.size(),
             built.report.inverted_groups.size());
+    }
+
+    if (routePushThroughTunnel) {
+        // Zero here is the interesting reading: the published lists no longer
+        // send Apple's couriers direct, so the override is a no-op and push is
+        // tunnelling for some other reason.
+        SPDLOG_INFO("[geo] apple push -> server; displaced {} published rules",
+            built.report.apple_push_rules_overridden);
+    } else {
+        SPDLOG_INFO("[geo] apple push -> direct, as published");
     }
 
     // The one case worth refusing: nothing survived. An empty artifact would
@@ -382,9 +393,11 @@ void SetGeoError(NSError **error, const std::string& message) {
                               userInfo:@{NSLocalizedDescriptionKey: description}];
 }
 
-bool CompileGeoDatabase(NSString *geoDatabaseDirectory, std::string& failure) {
+bool CompileGeoDatabase(NSString *geoDatabaseDirectory,
+    bool routePushThroughTunnel, std::string& failure) {
     try {
-        return CompileGeoDatabaseImpl(geoDatabaseDirectory, failure);
+        return CompileGeoDatabaseImpl(
+            geoDatabaseDirectory, routePushThroughTunnel, failure);
     } catch (const std::exception& exception) {
         failure = exception.what();
         SPDLOG_ERROR("[geo] exception while compiling the geo database: {}",
@@ -442,17 +455,43 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
 }
 
 + (BOOL)compileGeoRoutingPolicyAtPath:(NSString *)directoryPath
+               routePushThroughTunnel:(BOOL)routePushThroughTunnel
                                 error:(NSError * _Nullable * _Nullable)error {
     if (error != nullptr) {
         *error = nil;
     }
 
     std::string failure;
-    if (CompileGeoDatabase(directoryPath, failure)) {
+    if (CompileGeoDatabase(directoryPath, routePushThroughTunnel, failure)) {
         return YES;
     }
     SetGeoError(error, failure);
     return NO;
+}
+
++ (uint32_t)geoRoutingVerdictMapIdAtPath:(NSString *)directoryPath {
+    if (directoryPath.length == 0) {
+        return 0;
+    }
+    const std::string artifactPath = FileSystemPath(
+        directoryPath, @"geo-routing.bin");
+    auto rules = std::make_shared<fptn::geo::GeoRuleSet>();
+    // Checksum verification skipped on purpose: this answers "which opinion is
+    // published", and an artifact too damaged to route on still has to be
+    // recognisable as stale so it can be replaced. Opening for routing
+    // verifies.
+    if (rules->Open(artifactPath, /*verify_checksum=*/false) !=
+        fptn::geo::GeoLoadError::none) {
+        return 0;
+    }
+    return rules->verdict_map_id();
+}
+
++ (uint32_t)geoRoutingVerdictMapIdForRoutePushThroughTunnel:
+    (BOOL)routePushThroughTunnel {
+    return fptn::geo::DefaultVerdictMap(
+        fptn::geo::GeoIpProfile::standard, routePushThroughTunnel)
+        .id();
 }
 
 - (instancetype)initWithTunIPv4:(NSString *)tunIPv4

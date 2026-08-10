@@ -118,8 +118,31 @@ typedef struct {
 /// published artifact is never modified in place. This is intended for the
 /// app process, immediately after it has downloaded and atomically written the
 /// two source files, before it writes `manifest.json` as the commit marker.
+///
+/// `routePushThroughTunnel` mirrors the Settings switch of the same name. Both
+/// published lists send Apple's push couriers direct, which is right on an
+/// ordinary connection and fatal on a whitelist ISP — notifications stop while
+/// the rest of the tunnel keeps working. It is a compile input rather than a
+/// runtime check because the verdict has to be baked into the artifact the
+/// tunnel maps; flipping the switch therefore requires a recompile.
 + (BOOL)compileGeoRoutingPolicyAtPath:(NSString *)directoryPath
+               routePushThroughTunnel:(BOOL)routePushThroughTunnel
                                 error:(NSError * _Nullable * _Nullable)error;
+
+/// Identifies the opinion baked into the artifact published at `directoryPath`
+/// — the built-in mapping's version plus the routing preferences it was
+/// compiled under. Returns 0 when there is no readable artifact.
+///
+/// Compare it against +geoRoutingVerdictMapIdForRoutePushThroughTunnel: to tell
+/// a policy compiled under different settings from a current one. That
+/// comparison needs no network, which is the point: the devices most likely to
+/// be holding a stale policy are the ones whose network cannot reach the CDN to
+/// replace it.
++ (uint32_t)geoRoutingVerdictMapIdAtPath:(NSString *)directoryPath;
+
+/// What the compiler would stamp into an artifact built right now under these
+/// preferences.
++ (uint32_t)geoRoutingVerdictMapIdForRoutePushThroughTunnel:(BOOL)routePushThroughTunnel;
 
 /// Whether the compiled geo policy is actually driving this tunnel, and if not,
 /// why. Reads `active (…)` with the rule counts, or `inactive (…)` naming the

@@ -152,8 +152,8 @@ final class GeoDatabaseStore: ObservableObject {
     private let stagingDirectoryName = "staging"
     private let session: URLSession
 
-    /// The update in flight, if any. See `performUpdate()`.
-    private var updateTask: Task<GeoDatabase, Error>?
+    /// The job in flight, if any. See `performExclusively(_:)`.
+    private var jobTask: Task<GeoDatabase, Error>?
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -244,6 +244,26 @@ final class GeoDatabaseStore: ObservableObject {
         return now.timeIntervalSince(fetchedAt) >= refreshInterval
     }
 
+    /// Whether the published artifact encodes a different opinion than the app
+    /// would compile now — an older built-in mapping, or routing preferences
+    /// that have since changed.
+    ///
+    /// Separate from `isStale`, which is about the source lists, and answered
+    /// without touching the network on purpose. A device on a whitelist ISP is
+    /// both the most likely to be holding an outdated policy and the least able
+    /// to download a replacement, so "wait for the next refresh" would leave
+    /// exactly the wrong people behind.
+    var isPolicyOutdated: Bool {
+        guard let directory, hasCompiledArtifact else { return false }
+        let published = FPTNTunnelBridge.geoRoutingVerdictMapId(atPath: directory.path)
+        // Unreadable counts as outdated: rebuilding from the stored lists is
+        // both the diagnosis and the repair.
+        guard published != 0 else { return true }
+        return published != FPTNTunnelBridge.geoRoutingVerdictMapId(
+            forRoutePushThroughTunnel: Self.routePushThroughTunnel
+        )
+    }
+
     // MARK: Actions
 
     /// Loads whatever is already on disk. Does not hit the network.
@@ -254,25 +274,53 @@ final class GeoDatabaseStore: ObservableObject {
         }
         state = .parsing
         do {
-            let manifest = try readManifest()
+            let database: GeoDatabase
             if hasCompiledArtifact {
                 logger.info("Compiled artifact already present (\(self.compiledArtifactDescription)); skipping recompilation")
+                database = try await parseStored(manifest: try readManifest())
             } else {
                 logger.info("No compiled artifact; recompiling from the stored lists")
-                try await recompileFromStoredFiles(manifest: manifest)
+                database = try await performExclusively { try await self.runRecompile() }
                 logger.info("Compiled the routing artifact (\(self.compiledArtifactDescription))")
             }
-            let database = try await Self.parse(
-                ipURL: try require(fileURL(for: .geoip)),
-                siteURL: try require(fileURL(for: .geosite)),
-                ipProvenance: try require(manifest[GeoDataKind.geoip.rawValue]),
-                siteProvenance: try require(manifest[GeoDataKind.geosite.rawValue])
-            )
             state = .ready(database)
             logger.info("Loaded and compiled geo database: \(database.totalRuleCount) rules")
         } catch {
             logger.error("Loading the stored geo database failed: \(error.localizedDescription)")
             state = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Rebuilds the published artifact from the lists already on disk.
+    ///
+    /// Routing preferences are compiled into the artifact rather than consulted
+    /// at run time, so changing one has no effect on the tunnel until this runs.
+    /// No download is involved, which matters: the network that made the
+    /// preference necessary is often the one that cannot reach the CDN.
+    @discardableResult
+    func recompilePolicy() async -> GeoProvisionOutcome {
+        guard hasStoredFiles else {
+            // Nothing to rebuild. Whenever a database does arrive it will be
+            // compiled against whatever the preferences say at that point.
+            logger.info("No stored geo lists; nothing to recompile")
+            return .upToDate
+        }
+        do {
+            let database = try await performExclusively { try await self.runRecompile() }
+            state = .ready(database)
+            logger.info("Recompiled the routing policy: \(database.totalRuleCount) rules")
+            return .refreshed
+        } catch {
+            let message = error.localizedDescription
+            logger.error("Recompiling the routing policy failed: \(message)")
+            // The swap only happens once a compile has succeeded, so a failure
+            // here leaves the previous artifact published and routing — just
+            // not with the preference that was asked for.
+            if isPublished {
+                return .failedButUsable(message)
+            }
+            state = .failed(message)
+            return .unavailable(reason: Self.failureReason(for: error), message: message)
         }
     }
 
@@ -284,7 +332,7 @@ final class GeoDatabaseStore: ObservableObject {
     func download() async {
         state = .downloading
         do {
-            let database = try await performUpdate()
+            let database = try await performExclusively { try await self.runUpdate() }
             state = .ready(database)
             logger.info("Downloaded and compiled geo database: \(database.totalRuleCount) rules")
         } catch {
@@ -305,6 +353,13 @@ final class GeoDatabaseStore: ObservableObject {
     func provision(force: Bool = false) async -> GeoProvisionOutcome {
         let published = isPublished
         guard force || !published || isStale else {
+            // Fresh lists, but the policy built from them can still predate a
+            // change to the built-in mapping or to a routing preference. That
+            // is repairable from disk, with no download to be blocked.
+            if isPolicyOutdated {
+                logger.info("Geo lists are current but the policy predates the current preferences; rebuilding it from disk")
+                return await recompilePolicy()
+            }
             logger.info("Geo database is current (fetched \(self.storedFetchDate.map(Self.describe) ?? "unknown")); no refresh needed")
             return .upToDate
         }
@@ -320,7 +375,7 @@ final class GeoDatabaseStore: ObservableObject {
         }
 
         do {
-            let database = try await performUpdate()
+            let database = try await performExclusively { try await self.runUpdate() }
             state = .ready(database)
             logger.info("Refreshed the geo database: \(database.totalRuleCount) rules")
             return .refreshed
@@ -333,6 +388,14 @@ final class GeoDatabaseStore: ObservableObject {
 
             if isPublished {
                 logger.info("Keeping the previously published geo database (fetched \(self.storedFetchDate.map(Self.describe) ?? "unknown"))")
+                // The download is what failed, not the compiler. If the kept
+                // policy encodes outdated preferences it can still be rebuilt
+                // from the lists already on disk — which is the whole point of
+                // separating the two.
+                if isPolicyOutdated {
+                    logger.info("Rebuilding the kept policy to match the current preferences")
+                    _ = await recompilePolicy()
+                }
                 if state.database == nil {
                     await loadStored()
                 }
@@ -368,22 +431,31 @@ final class GeoDatabaseStore: ObservableObject {
         }
     }
 
-    /// Runs one update at a time, joining a call already in flight rather than
+    /// Runs one job at a time, joining a call already in flight rather than
     /// starting a second.
     ///
-    /// The launch refresh, the data-plane picker and the Update button can all
-    /// fire independently, and this type is `@MainActor` rather than
-    /// single-threaded — everything suspends at `await`. Two concurrent updates
-    /// would share one staging directory, and the second would delete the
-    /// first's files out from under it.
-    private func performUpdate() async throws -> GeoDatabase {
-        if let updateTask {
-            logger.info("An update is already in flight; joining it")
-            return try await updateTask.value
+    /// The launch refresh, the data-plane picker, the push-routing switch, the
+    /// Geo Database screen and the Update button can all fire independently,
+    /// and this type is `@MainActor` rather than single-threaded — everything
+    /// suspends at `await`. Two concurrent jobs would share one staging
+    /// directory, and the second would delete the first's files out from under
+    /// it.
+    ///
+    /// Joining is safe across job kinds because every one of them compiles with
+    /// the preferences in force when it runs: a recompile that joins a download
+    /// gets the artifact it was going to build anyway. The reverse costs a
+    /// download the freshness it wanted, and is bounded by how long a recompile
+    /// takes — well under a second, with no network involved.
+    private func performExclusively(
+        _ body: @escaping @MainActor () async throws -> GeoDatabase
+    ) async throws -> GeoDatabase {
+        if let jobTask {
+            logger.info("A geo job is already in flight; joining it")
+            return try await jobTask.value
         }
-        let task = Task { try await runUpdate() }
-        updateTask = task
-        defer { updateTask = nil }
+        let task = Task { try await body() }
+        jobTask = task
+        defer { jobTask = nil }
         return try await task.value
     }
 
@@ -410,7 +482,9 @@ final class GeoDatabaseStore: ObservableObject {
         )
 
         logger.info("Compiling the routing artifact from \(ip.data.count) + \(site.data.count) downloaded bytes")
-        try await Self.compileNativeDatabase(at: staging.path)
+        try await Self.compileNativeDatabase(
+            at: staging.path, routePushThroughTunnel: Self.routePushThroughTunnel
+        )
 
         try commit(from: staging, manifest: [
             GeoDataKind.geoip.rawValue: ip.provenance,
@@ -427,12 +501,13 @@ final class GeoDatabaseStore: ObservableObject {
         )
     }
 
-    /// Rebuilds a missing artifact from the lists already on disk, via the same
+    /// Rebuilds the artifact from the lists already on disk, via the same
     /// staging path as a download. Compiling in place would mean deleting the
     /// manifest first and rewriting it only on success — so one rejected list
     /// would demote an otherwise intact database to "absent", and the retry
     /// would fail identically.
-    private func recompileFromStoredFiles(manifest: [String: GeoFileProvenance]) async throws {
+    private func runRecompile() async throws -> GeoDatabase {
+        let manifest = try readManifest()
         let staging = try prepareStagingDirectory()
         defer { try? FileManager.default.removeItem(at: staging) }
 
@@ -442,8 +517,22 @@ final class GeoDatabaseStore: ObservableObject {
                 to: staging.appendingPathComponent(kind.fileName)
             )
         }
-        try await Self.compileNativeDatabase(at: staging.path)
+        try await Self.compileNativeDatabase(
+            at: staging.path, routePushThroughTunnel: Self.routePushThroughTunnel
+        )
         try commit(from: staging, manifest: manifest)
+
+        state = .parsing
+        return try await parseStored(manifest: manifest)
+    }
+
+    private func parseStored(manifest: [String: GeoFileProvenance]) async throws -> GeoDatabase {
+        try await Self.parse(
+            ipURL: try require(fileURL(for: .geoip)),
+            siteURL: try require(fileURL(for: .geosite)),
+            ipProvenance: try require(manifest[GeoDataKind.geoip.rawValue]),
+            siteProvenance: try require(manifest[GeoDataKind.geosite.rawValue])
+        )
     }
 
     private func prepareStagingDirectory() throws -> URL {
@@ -554,14 +643,25 @@ final class GeoDatabaseStore: ObservableObject {
         return value
     }
 
+    /// Whether Apple's push couriers should be compiled to route through the
+    /// server. Read at compile time rather than stored, so every artifact this
+    /// type publishes matches the preference in force when it was built.
+    nonisolated static var routePushThroughTunnel: Bool {
+        SettingsService.shared.routePushThroughTunnel
+    }
+
     /// The compiler is synchronous native code, so keep it off the main actor.
     /// The task is awaited before the manifest is restored; the tunnel can only
     /// observe the artifact once the complete download/compile transaction is
     /// committed.
-    private nonisolated static func compileNativeDatabase(at path: String) async throws {
+    private nonisolated static func compileNativeDatabase(
+        at path: String, routePushThroughTunnel: Bool
+    ) async throws {
         try await Task.detached(priority: .utility) {
             do {
-                try FPTNTunnelBridge.compileGeoRoutingPolicy(atPath: path)
+                try FPTNTunnelBridge.compileGeoRoutingPolicy(
+                    atPath: path, routePushThroughTunnel: routePushThroughTunnel
+                )
             } catch {
                 // Named here rather than only at the call site: the native
                 // compiler's reason (which .dat was rejected, at which byte)

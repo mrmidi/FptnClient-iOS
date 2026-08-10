@@ -80,6 +80,13 @@ actor SettingsService {
 
     /// When enabled, APNs (push) traffic is forced through the tunnel via
     /// `includeAllNetworks` + `excludeAPNs = false`. Defaults to ON.
+    ///
+    /// Also a compile input to the split-routing policy: both published geo
+    /// lists put Apple's push couriers in the direct set, so without this the
+    /// OS would hand APNs to the tunnel and split routing would send it
+    /// straight back out — the exact failure on a whitelist ISP. See
+    /// `GeoDatabaseStore.recompilePolicy()`, which is what makes a change here
+    /// reach the artifact the tunnel maps.
     nonisolated var routePushThroughTunnel: Bool {
         let stored = UserDefaults.standard.object(forKey: Self.routePushThroughTunnelKey)
         return stored == nil ? true : UserDefaults.standard.bool(forKey: Self.routePushThroughTunnelKey)

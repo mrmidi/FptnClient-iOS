@@ -246,7 +246,7 @@ struct SettingsView: View {
                     Text("Routing")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
-                    Text("Route Push Notifications forces Apple Push (APNs) traffic through the tunnel so notifications keep arriving on networks that block them directly. This routes all network traffic through the VPN while connected.")
+                    Text("Sends Apple Push (APNs) through the server, so notifications keep arriving on networks that block Apple's addresses directly. While connected this forces all traffic through the VPN. In split routing it makes push the one Apple service that does not go direct — updates and iCloud still do.")
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)
@@ -413,6 +413,17 @@ struct SettingsView: View {
             case .download, nil:
                 Text("The routing lists could not be downloaded, so all traffic will go through FPTN servers. Split routing stays on. Your network may be blocking the download — try again from the Geo Database screen while the VPN is connected.")
             }
+        }
+        .alert(
+            "Push routing not applied",
+            isPresented: $viewModel.geoPolicyRebuildFailed
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            // Deliberately not the "everything goes through FPTN servers"
+            // warning: the previously published policy is intact and still
+            // routing. The only thing that failed is the change.
+            Text("The split-routing policy could not be rebuilt, so push notifications still follow the previous setting. Updating the database from the Geo Database screen will apply it.")
         }
         .confirmationDialog(
             "Are you sure you want to log out?",
