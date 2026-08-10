@@ -847,12 +847,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             return true
         }
 
-        // Resolvers are pinned to the fptn verdict so the server's own DNS is
-        // reachable through the tunnel — that is what makes split mode work
-        // without a custom resolver.
+        // The server's resolvers are pinned to the fptn verdict, because they
+        // are reachable only through the tunnel — that is what makes split mode
+        // work without a custom resolver.
         var resolvers: [String] = [configuration.dnsIPv4]
         if let dnsIPv6 = configuration.dnsIPv6 { resolvers.append(dnsIPv6) }
-        if let custom = configuration.customDnsIPv4 { resolvers.append(custom) }
+
+        // A resolver the person chose is pinned the other way, to direct. It
+        // used to join the list above, which sent their queries to the server
+        // to be resolved from its network position rather than theirs — and
+        // made a resolver on their own LAN unreachable outright, since the
+        // server cannot route into it.
+        var directResolvers: [String] = []
+        if let custom = configuration.customDnsIPv4 { directResolvers.append(custom) }
         let geoDatabaseDirectory = Self.geoDatabaseDirectoryPath()
 
         guard let bridge = FPTNTunnelBridge(
@@ -865,6 +872,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             rejectDomains: [],
             dropDomains: [],
             tunnelResolvers: resolvers,
+            directResolvers: directResolvers,
             geoDatabaseDirectory: geoDatabaseDirectory
         ) else {
             logger.error("Failed to create the split routing bridge")

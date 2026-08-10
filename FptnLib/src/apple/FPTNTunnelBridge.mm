@@ -535,6 +535,7 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
                                rejectDomains:(NSArray<NSString *> *)rejectDomains
                                  dropDomains:(NSArray<NSString *> *)dropDomains
                              tunnelResolvers:(NSArray<NSString *> *)tunnelResolvers
+                             directResolvers:(NSArray<NSString *> *)directResolvers
                          geoDatabaseDirectory:(nullable NSString *)geoDatabaseDirectory {
     self = [super init];
     if (!self) {
@@ -561,6 +562,7 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
     config.routing.reject_domains = ToStringVector(rejectDomains);
     config.routing.drop_domains = ToStringVector(dropDomains);
     config.routing.tunnel_resolvers = ToStringVector(tunnelResolvers);
+    config.routing.direct_resolvers = ToStringVector(directResolvers);
     NSString *geoStatus = @"inactive (not attempted)";
     auto routingPolicy = LoadGeoPolicy(geoDatabaseDirectory, &geoStatus);
     self.geoRoutingStatusStorage = geoStatus;

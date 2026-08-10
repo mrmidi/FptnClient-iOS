@@ -111,6 +111,7 @@ typedef struct {
                                rejectDomains:(NSArray<NSString *> *)rejectDomains
                                  dropDomains:(NSArray<NSString *> *)dropDomains
                              tunnelResolvers:(NSArray<NSString *> *)tunnelResolvers
+                             directResolvers:(NSArray<NSString *> *)directResolvers
                          geoDatabaseDirectory:(nullable NSString *)geoDatabaseDirectory;
 
 /// Compiles the raw `geoip.dat`/`geosite.dat` pair in the shared app-group
