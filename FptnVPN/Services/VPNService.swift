@@ -324,6 +324,16 @@ final class VPNService: ObservableObject {
                             bestLatencyMs: update.bestLatencyMs
                         )
                     }
+                },
+                onOutcome: { summary in
+                    // One line per selection run. A scan that stops early — on
+                    // either deadline — now says so instead of leaving only a
+                    // spinner behind.
+                    if summary.succeeded {
+                        logger.info("\(summary.logLine)")
+                    } else {
+                        logger.warning("\(summary.logLine)")
+                    }
                 }
             )
             result = await coordinator.connect(request)
