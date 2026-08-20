@@ -37,6 +37,24 @@ struct SettingsView: View {
             + "library is \(NativeBuildInfo.configuration)."
     }
 
+    /// Small caption row with a leading glyph.
+    ///
+    /// Not `Label`: a `Label`'s glyph scales with the body font, so at large
+    /// Dynamic Type the icon grows out of proportion to the caption text beside
+    /// it. Sizing the image explicitly keeps the two in step.
+    @ViewBuilder
+    private func statusRow(_ text: String, icon: String, tint: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -343,6 +361,74 @@ struct SettingsView: View {
                 // MARK: Account
 
                 Section {
+                    // Token freshness. The token carries the server list as well
+                    // as the credentials, so a stale one races against hosts that
+                    // may no longer exist.
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Token Updated")
+                                .foregroundStyle(Color.appPrimaryText)
+                            Spacer()
+                            if let age = viewModel.tokenAgeDescription {
+                                Text(age)
+                                    .foregroundStyle(viewModel.tokenIsStale
+                                                     ? Color.appWarning
+                                                     : Color.appSecondaryText)
+                            } else {
+                                Text("Unknown")
+                                    .foregroundStyle(Color.appSecondaryText)
+                            }
+                        }
+
+                        if let exact = viewModel.tokenUpdatedAtDescription {
+                            Text(exact)
+                                .font(.caption)
+                                .foregroundStyle(Color.appSecondaryText)
+                        }
+
+                        if viewModel.tokenIsStale {
+                            statusRow("Get a fresh token from @fptn_bot — server lists change over time.",
+                                      icon: "exclamationmark.triangle.fill",
+                                      tint: Color.appWarning)
+                        } else if viewModel.tokenAgeIsUnknown {
+                            Text("This token was saved before the app started tracking updates.")
+                                .font(.caption)
+                                .foregroundStyle(Color.appSecondaryText)
+                        }
+                    }
+
+                    // In-place refresh: paste a new token without logging out.
+                    Button {
+                        Task { await viewModel.pasteNewToken() }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "doc.on.clipboard")
+                                .font(.subheadline)
+                            Text("Paste New Token")
+                            Spacer()
+                            if viewModel.isRefreshingToken {
+                                ProgressView()
+                            }
+                        }
+                        .foregroundStyle(Color.appAccent)
+                    }
+                    .disabled(viewModel.isRefreshingToken)
+
+                    if let outcome = viewModel.tokenRefreshOutcome {
+                        switch outcome {
+                        case .updated(let serverCount):
+                            statusRow(
+                                String(format: NSLocalizedString("Token updated — %lld servers", comment: ""), serverCount),
+                                icon: "checkmark.circle.fill",
+                                tint: Color.appSuccess
+                            )
+                        case .failed(let message):
+                            statusRow(message,
+                                      icon: "exclamationmark.triangle.fill",
+                                      tint: Color.appError)
+                        }
+                    }
+
                     Button(role: .destructive) {
                         showClearKeychainConfirmation = true
                     } label: {
@@ -367,7 +453,7 @@ struct SettingsView: View {
                     Text("Account")
                         .foregroundStyle(Color.appAccent)
                 } footer: {
-                    Text("Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch.")
+                    Text("Paste New Token replaces your servers and credentials without logging out; it applies to the next connection. Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch.")
                         .foregroundStyle(Color.appSecondaryText)
                 }
                 .listRowBackground(Color.appSurface)
@@ -376,6 +462,10 @@ struct SettingsView: View {
             .background(Color.appBackground)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                viewModel.refreshTokenAge()
+                viewModel.tokenRefreshOutcome = nil
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }

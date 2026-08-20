@@ -19,6 +19,8 @@ actor TokenService {
     private static let usernameKey = "vpnUsername"
     private static let passwordKey = "vpnPassword"
     private static let serviceNameKey = "serviceName"
+    /// When the stored token was last written, as a Unix timestamp.
+    private static let tokenUpdatedAtKey = "fptn.tokenUpdatedAt"
 
     /// Flag set when local cache was populated from iCloud KVS data.
     private static let cloudOriginKey = "fptn.cloudOrigin"
@@ -30,6 +32,7 @@ actor TokenService {
     private static let cloudUsernameKey = "fptn.cloud.username"
     private static let cloudServiceNameKey = "fptn.cloud.serviceName"
     private static let cloudPasswordKey = "fptn.cloud.password"
+    private static let cloudTokenUpdatedAtKey = "fptn.cloud.tokenUpdatedAt"
 
     nonisolated(unsafe) private static let cloud = NSUbiquitousKeyValueStore.default
 
@@ -37,6 +40,12 @@ actor TokenService {
 
     func saveTokenData(_ tokenData: FPTNToken) {
         let encoder = JSONEncoder()
+        // Stamped here rather than at decode time so every path that persists a
+        // token — manual login, paste auto-login, a future in-place refresh —
+        // updates the age without having to remember to.
+        let updatedAt = Date().timeIntervalSince1970
+        UserDefaults.standard.set(updatedAt, forKey: Self.tokenUpdatedAtKey)
+        Self.cloud.set(updatedAt, forKey: Self.cloudTokenUpdatedAtKey)
 
         // -- Local UserDefaults (immediate access) --
         if let encodedToken = try? encoder.encode(tokenData) {
@@ -117,9 +126,27 @@ actor TokenService {
             }
             UserDefaults.standard.set(token.username, forKey: Self.usernameKey)
             UserDefaults.standard.set(token.service_name, forKey: Self.serviceNameKey)
+            // Carry the original write time across, so a device adopting a token
+            // from iCloud reports the token's real age rather than "just now".
+            let cloudUpdatedAt = Self.cloud.double(forKey: Self.cloudTokenUpdatedAtKey)
+            if cloudUpdatedAt > 0 {
+                UserDefaults.standard.set(cloudUpdatedAt, forKey: Self.tokenUpdatedAtKey)
+            }
         }
 
         return token
+    }
+
+    /// When the stored token was last written, or `nil` if it was stored before
+    /// the app began tracking this. Never guesses — an unknown age is reported
+    /// as unknown rather than backfilled with "now", which would claim a
+    /// months-old token is fresh.
+    nonisolated func tokenUpdatedAt() -> Date? {
+        let local = UserDefaults.standard.double(forKey: Self.tokenUpdatedAtKey)
+        if local > 0 { return Date(timeIntervalSince1970: local) }
+        let cloud = Self.cloud.double(forKey: Self.cloudTokenUpdatedAtKey)
+        if cloud > 0 { return Date(timeIntervalSince1970: cloud) }
+        return nil
     }
 
     func getServers() -> [VPNServer] {
@@ -161,6 +188,7 @@ actor TokenService {
         UserDefaults.standard.removeObject(forKey: Self.passwordKey)
         UserDefaults.standard.removeObject(forKey: Self.serviceNameKey)
         UserDefaults.standard.removeObject(forKey: Self.cloudOriginKey)
+        UserDefaults.standard.removeObject(forKey: Self.tokenUpdatedAtKey)
 
         // iCloud KVS
         Self.cloud.removeObject(forKey: Self.cloudTokenKey)
@@ -168,6 +196,7 @@ actor TokenService {
         Self.cloud.removeObject(forKey: Self.cloudUsernameKey)
         Self.cloud.removeObject(forKey: Self.cloudServiceNameKey)
         Self.cloud.removeObject(forKey: Self.cloudPasswordKey) // Secure cleanup
+        Self.cloud.removeObject(forKey: Self.cloudTokenUpdatedAtKey)
         Self.cloud.synchronize()
     }
 
@@ -198,7 +227,8 @@ actor TokenService {
     private func handleCloudChange(changedKeys: [String]) {
         let relevantKeys: Set<String> = [
             Self.cloudTokenKey, Self.cloudServersKey,
-            Self.cloudUsernameKey, Self.cloudServiceNameKey
+            Self.cloudUsernameKey, Self.cloudServiceNameKey,
+            Self.cloudTokenUpdatedAtKey
         ]
         guard !changedKeys.filter({ relevantKeys.contains($0) }).isEmpty else { return }
 
@@ -206,6 +236,10 @@ actor TokenService {
         if let data = Self.cloud.data(forKey: Self.cloudTokenKey) {
             UserDefaults.standard.set(data, forKey: Self.tokenKey)
             UserDefaults.standard.set(true, forKey: Self.cloudOriginKey)
+            let cloudUpdatedAt = Self.cloud.double(forKey: Self.cloudTokenUpdatedAtKey)
+            if cloudUpdatedAt > 0 {
+                UserDefaults.standard.set(cloudUpdatedAt, forKey: Self.tokenUpdatedAtKey)
+            }
         }
         if let data = Self.cloud.data(forKey: Self.cloudServersKey) {
             UserDefaults.standard.set(data, forKey: Self.serversKey)

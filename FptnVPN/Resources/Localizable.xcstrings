@@ -1,6 +1,210 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Paste access was denied — tap again and choose Allow Paste" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste access was denied — tap again and choose Allow Paste"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Доступ к буферу обмена запрещён — нажмите ещё раз и выберите «Разрешить вставку»"
+          }
+        }
+      }
+    },
+    "Just now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Just now"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Только что"
+          }
+        }
+      }
+    },
+    "Paste Token" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste Token"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вставить токен"
+          }
+        }
+      }
+    },
+    "Paste New Token" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste New Token"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вставить новый токен"
+          }
+        }
+      }
+    },
+    "Token updated — %lld servers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token updated — %lld servers"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен обновлён — серверов: %lld"
+          }
+        }
+      }
+    },
+    "Clipboard is empty — copy the token from @fptn_bot first" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clipboard is empty — copy the token from @fptn_bot first"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Буфер обмена пуст — сначала скопируйте токен у @fptn_bot"
+          }
+        }
+      }
+    },
+    "That doesn't look like an FPTN token" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That doesn't look like an FPTN token"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это не похоже на токен FPTN"
+          }
+        }
+      }
+    },
+    "Token looks truncated — copy the whole message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token looks truncated — copy the whole message"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен выглядит обрезанным — скопируйте сообщение целиком"
+          }
+        }
+      }
+    },
+    "Token format not recognized — request a fresh one" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token format not recognized — request a fresh one"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Формат токена не распознан — запросите новый"
+          }
+        }
+      }
+    },
+    "Token is damaged — request a fresh one from @fptn_bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token is damaged — request a fresh one from @fptn_bot"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен повреждён — запросите новый у @fptn_bot"
+          }
+        }
+      }
+    },
+    "Token has no servers — contact support" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token has no servers — contact support"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В токене нет серверов — обратитесь в поддержку"
+          }
+        }
+      }
+    },
+    "Paste New Token replaces your servers and credentials without logging out; it applies to the next connection. Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste New Token replaces your servers and credentials without logging out; it applies to the next connection. Clear Keychain removes the stored password from iCloud Keychain on all devices. The app will re-sync it automatically on next launch."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Вставить новый токен» заменяет серверы и учётные данные без выхода из аккаунта; изменения применятся при следующем подключении. «Очистить связку ключей» удаляет сохранённый пароль из связки ключей iCloud на всех устройствах. Приложение автоматически синхронизирует его при следующем запуске."
+          }
+        }
+      }
+    },
     "—" : {
 
     },
@@ -974,6 +1178,23 @@
     "Geo policy" : {
 
     },
+    "Get a fresh token from @fptn_bot — server lists change over time." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get a fresh token from @fptn_bot — server lists change over time."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Получите новый токен у @fptn_bot — списки серверов со временем меняются."
+          }
+        }
+      }
+    },
     "Get your free token from" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1797,6 +2018,9 @@
         }
       }
     },
+    "Sends Apple Push (APNs) through the server, so notifications keep arriving on networks that block Apple's addresses directly. While connected this forces all traffic through the VPN. In split routing it makes push the one Apple service that does not go direct — updates and iCloud still do." : {
+
+    },
     "Server" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2036,6 +2260,9 @@
     "The routing lists were downloaded but could not be prepared, so all traffic will go through FPTN servers. Split routing stays on. This usually clears up with the next published update." : {
 
     },
+    "The split-routing policy could not be rebuilt, so push notifications still follow the previous setting. Updating the database from the Geo Database screen will apply it." : {
+
+    },
     "The VPN will be disconnected before scanning so probes reach the server directly." : {
 
     },
@@ -2052,6 +2279,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Пароль будет удалён из Связки ключей iCloud на всех устройствах. При следующем запуске он синхронизируется заново."
+          }
+        }
+      }
+    },
+    "This token was saved before the app started tracking updates." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This token was saved before the app started tracking updates."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот токен был сохранён до того, как приложение начало отслеживать обновления."
           }
         }
       }
@@ -2141,6 +2385,23 @@
         }
       }
     },
+    "Token Updated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token Updated"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Токен обновлён"
+          }
+        }
+      }
+    },
     "Tools" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2206,6 +2467,23 @@
     },
     "Type an IP address or a domain to see which rule claims it." : {
 
+    },
+    "Unknown" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Неизвестно"
+          }
+        }
+      }
     },
     "Unknown error" : {
       "extractionState" : "manual",

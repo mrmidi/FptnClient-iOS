@@ -24,6 +24,15 @@ final class SettingsViewModel: ObservableObject {
     @Published var flowDataPlaneEnabled: Bool
     @Published var dataPlaneMode: TunnelDataPlaneMode
 
+    /// When the stored token was last written. `nil` for tokens saved before the
+    /// app tracked this, and for that case the UI says "unknown" rather than
+    /// inventing a date.
+    @Published private(set) var tokenUpdatedAt: Date?
+
+    /// Result of the most recent in-place token refresh, cleared when shown.
+    @Published var tokenRefreshOutcome: TokenRefreshOutcome?
+    @Published private(set) var isRefreshingToken = false
+
     /// Set only when split routing was selected and no usable geo database
     /// could be produced. A stale-but-working database is not a failure.
     @Published var geoProvisionFailure: GeoProvisionOutcome?
@@ -73,6 +82,79 @@ final class SettingsViewModel: ObservableObject {
         self.customDnsIPv4 = settingsService.customDnsIPv4
         self.flowDataPlaneEnabled = settingsService.flowDataPlaneEnabled
         self.dataPlaneMode = settingsService.dataPlaneMode
+        self.tokenUpdatedAt = tokenService.tokenUpdatedAt()
+    }
+
+    // MARK: - Token freshness
+
+    /// How old a token may get before Settings suggests refreshing it.
+    ///
+    /// A guess, deliberately isolated to one constant: the right value depends
+    /// on how often the bot rotates tokens and how often the server list
+    /// changes, neither of which the client can observe.
+    static let tokenStalenessThreshold: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Re-read on appear so a refresh performed elsewhere is reflected without
+    /// rebuilding the view model.
+    func refreshTokenAge() {
+        tokenUpdatedAt = tokenService.tokenUpdatedAt()
+    }
+
+    /// Replace the stored token from the clipboard, in place.
+    ///
+    /// Deliberately does not log out: the whole point is that an expired token
+    /// should not cost the user their session and force them back through the
+    /// login screen. Servers and credentials are swapped underneath; an active
+    /// tunnel keeps running on the old ones until the next connect.
+    func pasteNewToken() async {
+        guard !isRefreshingToken else { return }
+        isRefreshingToken = true
+        defer { isRefreshingToken = false }
+
+        do {
+            let clipboard = try TokenPasteboard.readToken()
+            let token = try TokenDecoder.decode(clipboard)
+            await tokenService.saveTokenData(token)
+            refreshTokenAge()
+            tokenRefreshOutcome = .updated(serverCount: token.servers.count)
+            logger.info("Token refreshed in place, servers: \(token.servers.count)")
+        } catch {
+            tokenRefreshOutcome = .failed(error.localizedDescription)
+            logger.error("Token refresh rejected: \(error.localizedDescription)")
+        }
+    }
+
+    var tokenAgeIsUnknown: Bool { tokenUpdatedAt == nil }
+
+    /// True once the token is older than the threshold. False when the age is
+    /// unknown — an unknown age is not evidence of staleness, and treating it
+    /// as such would flag every existing install on first launch after update.
+    var tokenIsStale: Bool {
+        guard let tokenUpdatedAt else { return false }
+        return Date().timeIntervalSince(tokenUpdatedAt) > Self.tokenStalenessThreshold
+    }
+
+    /// Localized, human-readable age, e.g. "8 days ago". `nil` when unknown.
+    ///
+    /// Anything under a minute reads as "Just now": `RelativeDateTimeFormatter`
+    /// renders a just-written timestamp as "in 0 seconds", which looks like a
+    /// bug and points at the future for something that already happened.
+    var tokenAgeDescription: String? {
+        guard let tokenUpdatedAt else { return nil }
+        let elapsed = Date().timeIntervalSince(tokenUpdatedAt)
+        if elapsed < 60 {
+            return NSLocalizedString("Just now", comment: "Token was updated moments ago")
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: tokenUpdatedAt, relativeTo: Date())
+    }
+
+    /// Absolute date, shown alongside the relative age so the value stays
+    /// meaningful for a token that is months old.
+    var tokenUpdatedAtDescription: String? {
+        guard let tokenUpdatedAt else { return nil }
+        return tokenUpdatedAt.formatted(date: .abbreviated, time: .shortened)
     }
 
     func saveSni() {
@@ -197,5 +279,17 @@ final class SettingsViewModel: ObservableObject {
             guard let username = await tokenService.getTokenData()?.username else { return }
             KeychainHelper.deletePassword(account: username)
         }
+    }
+}
+
+/// Outcome of an in-place token refresh, shown inline in Settings rather than
+/// as an alert — the row the user just tapped is where they are looking.
+enum TokenRefreshOutcome: Equatable {
+    case updated(serverCount: Int)
+    case failed(String)
+
+    var isSuccess: Bool {
+        if case .updated = self { return true }
+        return false
     }
 }
