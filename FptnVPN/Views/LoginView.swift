@@ -8,9 +8,6 @@ import SwiftUI
 
 struct LoginView: View {
     @StateObject private var viewModel = LoginViewModel()
-    @State private var showingAlert = false
-    @State private var autoLoginTask: Task<Void, Never>?
-    @State private var previousToken = ""
 
     var body: some View {
         NavigationStack {
@@ -98,105 +95,69 @@ struct LoginView: View {
                                 .stroke(Color.appSeparator.opacity(0.45), lineWidth: 1)
                         )
                         
-                        // Token input
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Token")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.appPrimaryText)
-                                .padding(.leading, 4)
-                            
-                            HStack(spacing: 12) {
-                                Image(systemName: "key.fill")
-                                    .foregroundStyle(Color.appAccent.opacity(0.75))
-                                    .frame(width: 20)
-                                
-                                TextField("", text: $viewModel.token, prompt: Text("Paste your token here").foregroundColor(Color.appSecondaryText))
-                                    .foregroundStyle(Color.appPrimaryText)
-                                    .textInputAutocapitalization(.never)
-                                    .disableAutocorrection(true)
-                                    .textFieldStyle(.plain)
-                                    .onChange(of: viewModel.token) { newValue in
-                                        let oldValue = previousToken
-                                        previousToken = newValue
-                                        autoLoginTask?.cancel()
-                                        guard viewModel.shouldAutoLoginAfterTokenChange(from: oldValue, to: newValue) else {
-                                            return
-                                        }
-
-                                        autoLoginTask = Task {
-                                            try? await Task.sleep(nanoseconds: 150_000_000)
-                                            guard !Task.isCancelled else { return }
-                                            await viewModel.loginIfValidPastedToken(newValue)
-                                        }
-                                    }
-                                
-                                if !viewModel.token.isEmpty {
-                                    Button {
-                                        autoLoginTask?.cancel()
-                                        viewModel.token = ""
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(Color.appSecondaryText)
-                                    }
-                                }
-                            }
-                            .padding(16)
-                            .background(Color.appElevatedSurface)
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.appAccent.opacity(viewModel.token.isEmpty ? 0 : 0.55), lineWidth: 1)
-                            )
-                        }
-                        
-                        // Login button
+                        // Paste-only entry. A token is hundreds of base64
+                        // characters — nobody types one — so there is no text
+                        // field here and the keyboard never appears.
                         Button {
-                            Task {
-                                await viewModel.login()
-                                if viewModel.errorMessage != nil {
-                                    showingAlert = true
-                                }
-                            }
+                            Task { await viewModel.pasteToken() }
                         } label: {
-                            HStack(spacing: 8) {
-                                Text("Login")
+                            HStack(spacing: 10) {
+                                if viewModel.isPasting {
+                                    ProgressView()
+                                        .tint(Color.black.opacity(0.85))
+                                } else {
+                                    Image(systemName: "doc.on.clipboard.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                }
+                                Text("Paste Token")
                                     .fontWeight(.semibold)
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 14, weight: .semibold))
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(
-                                Group {
-                                    if viewModel.isLoginButtonEnabled {
-                                        LinearGradient(
-                                            colors: [Color.appAccent, Color.appAccent.opacity(0.82)],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    } else {
-                                        Color.appMutedControl
-                                    }
-                                }
+                                LinearGradient(
+                                    colors: [Color.appAccent, Color.appAccent.opacity(0.82)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                            .foregroundStyle(viewModel.isLoginButtonEnabled ? Color.black.opacity(0.85) : Color.appSecondaryText)
+                            .foregroundStyle(Color.black.opacity(0.85))
                             .cornerRadius(12)
-                            .shadow(color: viewModel.isLoginButtonEnabled ? Color.appAccent.opacity(0.25) : .clear, radius: 8, x: 0, y: 4)
+                            .shadow(color: Color.appAccent.opacity(0.25), radius: 8, x: 0, y: 4)
                         }
-                        .disabled(!viewModel.isLoginButtonEnabled)
-                        .animation(.easeInOut(duration: 0.2), value: viewModel.isLoginButtonEnabled)
+                        .disabled(viewModel.isPasting)
+
+                        // Inline, not an alert: the advice is about the thing
+                        // they just tapped, and it should stay readable while
+                        // they go back to Telegram to re-copy.
+                        if let errorMessage = viewModel.errorMessage {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(Color.appWarning)
+                                Text(errorMessage)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.appPrimaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.appSurface)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.appWarning.opacity(0.45), lineWidth: 1)
+                            )
+                            .transition(.opacity)
+                        }
+
                     }
                     .padding(.horizontal, 32)
+                    .animation(.easeInOut(duration: 0.2), value: viewModel.errorMessage)
                     
                     Spacer()
                     Spacer()
                 }
-            }
-            .alert("Error", isPresented: $showingAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(viewModel.errorMessage ?? "Unknown error")
             }
             .navigationDestination(isPresented: $viewModel.isLoggedIn) {
                 HomeView(
@@ -207,9 +168,6 @@ struct LoginView: View {
                         viewModel.isLoggedIn = false
                     }
                 )
-            }
-            .onDisappear {
-                autoLoginTask?.cancel()
             }
         }
     }
