@@ -284,6 +284,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS
         FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp
         SWIFT_OBJC_BRIDGING_HEADER: Fptn-macOS/Cpp/Fptn_macOS-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/TunnelDiagnosticsCore/include
         ENABLE_APP_SANDBOX: YES
         ENABLE_HARDENED_RUNTIME: YES
     info:
@@ -294,11 +295,15 @@ targets:
         CFBundleLocalizations: [en, ru]
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        # Read back by SharedTunnelRuntime/FptnAppGroup.swift. A sandboxed
+        # macOS app's group container is TEAMID.group.…, so the prefix has to
+        # reach Swift somehow; stamping it beats hardcoding the team.
+        FPTNTeamIdentifierPrefix: $(TeamIdentifierPrefix)
     entitlements:
       path: Fptn-macOS/Fptn_macOS.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.net.mrmidi.FptnVPN
+          - $(TeamIdentifierPrefix)group.net.mrmidi.FptnVPN
         keychain-access-groups:
           - $(AppIdentifierPrefix)group.net.mrmidi.FptnVPN
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)net.mrmidi.FptnVPN
@@ -308,6 +313,7 @@ targets:
     dependencies:
       - target: Fptn-macOS-Tunnel
         embed: true
+      - target: FptnTunnelDiagnosticsCore-macOS
       - package: FptnShared
         product: FptnSharedCore
       - package: FptnShared
@@ -324,28 +330,52 @@ targets:
   Fptn-macOS-Tunnel:
     templates: [TunnelBase]
     platform: macOS
+    # The provider is shared with iOS rather than forked. It imports only
+    # Foundation/Darwin/Network/NetworkExtension/os.log/os.signpost plus
+    # FptnShared — no UIKit and no iOS-only NetworkExtension API — so it is
+    # already portable, and sharing it is what makes a Mac a usable stand for
+    # profiling the data plane that actually ships. Only the app layer above
+    # stays a deliberate per-platform fork.
     sources:
-      - Fptn-macOS-Tunnel
+      - path: FptnVPNTunnel
+        excludes:
+          - Info.plist
+          - FptnVPNTunnel.entitlements
       - SharedTunnelRuntime
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS.Fptn-macOS-Tunnel
-        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS-Tunnel/Cpp
-        SWIFT_OBJC_BRIDGING_HEADER: Fptn-macOS-Tunnel/Cpp/Fptn_macOS_Tunnel-Bridging-Header.h
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Fptn-macOS/Cpp
+        # Shared with iOS along with the sources it declares.
+        SWIFT_OBJC_BRIDGING_HEADER: FptnVPNTunnel/Cpp/FptnVPNTunnel-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/TunnelDiagnosticsCore/include
+        # The Mac App Store requires every bundled appex to be sandboxed.
+        ENABLE_APP_SANDBOX: YES
         ENABLE_HARDENED_RUNTIME: YES
     info:
       path: Fptn-macOS-Tunnel/Info.plist
+      properties:
+        FPTNTeamIdentifierPrefix: $(TeamIdentifierPrefix)
     entitlements:
       path: Fptn-macOS-Tunnel/Fptn_macOS_Tunnel.entitlements
       properties:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
         com.apple.security.application-groups:
-          - group.net.mrmidi.FptnVPN
+          - $(TeamIdentifierPrefix)group.net.mrmidi.FptnVPN
+        # Once sandboxed, every outbound socket fails without this — and it
+        # presents as a connected tunnel passing no data, which is
+        # indistinguishable from a data-plane bug.
+        com.apple.security.network.client: true
     dependencies:
+      - target: FptnTunnelDiagnosticsCore-macOS
+      - package: FptnShared
+        product: FptnSharedCore
       - package: FptnShared
         product: FptnSharedTunnel
-      - framework: Fptn-macOS-Tunnel/Cpp/fptn_native_lib.xcframework
+      - package: swift-log
+        product: Logging
+      - framework: Fptn-macOS/Cpp/fptn_native_lib.xcframework
     preBuildScripts:
       - name: Build FptnLib (Conan+CMake)
         script: 'FPTN_NATIVE_BUILD_IF_MISSING=1 "${SRCROOT}/build_fptn_lib.sh"'

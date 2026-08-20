@@ -528,15 +528,18 @@ if [ "$TARGET" = "macos" ]; then
     # ── Stage as the macos slice, then package ────────────────────────────────
     # arm64 + x86_64 lipo'd together is a legitimate fat binary: same platform,
     # different architectures. It becomes the single macos slice.
-    TUNNEL_DEST_DIR="${ROOT_DIR}/Fptn-macOS-Tunnel/Cpp"
-
     # stage_slice copies from the working directory, and the universal
     # framework was assembled at the top of LIB_DIR.
     cd "$LIB_DIR"
     stage_slice
 
+    # One copy only, as on iOS: the appex reads it out of the app's Cpp
+    # directory via FRAMEWORK_SEARCH_PATHS. A second copy under
+    # Fptn-macOS-Tunnel/Cpp is not just 226 MB of duplication — XcodeGen sweeps
+    # the tunnel's source directory, picks the xcframework up as a target file,
+    # and Xcode then plans a second ProcessXCFramework into the shared products
+    # dir, colliding with the app's on every versioned-bundle directory node.
     package_xcframework "$DEST_DIR" || exit 1
-    package_xcframework "$TUNNEL_DEST_DIR" || exit 1
 
     copy_dsym_to_archive_products "${SLICE_DIR}/fptn_native_lib.framework.dSYM"
 
@@ -545,7 +548,6 @@ if [ "$TARGET" = "macos" ]; then
     echo "Build complete. Slice: ${SLICE_DIR}/fptn_native_lib.framework"
     echo "Build complete. Universal xcframework packaged into:"
     echo "  ${DEST_DIR}/fptn_native_lib.xcframework"
-    echo "  ${TUNNEL_DEST_DIR}/fptn_native_lib.xcframework"
     exit 0
 fi
 

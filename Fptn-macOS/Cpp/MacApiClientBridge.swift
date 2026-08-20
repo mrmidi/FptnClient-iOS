@@ -15,13 +15,17 @@ struct MacApiClientHandshakeResult: Sendable {
 final class MacApiClientBridge: @unchecked Sendable {
     private nonisolated(unsafe) let client: SwiftApiClient
 
-    init(host: String, port: Int, sni: String, md5Fingerprint: String, censorshipStrategy: String = "SNI") {
+    // `name` carries a default on the C++ side, but Swift/C++ interop does not
+    // import C++ default arguments, so it has to be passed explicitly.
+    init(host: String, port: Int, sni: String, md5Fingerprint: String,
+         censorshipStrategy: String = "SNI", name: String = "") {
         client = SwiftApiClient(
             std.string(host),
             Int32(port),
             std.string(sni),
             std.string(md5Fingerprint),
-            std.string(censorshipStrategy)
+            std.string(censorshipStrategy),
+            std.string(name)
         )
     }
 
