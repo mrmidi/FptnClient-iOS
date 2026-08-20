@@ -21,7 +21,11 @@ struct Fptn_macOSApp: App {
     @StateObject private var selection = MacServerSelectionService()
 
     var body: some Scene {
-        WindowGroup(id: MacWindowID.main) {
+        // Window, not WindowGroup: WindowGroup is a multi-window scene, so the
+        // menu bar item's openWindow(id:) spawned a fresh window on every
+        // click instead of surfacing the existing one. Window is single
+        // instance, so openWindow activates what is already there.
+        Window("FPTN", id: MacWindowID.main) {
             RootView()
                 .environmentObject(model)
                 .environmentObject(vpn)
