@@ -7,19 +7,56 @@
 
 import SwiftUI
 
+enum MacWindowID {
+    static let main = "fptn.main"
+}
+
 @main
 struct Fptn_macOSApp: App {
-    init() {
-        // Begin observing iCloud KVS for cross-device token sync.
-        // The onChange callback is not needed here — ContentView polls on appear.
-        CloudTokenSync.startObserving {}
-    }
+
+    // Owned here, not in a view: the Settings scene and the menu bar item are
+    // sibling Scenes and cannot reach into another scene's @State.
+    @StateObject private var model = MacAppModel()
+    @StateObject private var vpn = MacVPNService()
+    @StateObject private var selection = MacServerSelectionService()
 
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        WindowGroup(id: MacWindowID.main) {
+            RootView()
+                .environmentObject(model)
+                .environmentObject(vpn)
+                .environmentObject(selection)
+                .task {
+                    // Observe iCloud KVS for a token added on another device.
+                    CloudTokenSync.startObserving { [weak model] in
+                        Task { @MainActor in model?.loadPersistedToken() }
+                    }
+                    model.loadPersistedToken()
+                    vpn.syncWithSystem()
+                }
         }
         .windowStyle(.titleBar)
-        .defaultSize(width: 860, height: 600)
+        // contentMinSize, not contentSize: a wrapped error label must be able
+        // to grow the window rather than clip inside it.
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 420, height: 460)
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+        }
+
+        Settings {
+            MacSettingsView()
+                .environmentObject(model)
+                .environmentObject(vpn)
+        }
+
+        MenuBarExtra {
+            MenuBarContentView()
+                .environmentObject(model)
+                .environmentObject(vpn)
+        } label: {
+            Image(systemName: vpn.isConnected ? "lock.shield.fill" : "lock.shield")
+        }
+        .menuBarExtraStyle(.window)
     }
 }

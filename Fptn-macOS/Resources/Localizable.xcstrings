@@ -1,15 +1,14 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "%@ (%@:%@)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ (%2$@:%3$@)"
-          }
-        }
-      }
+    "Add your access token" : {
+
+    },
+    "Captures all traffic so APNs stays inside the tunnel. Local network access is preserved." : {
+
+    },
+    "Censorship bypass" : {
+
     },
     "Connect" : {
       "extractionState" : "manual",
@@ -62,6 +61,12 @@
         }
       }
     },
+    "Disconnect to change these settings." : {
+
+    },
+    "Fastest" : {
+
+    },
     "FPTN macOS" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -78,6 +83,9 @@
           }
         }
       }
+    },
+    "Get a token from @fptn_bot on Telegram, copy it, then paste it here." : {
+
     },
     "Parse Token" : {
       "extractionState" : "manual",
@@ -181,9 +189,6 @@
         }
       }
     },
-    "Service: %@" : {
-
-    },
     "Smart Connect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -235,6 +240,12 @@
         }
       }
     },
+    "Takes effect on the next connection." : {
+
+    },
+    "The clipboard is empty." : {
+
+    },
     "Token" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -251,6 +262,9 @@
           }
         }
       }
+    },
+    "You will need to paste a token again to reconnect." : {
+
     }
   },
   "version" : "1.0"

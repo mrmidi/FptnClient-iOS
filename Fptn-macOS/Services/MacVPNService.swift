@@ -44,6 +44,7 @@ final class MacVPNService: ObservableObject {
         tokenPayload: MacTokenPayload,
         server: MacVPNServer,
         sni: String,
+        censorshipStrategy: CensorshipStrategy = .sniSpoofing,
         logLevel: String = "warning"
     ) {
         guard !isConnecting else { return }
@@ -80,7 +81,7 @@ final class MacVPNService: ObservableObject {
                     dnsIPv6: dns.dnsIPv6,
                     sni: sni,
                     md5Fingerprint: server.md5_fingerprint,
-                    censorshipStrategy: CensorshipStrategy(storedValue: ""),
+                    censorshipStrategy: censorshipStrategy,
                     logLevel: SharedLogLevel(rawValue: logLevel) ?? .warning
                 )
                 let startupData = try JSONEncoder().encode(startup)
