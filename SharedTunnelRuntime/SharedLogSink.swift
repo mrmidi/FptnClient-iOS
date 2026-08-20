@@ -13,15 +13,13 @@ final class SharedLogSink: @unchecked Sendable {
     static let app = SharedLogSink(fileName: "app.log")
     static let tunnel = SharedLogSink(fileName: "tunnel.log")
 
-    private let appGroup = "group.net.mrmidi.FptnVPN"
     private let maxFileSize: UInt64 = 512 * 1024 // 512 KB
     private let queue: DispatchQueue
     private var fileURL: URL?
 
     init(fileName: String) {
         self.queue = DispatchQueue(label: "org.fptn.logsink.\(fileName)", qos: .utility)
-        guard let container = FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: appGroup) else {
+        guard let container = FptnAppGroup.containerURL else {
             return
         }
         let logsDir = container.appendingPathComponent("logs", isDirectory: true)

@@ -31,9 +31,7 @@ struct TunnelDiagnosticsDecoder: Sendable {
     }
 
     static var production: TunnelDiagnosticsDecoder? {
-        guard let container = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.net.mrmidi.FptnVPN"
-        ) else { return nil }
+        guard let container = FptnAppGroup.containerURL else { return nil }
         let diagDir = container.appendingPathComponent("diagnostics", isDirectory: true)
         return TunnelDiagnosticsDecoder(
             ringPath: diagDir.appendingPathComponent("flight-ring.bin").path,

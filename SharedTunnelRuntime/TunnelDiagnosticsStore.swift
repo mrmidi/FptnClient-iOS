@@ -175,7 +175,6 @@ final class TunnelDiagnosticsStore: @unchecked Sendable {
         #endif
     }
 
-    private static let appGroup = "group.net.mrmidi.FptnVPN"
     private let queue = DispatchQueue(label: "org.fptn.diagnostics-store", qos: .utility)
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -187,8 +186,7 @@ final class TunnelDiagnosticsStore: @unchecked Sendable {
         if let rootURL {
             self.rootURL = rootURL
         } else {
-            self.rootURL = FileManager.default
-                .containerURL(forSecurityApplicationGroupIdentifier: Self.appGroup)?
+            self.rootURL = FptnAppGroup.containerURL?
                 .appendingPathComponent("diagnostics", isDirectory: true)
         }
         if let rootURL = self.rootURL {
@@ -386,11 +384,14 @@ enum TunnelDiagnosticsRedactor {
 
 enum TunnelCrashSignalInstaller {
     nonisolated(unsafe) private static var markerFD: Int32 = -1
+    #if os(macOS)
+    private static let processName = "Fptn-macOS-Tunnel"
+    #else
     private static let processName = "FptnVPNTunnel"
+    #endif
 
     static func installIfPossible() {
-        guard markerFD == -1,
-              let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.net.mrmidi.FptnVPN") else {
+        guard markerFD == -1, let container = FptnAppGroup.containerURL else {
             return
         }
         let diagnosticsDir = container.appendingPathComponent("diagnostics", isDirectory: true)

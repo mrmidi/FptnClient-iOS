@@ -382,9 +382,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
         // PR3: initialize binary flight recorder + lifecycle snapshot store.
         var didCreateFlightRecorder = false
-        if flightRecorder == nil,
-           let container = FileManager.default.containerURL(
-               forSecurityApplicationGroupIdentifier: "group.net.mrmidi.FptnVPN") {
+        if flightRecorder == nil, let container = FptnAppGroup.containerURL {
             let diagDir = container.appendingPathComponent("diagnostics", isDirectory: true)
             try? FileManager.default.createDirectory(at: diagDir, withIntermediateDirectories: true)
             let ringPath = diagDir.appendingPathComponent("flight-ring.bin").path
@@ -830,11 +828,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     /// artifact only when manifest.json is present. Missing or invalid data
     /// leaves the default verdict as fptn, so a stale or first-run database
     /// cannot accidentally make traffic direct.
-    private static let sharedAppGroupIdentifier = "group.net.mrmidi.FptnVPN"
-
     private static func geoDatabaseDirectoryPath() -> String? {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: sharedAppGroupIdentifier)?
+        FptnAppGroup.containerURL?
             .appendingPathComponent("GeoDatabase", isDirectory: true)
             .path
     }

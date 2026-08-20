@@ -147,7 +147,6 @@ final class GeoDatabaseStore: ObservableObject {
     nonisolated static let refreshInterval: TimeInterval = 24 * 60 * 60
 
     private let logger = Logger(subsystem: "org.fptn", category: "geodb")
-    private let appGroup = "group.net.mrmidi.FptnVPN"
     private let compiledArtifactFileName = "geo-routing.bin"
     private let stagingDirectoryName = "staging"
     private let session: URLSession
@@ -162,8 +161,7 @@ final class GeoDatabaseStore: ObservableObject {
     // MARK: Locations
 
     private var directory: URL? {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
+        FptnAppGroup.containerURL?
             .appendingPathComponent("GeoDatabase", isDirectory: true)
     }
 
