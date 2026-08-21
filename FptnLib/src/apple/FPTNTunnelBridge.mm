@@ -671,6 +671,7 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
     out.packetsToTransport = split.packets_to_transport;
     out.packetsDropped = split.packets_dropped;
     out.rollbacks = split.rollbacks;
+    out.partitionReentries = split.partition_reentries;
 
     const auto classifier = plane->ClassifierForTesting().Counters();
     out.classifiedPackets = classifier.classified_packets;

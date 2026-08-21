@@ -56,6 +56,13 @@ typedef struct {
     uint64_t packetsDropped;
     uint64_t rollbacks;
 
+    /// InputPackets entered while a previous call was still partitioning.
+    /// Must stay zero: the ingress scratch buffers are reused on the
+    /// assumption that ingress never overlaps itself, and the assert guarding
+    /// it is compiled out of Release. Without this a re-entry looks exactly
+    /// like transport backpressure.
+    uint64_t partitionReentries;
+
     uint64_t classifiedPackets;
     uint64_t decisions;
     uint64_t tableHits;

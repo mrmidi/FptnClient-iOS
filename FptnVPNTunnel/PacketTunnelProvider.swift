@@ -2170,6 +2170,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 mru=\(s.mruHits)/\(String(format: "%.1f", mruPct))% \
                 to_stack=\(s.packetsToStack) to_transport=\(s.packetsToTransport) \
                 dropped=\(s.packetsDropped) rollbacks=\(s.rollbacks) \
+                reentries=\(s.partitionReentries) \
                 decisions=\(s.decisions) hits=\(s.tableHits) \
                 verdicts=direct:\(s.directFlows)/fptn:\(s.fptnFlows)/\
                 reject:\(s.rejectedFlows)/drop:\(s.droppedFlows) \
