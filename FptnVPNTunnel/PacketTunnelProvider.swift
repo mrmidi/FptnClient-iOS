@@ -11,9 +11,6 @@ import NetworkExtension
 import os.log
 import FptnSharedCore
 import FptnSharedTunnel
-#if FPTN_SIGNPOSTS
-import os.signpost
-#endif
 
 extension NEPacketTunnelFlow: FPTNPacketFlowIO {}
 extension FPTNTunnelBridge: @unchecked Sendable {}
@@ -265,17 +262,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var previousSessionDownloadBytes: Int64 = 0
     private var previousRateSampleMachTime: UInt64 = 0  // 0 = "no baseline yet"
 
-    // PR3A: Instruments signpost state (Debug/Measurement only).
-    // Protected by signpostLock — never hold stateLock while emitting.
-    #if FPTN_SIGNPOSTS
-    private let signpostLock = NSLock()
-    private var startupSignpost: OSSignpostIntervalState?
-    private var bridgeSignpost: (generation: Int, id: OSSignpostID, state: OSSignpostIntervalState)?
-    private var teardownSignpost: (generation: Int, id: OSSignpostID, state: OSSignpostIntervalState)?
-    private var shutdownSignpost: OSSignpostIntervalState?
-    private var reconnectSignpost: (attempt: Int, id: OSSignpostID, state: OSSignpostIntervalState)?
-    private var readLoopSignpost: OSSignpostIntervalState?
-    #endif
 
     private var wsClient: WebsocketClientBridge?
     private var flowBridge: FPTNTunnelBridge?
@@ -364,11 +350,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         options: [String: NSObject]?,
         completionHandler: @escaping (Error?) -> Void
     ) {
-        #if FPTN_SIGNPOSTS
-        signpostLock.lock()
-        startupSignpost = TunnelSignposts.beginTunnelStartup()
-        signpostLock.unlock()
-        #endif
         bootstrapLogging()
         // First line of every tunnel session: which native framework actually
         // loaded. A Release app can link a Debug framework, and until this was
@@ -431,26 +412,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 recordProviderEvent(category: "error", message: "unsupportedDataPlaneMode rawValue=\(rawValue) schemaVersion=\(schemaVersion)", flightEvent: .unsupportedDataPlaneMode)
                 let err = makeError("Unsupported data plane mode '\(rawValue)' (schema version \(schemaVersion))")
                 logger.error("startTunnel failed: \(err.localizedDescription)")
-                #if FPTN_SIGNPOSTS
-                endStartupSignpost()
-                #endif
                 completionHandler(err)
                 return
             } catch {
                 let err = makeError("Missing or incomplete providerConfiguration: \(error)")
                 logger.error("startTunnel failed: \(err.localizedDescription)")
-                #if FPTN_SIGNPOSTS
-                endStartupSignpost()
-                #endif
                 completionHandler(err)
                 return
             }
         } else {
             let err = makeError("Missing or incomplete providerConfiguration")
             logger.error("startTunnel failed: \(err.localizedDescription)")
-            #if FPTN_SIGNPOSTS
-            endStartupSignpost()
-            #endif
             completionHandler(err)
             return
         }
@@ -576,30 +548,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     ) {
         let description = describeStopReason(reason.rawValue)
         let initiator = currentOrDefaultStopInitiator()
-        #if FPTN_SIGNPOSTS
-        signpostLock.lock()
-        shutdownSignpost = TunnelSignposts.beginTunnelShutdown()
-        signpostLock.unlock()
-        #endif
 
         stateLock.lock()
         shutdownRequested = true
         lastStopReasonRawValue = Int(reason.rawValue)
         lastStopReason = description
-        let wasReadLoopActive = isReadLoopActive
         isReadLoopActive = false
         // PR2: do NOT clear isPacketReadPending — the outstanding
         // readPackets callback still exists and owns the slot.
         stateLock.unlock()
 
-        // PR3A: end ReadLoopLifetime on true→false transition, outside lock.
-        #if FPTN_SIGNPOSTS
-        if wasReadLoopActive {
-            signpostLock.lock()
-            if let sp = readLoopSignpost { TunnelSignposts.endReadLoopLifetime(sp); readLoopSignpost = nil }
-            signpostLock.unlock()
-        }
-        #endif
 
         logger.warning(
             "PacketTunnelProvider stopTunnel systemReason=\(TunnelStopReasonDescription.describe(rawValue: reason.rawValue)) recordedInitiator=\(initiator.rawValue)\(currentDiagnosticContext().formatted())"
@@ -635,14 +593,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         // interval on an otherwise orderly stop.
         writeLifecycleSnapshot(synchronize: true)
 
-        #if FPTN_SIGNPOSTS
-        signpostLock.lock()
-        if let sp = shutdownSignpost {
-            TunnelSignposts.endTunnelShutdown(sp)
-            shutdownSignpost = nil
-        }
-        signpostLock.unlock()
-        #endif
         completionHandler()
     }
 
@@ -669,17 +619,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 stateLock.lock()
                 localStopInitiator = .appDisconnect
                 shutdownRequested = true
-                let wasReadLoopActive = isReadLoopActive
                 isReadLoopActive = false
                 stateLock.unlock()
-                // PR3A: end ReadLoopLifetime outside lock.
-                #if FPTN_SIGNPOSTS
-                if wasReadLoopActive {
-                    signpostLock.lock()
-                    if let sp = readLoopSignpost { TunnelSignposts.endReadLoopLifetime(sp); readLoopSignpost = nil }
-                    signpostLock.unlock()
-                }
-                #endif
                 cancelPendingReconnect()
                 cancelReadBackpressure()
                 logger.info("Marked local stop initiator via IPC: app_disconnect; reconnect will be suppressed")
@@ -960,9 +901,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         logger.info("Tunnel transport connected \(activityDiagnosticsDescription())")
-        #if FPTN_SIGNPOSTS
-        signpostLock.lock(); TunnelSignposts.transportConnected(generation: generation); signpostLock.unlock()
-        #endif
         recordProviderEvent(category: "websocket", message: "transport_connected generation=\(generation)", generation: generation, flightEvent: .bridgeConnected)
 
         if shouldApplySettings {
@@ -986,20 +924,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     self.appliedIPv4 = pendingAppliedIPv4
                     self.appliedIPv6 = pendingAppliedIPv6
                     self.didApplyNetworkSettings = true
-                    let shouldBeginReadLoop = !self.isReadLoopActive
                     self.isReadLoopActive = true
                     self.reconnectAttempt = 0
                     self.lastTransportError = nil
                     self.stateLock.unlock()
 
-                    // PR3A: begin ReadLoopLifetime only on false→true transition.
-                    #if FPTN_SIGNPOSTS
-                    if shouldBeginReadLoop {
-                        self.signpostLock.lock()
-                        self.readLoopSignpost = TunnelSignposts.beginReadLoopLifetime()
-                        self.signpostLock.unlock()
-                    }
-                    #endif
 
                     self.updateRuntimeState(.connected, reason: "websocket connected and settings applied")
                     self.recordProviderEvent(category: "settings", message: "apply_success generation=\(generation)", generation: generation, flightEvent: .tunnelConnected)
@@ -1067,9 +996,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             value2: UInt64(activeOps)
         )
         updateDiagnosticsHeartbeat(lastEvent: "transport_disconnected")
-        #if FPTN_SIGNPOSTS
-        signpostLock.lock(); TunnelSignposts.transportDisconnected(generation: generation); signpostLock.unlock()
-        #endif
         applyReadBackpressure(delay: sendFailureBackpressureMaxDelaySeconds, reason: "transport_disconnected")
         replaceWebSocketClient(with: nil, stopCurrent: false)
         cancelStartTimeout()
@@ -1204,9 +1130,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         // PR3A: end previous ReconnectDelay before replacing.
-        #if FPTN_SIGNPOSTS
-        endReconnectDelaySignpost()
-        #endif
         reconnectWorkItem?.cancel()
 
         workItem = DispatchWorkItem { [weak self] in
@@ -1216,17 +1139,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         stateLock.unlock()
 
         // PR3A: begin ReconnectDelay after work item is accepted.
-        #if FPTN_SIGNPOSTS
-        signpostLock.lock()
-        let rsp = TunnelSignposts.beginReconnectDelay(attempt: nextAttempt)
-        reconnectSignpost = (attempt: nextAttempt, id: rsp.0, state: rsp.1)
-        signpostLock.unlock()
-        #endif
 
         if exceededConfiguredBudget {
-            #if FPTN_SIGNPOSTS
-            endReconnectDelaySignpost()
-            #endif
             logger.warning(
                 "Reconnect attempt \(nextAttempt) exceeded configured budget \(maxAttempts). Failing tunnel."
             )
@@ -1259,9 +1173,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     private func performReconnectAttempt(expectedGeneration: Int) {
         // PR3A: end ReconnectDelay when the attempt starts.
-        #if FPTN_SIGNPOSTS
-        endReconnectDelaySignpost()
-        #endif
         let configuration: TunnelConfiguration?
         let currentState: TunnelRuntimeState
         let attempt: Int
@@ -1636,9 +1547,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         if !alreadyLogged {
             logger.error("INVARIANT_VIOLATION: \(invariant)")
             recordProviderEvent(category: "invariant", message: "violation \(invariant)", flightEvent: .invariantViolation)
-            #if FPTN_SIGNPOSTS
-            signpostLock.lock(); TunnelSignposts.invariantViolation(); signpostLock.unlock()
-            #endif
         }
     }
 
@@ -1685,15 +1593,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         // PR3A: begin NativeTeardown after detach.
-        #if FPTN_SIGNPOSTS
-        var teardownSP: (id: OSSignpostID, state: OSSignpostIntervalState)?
-        if previousClient != nil {
-            signpostLock.lock()
-            let sp = TunnelSignposts.beginNativeTeardown(generation: generation)
-            teardownSP = sp
-            signpostLock.unlock()
-        }
-        #endif
 
         // Stop and join the previous bridge.
         if stopCurrent, let previousClient {
@@ -1728,17 +1627,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }
 
             // PR3A: end NativeTeardown + BridgeLifetime after final status.
-            #if FPTN_SIGNPOSTS
-            signpostLock.lock()
-            if let sp = teardownSP {
-                TunnelSignposts.endNativeTeardown(sp.state, generation: generation, activeOps: finalStatus.activeOperations)
-            }
-            if let bsp = bridgeSignpost {
-                TunnelSignposts.endBridgeLifetime(bsp.state, generation: bsp.generation)
-                bridgeSignpost = nil
-            }
-            signpostLock.unlock()
-            #endif
         }
 
         // PR2: bridgeReplacementOverlap removed — the previous bridge
@@ -1761,14 +1649,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
 
         // PR3A: begin BridgeLifetime for the newly exposed bridge.
-        #if FPTN_SIGNPOSTS
-        if newClient != nil {
-            signpostLock.lock()
-            let sp = TunnelSignposts.beginBridgeLifetime(generation: generation)
-            bridgeSignpost = (generation: generation, id: sp.0, state: sp.1)
-            signpostLock.unlock()
-        }
-        #endif
 
         return true
     }
@@ -1981,31 +1861,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         reconnectWorkItem = nil
         stateLock.unlock()
         workItem?.cancel()
-        endReconnectDelaySignpost()
     }
 
-    // PR3A: signpost helpers — capture state under lock, emit outside.
-    #if FPTN_SIGNPOSTS
-    private func endReconnectDelaySignpost() {
-        signpostLock.lock()
-        let sp = reconnectSignpost
-        reconnectSignpost = nil
-        signpostLock.unlock()
-        if let sp {
-            TunnelSignposts.endReconnectDelay(sp.state, attempt: sp.attempt)
-        }
-    }
-
-    private func endStartupSignpost() {
-        signpostLock.lock()
-        let sp = startupSignpost
-        startupSignpost = nil
-        signpostLock.unlock()
-        if let sp {
-            TunnelSignposts.endTunnelStartup(sp)
-        }
-    }
-    #endif
 
     private func startPathMonitor() {
         stopPathMonitor()
@@ -2103,9 +1960,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         recordProviderEvent(category: "path", message: "path_satisfied=\(isSatisfied) network=\(pathSummary)", pathSatisfied: isSatisfied, flightEvent: .pathChanged)
         updateDiagnosticsHeartbeat(lastEvent: "path_satisfied=\(isSatisfied) network=\(pathSummary)")
         if didPathChange {
-            #if FPTN_SIGNPOSTS
-            TunnelSignposts.networkPathChanged(satisfied: isSatisfied)
-            #endif
             applyReadBackpressure(delay: pathChangeBackpressureDelaySeconds, reason: "network_path_changed")
         }
         if shouldScheduleReconnect {
@@ -2295,9 +2149,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         // which looks exactly like split routing being broken.
         if mode == "split", let flowBridge {
             let s = flowBridge.splitCounters()
+            // Two derived ratios, because the raw counters do not answer the
+            // questions we actually ask of them:
+            //   mru  — share of packets served by the 1-entry MRU in front
+            //          of the flow table. `hits` cannot show this: it is
+            //          per-packet against every live flow, so it sits near
+            //          100% whenever traffic is flowing.
+            //   batch— mean packets per InputPackets() call, which decides
+            //          whether per-batch or per-packet cost dominates ingress.
+            let mruPct = s.classifiedPackets > 0
+                ? Double(s.mruHits) * 100.0 / Double(s.classifiedPackets)
+                : 0
+            let batched = s.packetsToStack + s.packetsToTransport + s.packetsDropped
+            let meanBatch = s.batches > 0 ? Double(batched) / Double(s.batches) : 0
             logger.info(
                 """
                 Split funnel batches=\(s.batches) \
+                mean_batch=\(String(format: "%.1f", meanBatch)) \
+                classified=\(s.classifiedPackets) \
+                mru=\(s.mruHits)/\(String(format: "%.1f", mruPct))% \
                 to_stack=\(s.packetsToStack) to_transport=\(s.packetsToTransport) \
                 dropped=\(s.packetsDropped) rollbacks=\(s.rollbacks) \
                 decisions=\(s.decisions) hits=\(s.tableHits) \
@@ -2429,14 +2299,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     private func finishStart(with error: Error?) {
-        #if FPTN_SIGNPOSTS
-        signpostLock.lock()
-        if let sp = startupSignpost {
-            TunnelSignposts.endTunnelStartup(sp)
-            startupSignpost = nil
-        }
-        signpostLock.unlock()
-        #endif
         var completion: ((Error?) -> Void)?
 
         stateLock.lock()
@@ -2919,9 +2781,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             stateLock.unlock()
             guard shouldLog else { return }
             logger.warning("Tunnel memory pressure \(memory.level.rawValue) \(memory.description)")
-            #if FPTN_SIGNPOSTS
-            signpostLock.lock(); TunnelSignposts.memoryWarning(); signpostLock.unlock()
-            #endif
         }
     }
 
