@@ -52,6 +52,10 @@ void fptn_release_ingress_packet(void * _Nullable owner) noexcept {
     std::atomic<uint64_t> _totalWriteBytes;
     std::atomic<uint64_t> _staleReadCallbacks;
     std::atomic<uint64_t> _writeFailures;
+    // Reused across reads instead of allocated per batch. The read callback
+    // reissues itself and never overlaps, so a single buffer is safe; capacity
+    // settles at the high-water batch size and stops allocating.
+    std::vector<FPTNPacketDescriptor> _descriptors;
 }
 @end
 
@@ -125,7 +129,8 @@ void fptn_release_ingress_packet(void * _Nullable owner) noexcept {
         if (count > 0) {
             id<FPTNPacketBatchConsumer> consumer = strongSelf->_consumer;
             if (consumer) {
-                std::vector<FPTNPacketDescriptor> descriptors(count);
+                std::vector<FPTNPacketDescriptor> &descriptors = strongSelf->_descriptors;
+                descriptors.assign(count, FPTNPacketDescriptor{});
                 uint64_t batchBytes = 0;
                 for (NSUInteger i = 0; i < count; ++i) {
                     NSData *data = packets[i];

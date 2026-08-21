@@ -432,6 +432,10 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
     std::unique_ptr<fptn::tunnel::TunnelEngine> _engine;
     FPTNApplePacketFlowAdapter * __weak _egressAdapter;
     std::shared_ptr<SplitTransportSlot> _transportSlot;
+    // Reused by -consumePackets: rather than allocated per batch. Safe because
+    // that method is called only from the packet-flow adapter's serial read
+    // callback, which never overlaps itself.
+    std::vector<fptn::tunnel::PacketLease> _consumeLeases;
 }
 @property (nonatomic, copy, nullable) NSString *geoRoutingStatusStorage;
 @end
@@ -669,6 +673,8 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
     out.rollbacks = split.rollbacks;
 
     const auto classifier = plane->ClassifierForTesting().Counters();
+    out.classifiedPackets = classifier.classified_packets;
+    out.mruHits = classifier.mru_hits;
     out.decisions = classifier.decisions;
     out.tableHits = classifier.table_hits;
     out.unclassifiable = classifier.unclassifiable;
@@ -719,7 +725,10 @@ std::shared_ptr<const fptn::tunnel::IRoutingPolicy> LoadGeoPolicy(
     if (!_engine || count == 0) {
         return FPTNPacketInputResultInvalidPacket;
     }
-    std::vector<fptn::tunnel::PacketLease> leases;
+    // Reused across batches; the caller is the serial read callback, and
+    // capacity survives clear() so this stops allocating after the first few.
+    std::vector<fptn::tunnel::PacketLease> &leases = _consumeLeases;
+    leases.clear();
     leases.reserve(count);
     for (NSUInteger i = 0; i < count; ++i) {
         leases.push_back(fptn::tunnel::PacketLease{
