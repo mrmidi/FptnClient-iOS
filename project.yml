@@ -135,6 +135,7 @@ targets:
           - Cpp/*.xcframework
           - Cpp/*.xcframework/**
       - SharedTunnelRuntime
+      - SharedAppServices
       - path: fptn.icon
         buildPhase: resources
     settings:
@@ -282,6 +283,7 @@ targets:
           - Cpp/*.xcframework
           - Cpp/*.xcframework/**
       - SharedTunnelRuntime
+      - SharedAppServices
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.mrmidi.Fptn-macOS

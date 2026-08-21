@@ -37,6 +37,13 @@ struct Fptn_macOSApp: App {
                     }
                     model.loadPersistedToken()
                     vpn.syncWithSystem()
+                    // Keeps the routing lists within a day of the publisher.
+                    // Runs regardless of the selected data plane: half a
+                    // megabyte once a day is not worth gating, and gating it
+                    // on the mode makes the first switch to split routing the
+                    // slowest one. Failure is handled inside provision() --
+                    // it logs, keeps whatever is published, never blocks.
+                    await GeoDatabaseStore.shared.provision()
                 }
         }
         .windowStyle(.titleBar)

@@ -645,7 +645,13 @@ final class GeoDatabaseStore: ObservableObject {
     /// server. Read at compile time rather than stored, so every artifact this
     /// type publishes matches the preference in force when it was built.
     nonisolated static var routePushThroughTunnel: Bool {
+        // The two apps keep their own settings stores; this is the only
+        // platform-varying value this type reads.
+        #if os(macOS)
+        MacSettingsStore.readRoutePushThroughTunnel()
+        #else
         SettingsService.shared.routePushThroughTunnel
+        #endif
     }
 
     /// The compiler is synchronous native code, so keep it off the main actor.
