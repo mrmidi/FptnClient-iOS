@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import FptnSharedCore
+import FptnSharedTunnel
 
 /// Everything the window, the Settings scene and the menu bar item all need to
 /// agree on. Previously this lived as `@State` inside ContentView, which made a
@@ -23,6 +24,17 @@ final class MacAppModel: ObservableObject {
 
     @Published var routePushThroughTunnel: Bool = MacSettingsStore.readRoutePushThroughTunnel() {
         didSet { MacSettingsStore.saveRoutePushThroughTunnel(routePushThroughTunnel) }
+    }
+
+    @Published var logLevel: SharedLogLevel = MacSettingsStore.readLogLevel() {
+        didSet { MacSettingsStore.saveLogLevel(logLevel) }
+    }
+
+    /// macOS previously never sent this, so every session silently ran
+    /// `l3Tunnel` -- the split classifier was unreachable from the Mac, which
+    /// is the stand we profile the data plane on.
+    @Published var dataPlaneMode: TunnelDataPlaneMode = MacSettingsStore.readDataPlaneMode() {
+        didSet { MacSettingsStore.saveDataPlaneMode(dataPlaneMode) }
     }
 
     var servers: [MacVPNServer] { token?.servers ?? [] }

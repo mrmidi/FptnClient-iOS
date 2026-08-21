@@ -44,6 +44,9 @@
         }
       }
     },
+    "Debug" : {
+
+    },
     "Disconnect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -84,7 +87,13 @@
         }
       }
     },
+    "FPTN only" : {
+
+    },
     "Get a token from @fptn_bot on Telegram, copy it, then paste it here." : {
+
+    },
+    "Info" : {
 
     },
     "Parse Token" : {
@@ -223,6 +232,12 @@
         }
       }
     },
+    "Split routing" : {
+
+    },
+    "Split routing decides per flow whether traffic goes through FPTN or straight out. FPTN only sends everything through the tunnel." : {
+
+    },
     "Status" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -246,6 +261,9 @@
     "The clipboard is empty." : {
 
     },
+    "The periodic funnel counters are logged at Info. At Warning the tunnel looks silent even when it is working." : {
+
+    },
     "Token" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -262,6 +280,9 @@
           }
         }
       }
+    },
+    "Warning" : {
+
     },
     "You will need to paste a token again to reconnect." : {
 

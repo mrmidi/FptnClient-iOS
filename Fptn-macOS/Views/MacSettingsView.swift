@@ -1,5 +1,6 @@
 import SwiftUI
 import FptnSharedCore
+import FptnSharedTunnel
 
 /// The ⌘, Settings scene. Everything that used to sit inline in the main
 /// window, plus the censorship-strategy picker macOS never exposed — it always
@@ -37,6 +38,39 @@ struct MacSettingsView: View {
                 Text("Censorship bypass")
             } footer: {
                 Text("Takes effect on the next connection.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // "FPTN only" and "Split routing" are both shipping product modes.
+            // "Direct only" is not: it routes every flow out of this device,
+            // exposing the real IP while the UI still reports a healthy
+            // connection, so it stays debug-only. Hiding it is not the
+            // safeguard -- MacSettingsStore.readDataPlaneMode clamps a
+            // persisted value via TunnelDataPlaneMode.isReleaseSafe, and the
+            // tunnel clamps again on its own side.
+            Section {
+                Picker("Data plane", selection: $model.dataPlaneMode) {
+                    Text("FPTN only").tag(TunnelDataPlaneMode.l3Tunnel)
+                    Text("Split routing").tag(TunnelDataPlaneMode.split)
+                    #if DEBUG
+                    Text("Direct only (unsafe)").tag(TunnelDataPlaneMode.flowProxy)
+                    #endif
+                }
+            } footer: {
+                Text("Split routing decides per flow whether traffic goes through FPTN or straight out. FPTN only sends everything through the tunnel.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Log level", selection: $model.logLevel) {
+                    Text("Warning").tag(SharedLogLevel.warning)
+                    Text("Info").tag(SharedLogLevel.info)
+                    Text("Debug").tag(SharedLogLevel.debug)
+                }
+            } footer: {
+                Text("The periodic funnel counters are logged at Info. At Warning the tunnel looks silent even when it is working.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

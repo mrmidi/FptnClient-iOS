@@ -111,7 +111,9 @@ struct ConnectionView: View {
             tokenPayload: token,
             server: server,
             sni: model.sni,
-            censorshipStrategy: model.censorshipStrategy
+            censorshipStrategy: model.censorshipStrategy,
+            dataPlaneMode: model.dataPlaneMode,
+            logLevel: model.logLevel.rawValue
         )
     }
 
