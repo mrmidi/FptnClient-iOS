@@ -4,8 +4,8 @@ Ranked strategy for the split-routing ingress path. Measurement method is in
 [profiling-data-plane.md](profiling-data-plane.md); this document is what to do
 with the numbers.
 
-**Status: steps 1-3 implemented 2026-08-21. Sections are in
-execution order.
+**Status: steps 1-3 implemented and committed 2026-08-21, confirmed on real
+traffic.** Sections are in execution order.
 
 ---
 
@@ -17,11 +17,13 @@ the compiler, so these hold regardless of build configuration.
 
 | Phase | `mean_batch` | MRU hit rate |
 |---|---|---|
-| idle | 1.18 | 57.8% |
-| idle / light browsing | 2.09 | 18.7% |
+| idle | 1.2–1.6 | 12–42% |
+| light browsing | 2.4–3.9 | 83–87% |
 | browsing (mail.ru, ya.ru) | 2.33 | 76.5% |
-| **speedtest** | **13.66** | **90.6%** |
-| speedtest tail | 9.41 | 88.7% |
+| **speedtest** | **12.8–16.0** | **90.6 / 91.7 / 92.6 / 93.8 / 95.6%** |
+
+The loaded figure has now been confirmed five times across separate captures,
+the last two against the live cache rather than the shadow counter.
 
 **The workload is strongly bimodal, and the cumulative average (74.7%) is
 misleading — it is the mean of two unrelated regimes.** Optimize for the loaded
@@ -113,8 +115,11 @@ source: that path already costs one `mach_continuous_time()` per second in
 
 ## 2. 1-entry MRU in front of the flow table — DONE, and it is the whole win
 
-Gate satisfied three times independently: **90.6%, 91.7%, 92.6%** under load,
-against 18–58% at idle.
+Gate satisfied five times independently: **90.6, 91.7, 92.6, 93.8, 95.6%**
+under load, against 12–42% at idle. The last two are the live cache, not the
+shadow counter, and the identity
+`classified = table_hits + decisions + unclassifiable` was checked against each
+capture.
 
 A/B of the real classifier at `-Oz`, averaged over four runs:
 
@@ -180,9 +185,17 @@ then stops allocating entirely.
    NE guarantees non-concurrency, not thread affinity, so this is checked
    rather than assumed.
 
-Not yet measured end-to-end — the arithmetic says ~19 cyc/packet at batch 14,
-but that is a prediction, not a reading. Confirm from a loaded capture before
-claiming it.
+**Confirmed safe, not yet confirmed faster.** A loaded capture on the shipping
+build (`MinSizeRel`, 127k packets at `mean_batch=15.99`) reports
+`reentries=0`, `dropped=0`, `router_unknown=0`, `lease_exhaustions=0` and
+rollbacks at their pre-change ratio — so the scratch reuse and the serial-access
+invariant hold under real traffic.
+
+The ~19 cyc/packet remains arithmetic. Nothing in the funnel line can see
+allocation cost, so confirming it needs either an A/B of the ingress path like
+the one done for step 2, or the Allocations instrument on the macOS stand
+showing transient allocations flat per batch instead of scaling with batch
+count. **Open.**
 
 ---
 
@@ -244,6 +257,17 @@ The whole native lib is deliberately size-optimized
 (`FptnLib/CMakeLists.txt:50`). Measured effect on this path: 95 → 82 cyc
 overall (~14%), and `find()` 45 → 23 (~2×). Cheap to try, but a binary-size
 tradeoff — scope it to the data plane sources rather than flipping the library.
+
+---
+
+## Deferred, not abandoned
+
+| Item | Why it is open |
+|---|---|
+| Measure step 3 | Confirmed safe under load, never confirmed faster. Needs an ingress A/B or the Allocations instrument. |
+| `ExpireIdle` has no caller | The inline sweep is packet-count triggered, so on a quiet link the coarse clock freezes and nothing expires. A timer calling `ExpireIdle(now)` re-anchors it. |
+| `FPTN_BUILD_COMMIT` ignores a dirty tree | Stamped from `git rev-parse HEAD`, so a framework built with uncommitted changes is labelled with the previous commit — the one thing that line exists to prevent. Wants a `-dirty` marker. |
+| `MIXED CONFIG` cries wolf | Compares config *names* (`Release` vs `MinSizeRel`) rather than optimisation intent, so it fires on every correctly built Release app. The case it should catch is already covered by `NOT REPRESENTATIVE`. |
 
 ---
 
