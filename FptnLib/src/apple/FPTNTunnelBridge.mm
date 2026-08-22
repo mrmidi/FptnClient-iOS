@@ -234,8 +234,28 @@ bool CompileGeoDatabaseImpl(NSString *geoDatabaseDirectory,
 
     const auto verdictMap = fptn::geo::DefaultVerdictMap(
         fptn::geo::GeoIpProfile::standard, routePushThroughTunnel);
+
+    std::vector<fptn::geo::GeoDomainInput> domainOverrides;
+    for (NSString *overrideName in @[@"russia.txt", @"domain_blacklist.txt", @"direct_domains.txt"]) {
+        NSString *overridePath = [geoDatabaseDirectory stringByAppendingPathComponent:overrideName];
+        if ([fileManager fileExistsAtPath:overridePath]) {
+            const auto overrideBytes = ReadBytes(FileSystemPath(geoDatabaseDirectory, overrideName));
+            if (!overrideBytes.empty()) {
+                std::string_view overrideText(reinterpret_cast<const char*>(overrideBytes.data()), overrideBytes.size());
+                auto parsed = fptn::geo::ParseDomainList(overrideText, fptn::geo::GeoAction::direct);
+                SPDLOG_INFO("[geo] parsed {} domain overrides from {}", parsed.size(), [overrideName UTF8String]);
+                domainOverrides.insert(domainOverrides.end(), parsed.begin(), parsed.end());
+            }
+        }
+    }
+
     const auto built = fptn::geo::BuildGeoInputs(
-        ip.groups, site.groups, verdictMap);
+        ip.groups, site.groups, verdictMap, domainOverrides);
+    if (built.report.domain_overrides_added > 0 || built.report.domain_overrides_replaced > 0) {
+        SPDLOG_INFO("[geo] applied domain overrides: {} added, {} replaced/subsumed",
+            built.report.domain_overrides_added,
+            built.report.domain_overrides_replaced);
+    }
     // Skipped rules are reported, never adopted. BuildGeoInputs drops an
     // inverted group rather than routing its complement, and drops a regex it
     // cannot reduce; both then fall to the default verdict, which is the

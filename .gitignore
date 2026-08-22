@@ -147,3 +147,7 @@ FptnLib/slices/
 .gh_secrets.bak.*
 secrets/*
 **/Cpp/fptn_native_lib.build-manifest.json
+
+# Upstream clones kept alongside the tree for reference, not vendored.
+/sing-box/
+/sing-box-for-apple/

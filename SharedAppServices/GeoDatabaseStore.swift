@@ -18,6 +18,7 @@ import os
 enum GeoDatabaseSource {
     static let attribution = "roscomvpn"
     static let projectURL = URL(string: "https://github.com/hydraponique")!
+    static let russiaListURL = URL(string: "https://raw.githubusercontent.com/fptn-project/fptn/master/deploy/domain_blacklist/russia.txt")!
 
     static func downloadURL(for kind: GeoDataKind) -> URL {
         switch kind {
@@ -479,6 +480,20 @@ final class GeoDatabaseStore: ObservableObject {
             options: .atomic
         )
 
+        // Fetch fresh regional direct domain list (russia.txt) from Git, or fallback to bundled list
+        var russiaData = await fetchOptional(GeoDatabaseSource.russiaListURL)
+        if russiaData == nil {
+            logger.info("Using bundled fallback direct domain list (\(DefaultDirectDomainList.domainsText.utf8.count) bytes)")
+            russiaData = Data(DefaultDirectDomainList.domainsText.utf8)
+        }
+        if let russiaData {
+            try? russiaData.write(
+                to: staging.appendingPathComponent("russia.txt"),
+                options: .atomic
+            )
+            logger.info("Staged regional direct domain list (\(russiaData.count) bytes)")
+        }
+
         logger.info("Compiling the routing artifact from \(ip.data.count) + \(site.data.count) downloaded bytes")
         try await Self.compileNativeDatabase(
             at: staging.path, routePushThroughTunnel: Self.routePushThroughTunnel
@@ -515,6 +530,23 @@ final class GeoDatabaseStore: ObservableObject {
                 to: staging.appendingPathComponent(kind.fileName)
             )
         }
+
+        // Copy russia.txt into staging if present so recompilation preserves it, or write bundled fallback
+        if let directory {
+            let existingRussia = directory.appendingPathComponent("russia.txt")
+            if FileManager.default.fileExists(atPath: existingRussia.path) {
+                try? FileManager.default.copyItem(
+                    at: existingRussia,
+                    to: staging.appendingPathComponent("russia.txt")
+                )
+            } else {
+                try? Data(DefaultDirectDomainList.domainsText.utf8).write(
+                    to: staging.appendingPathComponent("russia.txt"),
+                    options: .atomic
+                )
+            }
+        }
+
         try await Self.compileNativeDatabase(
             at: staging.path, routePushThroughTunnel: Self.routePushThroughTunnel
         )
@@ -535,12 +567,7 @@ final class GeoDatabaseStore: ObservableObject {
 
     private func prepareStagingDirectory() throws -> URL {
         let directory = try require(directory)
-        let staging = try require(stagingURL)
-        try FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true
-        )
-        // A previous run may have died mid-update; its leftovers are worthless.
-        try? FileManager.default.removeItem(at: staging)
+        let staging = directory.appendingPathComponent(stagingDirectoryName)
         try FileManager.default.createDirectory(
             at: staging, withIntermediateDirectories: true
         )
@@ -556,7 +583,10 @@ final class GeoDatabaseStore: ObservableObject {
     private func commit(from staging: URL, manifest: [String: GeoFileProvenance]) throws {
         let fileManager = FileManager.default
         let directory = try require(directory)
-        let names = GeoDataKind.allCases.map(\.fileName) + [compiledArtifactFileName]
+        var names = GeoDataKind.allCases.map(\.fileName) + [compiledArtifactFileName]
+        if fileManager.fileExists(atPath: staging.appendingPathComponent("russia.txt").path) {
+            names.append("russia.txt")
+        }
 
         // Verify before destroying anything: the native compiler publishes the
         // artifact itself, and a staging set missing a file must not become a
@@ -611,6 +641,21 @@ final class GeoDatabaseStore: ObservableObject {
             byteCount: data.count,
             sha256: digest
         ))
+    }
+
+    private func fetchOptional(_ url: URL) async -> Data? {
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 15
+        do {
+            let (data, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), !data.isEmpty {
+                return data
+            }
+        } catch {
+            logger.info("Optional list download skipped from \(url): \(error.localizedDescription)")
+        }
+        return nil
     }
 
     // MARK: Manifest
